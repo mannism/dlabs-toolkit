@@ -1,0 +1,44 @@
+{
+  "name": "@diabolicallabs/llm-client",
+  "version": "0.0.0",
+  "description": "Unified LLM API for Anthropic, OpenAI, Google, and DeepSeek. Streaming, retry/backoff, structured output, token normalisation. © Diabolical Labs",
+  "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
+  "publisher": "Diabolical Labs",
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mannism/dlabs-toolkit.git",
+    "directory": "packages/llm-client"
+  },
+  "homepage": "https://github.com/mannism/dlabs-toolkit#readme",
+  "bugs": {
+    "url": "https://github.com/mannism/dlabs-toolkit/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check ./src && eslint ./src",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "vitest": "^2.1.8"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

@@ -1,0 +1,58 @@
+name: "@diabolicallabs/agent-sdk"
+purpose: >
+  Cost-tracking middleware that wraps @diabolicallabs/llm-client. Intercepts
+  every LLM call to capture a CallRecord and dispatches it asynchronously
+  (fire-and-forget) to the Agent Spend Dashboard ingestion API. The
+  instrumentation is non-blocking — LLM response is returned to the caller
+  before ingestion completes. Failed ingestion retries with exponential backoff,
+  then drops and logs on exhaustion. Never affects the underlying LLM call.
+owner: Sable
+status: scaffolded
+
+depends_on:
+  - name: "@diabolicallabs/llm-client"
+    why: "Wraps LlmClient — agent-sdk intercepts complete(), stream(), structured() calls"
+
+depended_on_by:
+  - name: "Agent Spend Dashboard"
+    how: "Born-in-toolkit consumer — uses instrumentClient() to wrap its LLM calls and feed the /api/ingest endpoint"
+  - name: "GEOAudit"
+    how: "Week 6 migration — replaces pool.query INSERT INTO llm_usage fire-and-forget block"
+
+exports:
+  - "instrumentClient(client: LlmClient, config: AgentSdkConfig): InstrumentedLlmClient"
+  - "Types: AgentIdentity, AgentSdkConfig, InstrumentedLlmClient, CallRecord"
+
+contracts:
+  ingestion:
+    pattern: "fire-and-forget — non-blocking, never delays the LLM response"
+    max_retries_default: 3
+    timeout_default_ms: 5000
+    on_exhaustion: "drop record + structured warning log"
+  queue:
+    type: "in-memory array"
+    max_items: 100
+    note: "buffers records when ingestion endpoint is temporarily unreachable"
+  disabled_mode:
+    trigger: "config.disabled = true"
+    behaviour: "all instrumentation skipped — LlmClient passthrough only"
+
+failure_modes:
+  - trigger: "Ingestion endpoint down"
+    impact: "Record queued in-memory, retried. If queue fills (100 items), oldest dropped."
+    propagation: "silent — LLM call is never affected"
+  - trigger: "Ingestion retries exhausted"
+    impact: "Record dropped. Structured warning log includes call_id for audit."
+    propagation: "silent — LLM call is never affected"
+  - trigger: "llm-client throws LlmError"
+    impact: "No CallRecord captured (no usage data available). Error propagated to caller."
+    propagation: "propagated"
+
+performance:
+  critical_path_overhead_target: "<2ms"
+  notes: "Ingestion dispatch uses setImmediate/queueMicrotask. If overhead exceeds 5ms in Week 4 tests, queue dispatch moves to setImmediate."
+
+notes: |
+  Status 'scaffolded': types and factory stub are in place; full implementation
+  ships Week 4. CallRecord shape is the ingestion contract with the Agent Spend
+  Dashboard — do not change without coordinating with the Dashboard brief.

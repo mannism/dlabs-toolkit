@@ -1,0 +1,60 @@
+name: "@diabolicallabs/rate-limiter"
+purpose: >
+  Redis sliding-window rate limiter. Implementation uses a sorted set per key:
+  ZREMRANGEBYSCORE to evict expired entries, ZCARD to count the current window,
+  ZADD to record the request — all in a single pipeline for atomicity.
+  Fail-closed: if the Redis connection throws, the request is rejected.
+  Never default to permissive on infrastructure failure.
+  ioredis is a peerDependency — caller provides the singleton.
+owner: Sable
+status: scaffolded
+
+depends_on:
+  - name: "ioredis (peerDependency)"
+    why: "Sorted-set pipeline implementation requires an ioredis client. Listed as peerDep so consumers provide their existing singleton — no duplicate Redis connections."
+  - name: "Redis"
+    why: "Sorted set sorted by timestamp. ZREMRANGEBYSCORE evicts expired entries, ZCARD counts the window, ZADD records the request."
+
+depended_on_by:
+  - name: "FitChecker"
+    how: "Replaces lib/redis.ts + inline sorted-set rate limiting on API routes"
+  - name: "GEOAudit"
+    how: "Ingestion endpoint will require rate limiting once Agent Spend Dashboard ships"
+  - name: "Agent Spend Dashboard"
+    how: "/api/ingest endpoint requires IP-based rate limiting on the public ingestion surface"
+
+exports:
+  - "createRateLimiter(config: RateLimiterConfig): RateLimiter"
+  - "RateLimitError (class)"
+  - "Types: RateLimiterConfig, RateLimitResult, RateLimiter"
+
+contracts:
+  algorithm: "sliding window via Redis sorted set"
+  pipeline:
+    ops: ["ZREMRANGEBYSCORE", "ZCARD", "ZADD"]
+    atomicity: "single redis.multi().exec() call"
+  fail_closed:
+    trigger: "redis.multi().exec() throws"
+    check_behaviour: "returns { allowed: false, remaining: 0, resetMs: windowMs }"
+    enforce_behaviour: "throws RateLimitError"
+
+failure_modes:
+  - trigger: "Redis unreachable"
+    impact: "Request rejected (fail-closed). check() returns { allowed: false }. enforce() throws RateLimitError."
+    propagation: "propagated — caller receives RateLimitError"
+  - trigger: "Redis timeout"
+    impact: "Same as unreachable — fail-closed"
+    propagation: "propagated"
+  - trigger: "Rate limit exceeded normally"
+    impact: "check() returns { allowed: false, remaining: 0, resetMs: N }. enforce() throws RateLimitError."
+    propagation: "propagated"
+
+performance:
+  expected_latency: "~1-2ms per check (Redis RTT on same host/LAN). Three ops in one pipeline."
+  notes: "Do not call check() in a hot loop — one check per request, at the request boundary."
+
+notes: |
+  Status 'scaffolded': types and factory stub are in place; implementation
+  ships Week 5 (parallel with @diabolicallabs/notion, no cross-dependency).
+  The fail-closed default is intentional and non-negotiable — a rate limiter
+  that fails open is not a rate limiter.

@@ -1,0 +1,65 @@
+name: "@diabolicallabs/llm-client"
+purpose: >
+  Unified LLM API across Anthropic, OpenAI, Google, and DeepSeek. Provides a
+  single LlmClient interface with streaming, non-streaming, and structured
+  output (Zod-validated). Handles retry with exponential backoff + full jitter,
+  error normalisation into LlmError, and token usage normalisation into a
+  consistent LlmUsage shape regardless of provider.
+owner: Sable
+status: scaffolded
+
+depends_on:
+  - name: "@anthropic-ai/sdk"
+    why: "Anthropic Claude provider — Week 2 implementation"
+  - name: "openai"
+    why: "OpenAI provider — Week 2 implementation"
+  - name: "@google/genai"
+    why: "Google Gemini provider — Week 3 implementation"
+  - name: "deepseek (fetch-based)"
+    why: "DeepSeek provider — Week 3 implementation. DeepSeek's API is OpenAI-compatible; uses the openai SDK with a base URL override."
+
+depended_on_by:
+  - name: "@diabolicallabs/agent-sdk"
+    how: "agent-sdk wraps LlmClient via instrumentClient() to intercept all calls for cost tracking. LlmClient is a peer dep of agent-sdk, not bundled."
+  - name: "GEOAudit"
+    how: "Pilot migration in Week 6 — replaces callLLM() in server.js"
+  - name: "FitChecker"
+    how: "Migration in post-Week 6 backlog — replaces lib/llm/providers/openai-provider.ts"
+  - name: "Agent Spend Dashboard"
+    how: "Born-in-toolkit consumer — installs @diabolicallabs/agent-sdk@next which wraps llm-client"
+
+exports:
+  - "createClient(config: LlmClientConfig): LlmClient"
+  - "createClientFromEnv(provider, model, overrides?): LlmClient"
+  - "LlmError (class)"
+  - "Types: LlmMessage, LlmClientConfig, LlmUsage, LlmResponse, LlmStreamChunk, LlmStructuredResponse, LlmClient"
+
+contracts:
+  retry:
+    strategy: "exponential backoff with full jitter"
+    formula: "delay = random(0, baseDelayMs * 2^attempt)"
+    retryable_conditions: ["HTTP 429", "HTTP 502", "HTTP 503", "HTTP 504", "ECONNRESET", "ETIMEDOUT"]
+    non_retryable_conditions: ["HTTP 400", "HTTP 401", "HTTP 403", "HTTP 404"]
+    max_retries_default: 3
+  timeout_default_ms: 30000
+
+failure_modes:
+  - trigger: "All retries exhausted"
+    impact: "Throws LlmError with retryable: false"
+    propagation: "propagated — caller must handle"
+  - trigger: "Provider API key invalid (HTTP 401/403)"
+    impact: "Throws LlmError immediately, no retry"
+    propagation: "propagated — caller must handle"
+  - trigger: "Provider SDK breaking change"
+    impact: "Build failure in @diabolicallabs/llm-client; other packages unaffected"
+    propagation: "contained to this package"
+
+performance:
+  expected_latency: "Passthrough to provider — no overhead beyond retry logic"
+  notes: "Token counting is done from the provider response, not via tiktoken. No sync-heavy computation."
+
+notes: |
+  Status 'scaffolded': types and factory stubs are in place; provider implementations
+  ship in Week 2 (Anthropic + OpenAI) and Week 3 (Google + DeepSeek).
+  Provider SDKs are devDependencies — bundled into dist at build time via tsup.
+  Consumers do not need to install provider SDKs directly.
