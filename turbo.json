@@ -1,0 +1,38 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  // TODO: Enable remote cache when Vercel account is linked.
+  // Add TURBO_TOKEN + TURBO_TEAM env vars and uncomment below:
+  // "remoteCache": { "enabled": true }
+  "tasks": {
+    // typecheck depends on ^build (not ^typecheck) because packages that depend
+    // on workspace siblings need the dist/.d.ts files to be present before tsc
+    // can resolve imports. tsc --noEmit on the dependency produces nothing,
+    // so waiting on ^typecheck alone is insufficient.
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**/*.ts", "tsconfig.json", "../../tsconfig.base.json"],
+      "outputs": []
+    },
+
+    // lint runs Biome check + narrow ESLint (no-floating-promises only)
+    "lint": {
+      "dependsOn": [],
+      "inputs": ["src/**/*.ts", "biome.json", "eslint.config.mjs"],
+      "outputs": []
+    },
+
+    // build: tsup compiles each package. agent-sdk depends on llm-client.
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**/*.ts", "tsup.config.ts", "package.json", "tsconfig.json"],
+      "outputs": ["dist/**"]
+    },
+
+    // test: vitest per-package. Runs after the package's own build.
+    "test": {
+      "dependsOn": ["build"],
+      "inputs": ["src/**/*.ts", "vitest.config.ts"],
+      "outputs": []
+    }
+  }
+}
