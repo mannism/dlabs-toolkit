@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**', 'chore/**', 'refactor/**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  # Cancel in-progress CI runs on the same branch/PR when a new push arrives.
+  # This avoids queuing redundant runs on rapid pushes.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Typecheck / Lint / Build / Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        # --frozen-lockfile: fail if pnpm-lock.yaml would change.
+        # Catches cases where a developer committed package.json changes
+        # without committing the corresponding lockfile update.
+        run: pnpm install --frozen-lockfile
+
+      - name: Run pipeline (typecheck, lint, build, test)
+        # Turborepo runs tasks in topological order with local cache.
+        # agent-sdk builds after llm-client; all other packages in parallel.
+        run: pnpm turbo run typecheck lint build test
+        env:
+          # Disable Turbo telemetry in CI
+          TURBO_TELEMETRY_DISABLED: 1
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    # Run audit independently so a failing typecheck doesn't mask a CVE.
+    # Both jobs must pass for the PR to be mergeable.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit dependencies
+        # Fail on high or critical severity vulnerabilities.
+        # Use --audit-level high — medium/low are tracked by Dependabot.
+        run: pnpm audit --audit-level high

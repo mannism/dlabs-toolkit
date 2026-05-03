@@ -1,0 +1,36 @@
+version: 2
+
+updates:
+  # npm/pnpm: scan workspace packages for outdated dependencies.
+  # Covers all packages/* and the root package.json.
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'Asia/Singapore'
+    # Group all non-major dev dependency updates into a single PR to reduce noise.
+    # Major version bumps are always separate PRs — they may be breaking.
+    groups:
+      dev-dependencies:
+        dependency-type: 'development'
+        update-types: ['minor', 'patch']
+    # Limit to 10 open PRs at once — prevents queue saturation on a solo-maintainer repo.
+    open-pull-requests-limit: 10
+    labels:
+      - 'dependencies'
+
+  # GitHub Actions: keep CI/CD action versions current.
+  # Stale action versions are a supply-chain risk vector.
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'Asia/Singapore'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'ci'
