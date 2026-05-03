@@ -7,8 +7,6 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules"],
-  // agent-sdk depends on llm-client — TypeScript project reference for
-  // incremental compilation and topological type-checking
   "references": [
     { "path": "../llm-client" }
   ]
