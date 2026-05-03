@@ -1,32 +1,81 @@
 # dlabs-toolkit
 
-**Diabolical Labs platform toolkit** — shared TypeScript infrastructure consumed across the Diabolical Labs and Diana Ismail project fleet.
+**Diabolical Labs platform toolkit** — shared TypeScript infrastructure consumed across the Diabolical Labs and Diana Ismail project fleet. © Diabolical Labs
 
 ## Status
 
-**Scaffolding pending platform brief.** Architecture, monorepo tooling, package layout, and v0 scope are being designed in:
+**Week 1 scaffold.** Monorepo structure, CI, and package skeletons are in place. Package implementations begin Week 2.
 
-`/Users/mann/Documents/Claude/proj-plan/dlabs-toolkit/briefs/brief-platform.md`
+## Packages
 
-This README will be replaced once the platform brief lands and v0 ships.
+| Package | Status | Description |
+|---|---|---|
+| [`@diabolicallabs/llm-client`](packages/llm-client/) | Scaffolded | Unified LLM API — Anthropic, OpenAI, Google, DeepSeek. Streaming, retry, structured output, token normalisation. |
+| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | Scaffolded | Cost-tracking middleware wrapping llm-client. Async ingestion to Agent Spend Dashboard. |
+| [`@diabolicallabs/notion`](packages/notion/) | Scaffolded | Notion REST API helpers — page creation, property serialisation, conflict retry, rate-limit backoff. |
+| [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | Scaffolded | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
 
-## Planned packages (subject to platform brief)
+See [`MODULES.md`](MODULES.md) for the manifest index.
 
-- `@dlabs/llm-client` — unified LLM API (Anthropic, OpenAI, Google, DeepSeek)
-- `@dlabs/agent-sdk` — cost-tracking + agent-identity middleware (consumes llm-client)
-- `@dlabs/notion` — Notion API helpers
-- Additional packages added when 2+ consumer repos duplicate the same pattern
+## Prerequisites
 
-## Consumers
+- Node ≥20
+- pnpm ≥9
 
-| Project | Layer |
+## Development
+
+```bash
+# Install all workspace dependencies
+pnpm install
+
+# Typecheck all packages (topological order via tsc project references)
+pnpm turbo run typecheck
+
+# Lint all packages (Biome + narrow ESLint for floating-promises)
+pnpm turbo run lint
+
+# Build all packages (tsup, ESM only)
+pnpm turbo run build
+
+# Test all packages (Vitest per package)
+pnpm turbo run test
+
+# Run full CI pipeline locally (mirrors ci.yml)
+pnpm turbo run typecheck lint build test
+```
+
+## Remote cache
+
+Turborepo remote cache is **not yet configured**. See `turbo.json` for the TODO. To enable: link the repo to Vercel and set `TURBO_TOKEN` + `TURBO_TEAM` env vars.
+
+## Toolchain
+
+| Tool | Purpose |
 |---|---|
-| Agent Spend Dashboard | Commercial (Diabolical Labs) |
-| Experiential Brief Generator | Commercial (Diabolical Labs) |
-| GEOAudit, FitChecker, EventChatScheduler, ig-autopilot, telegram-digital-twin | Mixed |
-| labs (experiments hub), portfolio | Personal (Diana Ismail) |
+| pnpm workspaces | Package manager + workspace protocol |
+| Turborepo | Task pipeline, topological ordering, local cache |
+| tsup (esbuild) | Per-package bundler — ESM only |
+| TypeScript strict | Strict mode, NodeNext module resolution |
+| Biome | Formatter + linter (all rules except floating-promises) |
+| ESLint (narrow) | `no-floating-promises` + `no-misused-promises` only |
+| Vitest | Per-package unit tests |
+| Changesets | Independent semver versioning per package |
 
-The toolkit is published under Diabolical Labs but consumed across both brand layers freely.
+## Publishing
+
+Packages are published to **GitHub Packages** at v0. Migration to npm public registry is a single workflow change when an external consumer requires it.
+
+Consumer repos add to their `.npmrc`:
+
+```
+@diabolicallabs:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+## Architecture
+
+Full architecture, v0 scope, public API surface, and build plan:
+`/Users/mann/Documents/Claude/proj-plan/dlabs-toolkit/briefs/brief-platform.md`
 
 ## Maintainer
 

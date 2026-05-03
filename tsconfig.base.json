@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    // Target: Node 20+ LTS. ESM-only, no CJS output.
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    // Strict type safety — no exceptions
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    // Unused code as errors — enforced at type-check time
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Emit: each package emits into its own dist/
+    // Per-package tsconfig sets "outDir": "dist" and "rootDir": "src"
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    // ESM interop
+    "esModuleInterop": false,
+    "allowSyntheticDefaultImports": false,
+    "verbatimModuleSyntax": true,
+
+    // Project references for incremental builds
+    "composite": true,
+    "incremental": true,
+
+    // Ensure consistent casing across OS
+    "forceConsistentCasingInFileNames": true,
+
+    "skipLibCheck": true
+  }
+}
