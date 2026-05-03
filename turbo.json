@@ -4,10 +4,12 @@
   // Add TURBO_TOKEN + TURBO_TEAM env vars and uncomment below:
   // "remoteCache": { "enabled": true }
   "tasks": {
-    // typecheck must run after the packages it depends on have been built.
-    // Uses tsc --build with project references for incremental compilation.
+    // typecheck depends on ^build (not ^typecheck) because packages that depend
+    // on workspace siblings need the dist/.d.ts files to be present before tsc
+    // can resolve imports. tsc --noEmit on the dependency produces nothing,
+    // so waiting on ^typecheck alone is insufficient.
     "typecheck": {
-      "dependsOn": ["^typecheck"],
+      "dependsOn": ["^build"],
       "inputs": ["src/**/*.ts", "tsconfig.json", "../../tsconfig.base.json"],
       "outputs": []
     },

@@ -51,7 +51,9 @@ export class LlmError extends Error {
   readonly provider: string;
   readonly statusCode: number | undefined;
   readonly retryable: boolean;
-  readonly cause: unknown;
+  // `cause` is declared on Error in lib.es2022.error.d.ts as `cause?: unknown`
+  // We override it here to make it always present (not optional) after construction.
+  override readonly cause: unknown;
 
   constructor(opts: {
     message: string;
@@ -60,7 +62,7 @@ export class LlmError extends Error {
     retryable: boolean;
     cause?: unknown;
   }) {
-    super(opts.message);
+    super(opts.message, { cause: opts.cause });
     this.provider = opts.provider;
     this.statusCode = opts.statusCode;
     this.retryable = opts.retryable;

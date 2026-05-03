@@ -2,12 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
-    "tsBuildInfoFile": "dist/.tsbuildinfo"
+    "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules"],
-  "references": [
-    { "path": "../llm-client" }
-  ]
+  "exclude": ["dist", "node_modules"]
 }

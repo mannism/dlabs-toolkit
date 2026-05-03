@@ -23,8 +23,6 @@
     "rules": {
       "recommended": true,
       "suspicious": {
-        // Explicit any is banned — TypeScript strict handles this at compile time,
-        // Biome enforces it at lint time for defence-in-depth
         "noExplicitAny": "error"
       },
       "style": {
@@ -37,7 +35,6 @@
         "noUnusedImports": "error"
       },
       "security": {
-        // Prevent eval() usage — security constraint
         "noGlobalEval": "error"
       }
     }
@@ -51,7 +48,6 @@
   },
   "overrides": [
     {
-      // Test files: allow more permissive patterns
       "include": ["**/*.test.ts", "**/*.spec.ts"],
       "linter": {
         "rules": {
