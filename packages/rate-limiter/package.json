@@ -1,6 +1,6 @@
 {
   "name": "@diabolicallabs/rate-limiter",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. © Diabolical Labs",
   "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
   "publisher": "Diabolical Labs",
