@@ -5,7 +5,6 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     exclude: ['src/__tests__/integration/**'],
     pool: 'threads',
-    passWithNoTests: true,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

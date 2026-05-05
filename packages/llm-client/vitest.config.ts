@@ -11,7 +11,6 @@ export default defineConfig({
 
     // Pool: threads for CPU-bound tests (mock-based, no I/O)
     pool: 'threads',
-    passWithNoTests: true,
 
     // Coverage: v8 provider, CI-gated at 80% line coverage
     coverage: {
