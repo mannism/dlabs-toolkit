@@ -18,6 +18,12 @@ jobs:
       # Required for changesets/action to create GitHub Releases and push
       # the version-bump commit back to main.
       contents: write
+      # Required for changesets/action to list, create, and update the
+      # "Version Packages" PR via the GitHub pull requests API.
+      pull-requests: write
+      # Required for OIDC token issuance — enables npm provenance attestations
+      # when publishing packages (future-proofs against npm registry requirements).
+      id-token: write
       # Required to publish packages to GitHub Packages.
       packages: write
 
