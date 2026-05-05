@@ -2,6 +2,8 @@
 
 Cost-tracking middleware for `@diabolicallabs/llm-client`. Drop-in wrapper that captures call records and dispatches them asynchronously to the Agent Spend Dashboard. © Diabolical Labs
 
+**Pre-1.0. APIs may change between minor versions.**
+
 ## Status
 
 **Scaffolded.** Types and public API surface are defined. Full implementation ships Week 4.
@@ -28,7 +30,7 @@ const client = instrumentClient(base, {
 
 // Identical API to LlmClient — instrumentation is invisible to the caller
 const response = await client.complete([
-  { role: 'user', content: 'Analyze this URL...' },
+  { role: 'user', content: 'Hello' },
 ]);
 // CallRecord dispatched asynchronously — response returned immediately
 ```
@@ -62,20 +64,20 @@ interface CallRecord {
   model: string;
   prompt_tokens: number;
   completion_tokens: number;
-  cache_creation_tokens?: number;
-  cache_read_tokens?: number;
+  cache_creation_tokens?: number; // Anthropic prompt cache only
+  cache_read_tokens?: number;     // Anthropic prompt cache only
   latency_ms: number;
   task_label?: string;
   project_id?: string;
-  timestamp: string; // ISO 8601
-  call_id: string;   // UUID idempotency key
+  timestamp: string; // ISO 8601 UTC
+  call_id: string;   // UUID v4 — idempotency key
 }
 ```
 
 ## Failure behavior
 
-Ingestion failures are **always silent** — they never surface to the caller.
+Ingestion failures are **always silent** — they never surface to the LLM caller.
 
-- Endpoint down: record queued in memory (max 100 items), retried on next call
-- Retries exhausted: record dropped, structured warning logged (includes `call_id`)
-- `disabled: true`: all instrumentation skipped, passthrough only
+- Endpoint down or slow: retried up to `maxIngestionRetries` with exponential backoff
+- Retries exhausted: record dropped, structured warning logged (includes `call_id` for audit)
+- `disabled: true`: all instrumentation skipped, underlying client returned directly
