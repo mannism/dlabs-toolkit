@@ -144,14 +144,11 @@ pnpm tsx scripts/integration-test.ts
 
 ## Publishing
 
-Packages publish to **GitHub Packages** at v0. Migration to the npm public registry is a single workflow change when an external consumer requires it.
+Pre-1.0 packages are currently distributed via **git tags + GitHub Releases**. No npm registry publish is active.
 
-Consumer `.npmrc`:
+Each merged "Version Packages" PR triggers `changeset tag`, which creates a git tag (e.g. `@diabolicallabs/llm-client@0.1.0`) and a GitHub Release. Consume packages internally via workspace dependency or git URL until the npm registry path is ready.
 
-```
-@diabolicallabs:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
-```
+**Planned (Week 4+):** Register `@diabolicallabs` org on npmjs.com, generate `NPM_TOKEN`, add to GitHub secrets, switch `release` script back to `changeset publish` targeting the default npm registry.
 
 ---
 
