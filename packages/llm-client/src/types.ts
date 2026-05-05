@@ -12,7 +12,8 @@ export interface LlmMessage {
 
 // Config passed to createClient
 export interface LlmClientConfig {
-  provider: 'anthropic' | 'openai' | 'google' | 'deepseek';
+  // Full 5-provider union — gemini, deepseek, perplexity are type-only stubs in Week 2
+  provider: 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'perplexity';
   model: string; // e.g. 'claude-sonnet-4-6', 'gpt-4o', 'gemini-2.5-flash'
   apiKey: string;
   maxRetries?: number; // default: 3

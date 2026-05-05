@@ -22,9 +22,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup pnpm
+        # No version pin here — pnpm/action-setup@v4 reads the version from
+        # packageManager field in root package.json (pnpm@9.15.0). Specifying
+        # both causes ERR_PNPM_BAD_PM_VERSION on action-setup@v4.
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,12 +40,29 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run pipeline (typecheck, lint, build, test)
-        # Turborepo runs tasks in topological order with local cache.
-        # agent-sdk builds after llm-client; all other packages in parallel.
+        # Turborepo runs tasks in topological order with remote cache enabled.
+        # TURBO_TOKEN + TURBO_TEAM activate the Vercel remote cache — cache hits
+        # skip unchanged packages entirely. On second run of an identical commit,
+        # all tasks should be replayed from cache (0 actual work).
+        # agent-sdk builds after llm-client; all other packages run in parallel.
         run: pnpm turbo run typecheck lint build test
         env:
+          # Turbo remote cache credentials (stored in GitHub Actions secrets)
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
           # Disable Turbo telemetry in CI
           TURBO_TELEMETRY_DISABLED: 1
+
+      - name: Run coverage (CI gate — 80% required)
+        # Run coverage separately from the Turbo pipeline so that:
+        # 1. Coverage failures are clearly reported as a separate step
+        # 2. Turbo can cache the test run; coverage does not participate in the cache
+        # Each package runs vitest with --coverage flag. Thresholds are in vitest.config.ts.
+        run: |
+          pnpm --filter @diabolicallabs/llm-client exec vitest run --coverage
+          pnpm --filter @diabolicallabs/agent-sdk exec vitest run --coverage
+          pnpm --filter @diabolicallabs/notion exec vitest run --coverage
+          pnpm --filter @diabolicallabs/rate-limiter exec vitest run --coverage
 
   audit:
     name: Security Audit
@@ -58,8 +76,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
