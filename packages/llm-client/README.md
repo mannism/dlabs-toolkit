@@ -6,7 +6,7 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, and DeepSeek. Single in
 
 ## Status
 
-**In progress.** All four providers are implemented. A fifth provider (Perplexity) is a stub and will be implemented in a future release.
+**Published — v0.1.0.** All four providers are implemented. A fifth provider (Perplexity) is a stub and will be implemented in a future release.
 
 ## Install
 

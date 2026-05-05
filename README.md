@@ -10,7 +10,7 @@ Shared platform infrastructure for the Diabolical Labs and Diana Ismail project 
 
 | Package | Status | Description |
 |---|---|---|
-| [`@diabolicallabs/llm-client`](packages/llm-client/) | in-progress | Unified LLM API — Anthropic, OpenAI, Gemini, DeepSeek (implemented); Perplexity (stub). Streaming, retry, structured output, token normalization. |
+| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v0.1.0) | Unified LLM API — Anthropic, OpenAI, Gemini, DeepSeek (implemented); Perplexity (stub). Streaming, retry, structured output, token normalization. |
 | [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | scaffolded | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. |
 | [`@diabolicallabs/notion`](packages/notion/) | scaffolded | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
 | [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | scaffolded | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |

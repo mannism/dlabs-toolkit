@@ -8,7 +8,7 @@ purpose: >
   Week 2: Anthropic + OpenAI fully implemented.
   Week 3: Gemini + DeepSeek fully implemented. Perplexity remains a stub (later week).
 owner: Sable
-status: in-progress
+status: published
 
 depends_on:
   - name: "@anthropic-ai/sdk"
