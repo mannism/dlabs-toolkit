@@ -1,10 +1,12 @@
 # @diabolicallabs/llm-client
 
-Unified LLM API across Anthropic, OpenAI, Google, and DeepSeek. © Diabolical Labs
+Unified LLM API across Anthropic, OpenAI, Google Gemini, and DeepSeek. Single interface for completion, streaming, and structured output. All provider errors are normalized into a consistent `LlmError` shape. © Diabolical Labs
+
+**Pre-1.0. APIs may change between minor versions.**
 
 ## Status
 
-**Scaffolded.** Types and public API surface are defined. Provider implementations ship Week 2 (Anthropic + OpenAI) and Week 3 (Google + DeepSeek).
+**In progress.** All four providers are implemented. A fifth provider (Perplexity) is a stub and will be implemented in a future release.
 
 ## Install
 
@@ -32,10 +34,10 @@ const client = createClient({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
-// From environment variables (reads ANTHROPIC_API_KEY automatically)
+// From environment variables
 const client = createClientFromEnv('anthropic', 'claude-sonnet-4-6');
 
-// Non-streaming
+// Non-streaming completion
 const response = await client.complete([
   { role: 'user', content: 'Hello' },
 ]);
@@ -53,15 +55,25 @@ const result = await client.structured(messages, schema);
 // result.data is typed as { name: string; score: number }
 ```
 
+## Provider universe
+
+| Provider | Status | Env var |
+|---|---|---|
+| `anthropic` | Implemented | `ANTHROPIC_API_KEY` |
+| `openai` | Implemented | `OPENAI_API_KEY` |
+| `google` | Implemented | `GOOGLE_AI_API_KEY` |
+| `deepseek` | Implemented | `DEEPSEEK_API_KEY` |
+| `perplexity` | Stub — throws `LlmError` | — |
+
 ## API
 
 ### `createClient(config: LlmClientConfig): LlmClient`
 
-Creates an LlmClient for the given provider.
+Creates an `LlmClient` for the given provider.
 
 ### `createClientFromEnv(provider, model, overrides?): LlmClient`
 
-Reads the API key from the environment:
+Reads the API key from the environment automatically:
 - `anthropic` → `ANTHROPIC_API_KEY`
 - `openai` → `OPENAI_API_KEY`
 - `google` → `GOOGLE_AI_API_KEY`
@@ -75,7 +87,7 @@ Reads the API key from the environment:
 | `stream(messages, options?)` | Streaming — async generator of `LlmStreamChunk`. Final chunk includes `usage`. |
 | `structured(messages, schema, options?)` | Structured output validated against a Zod schema. Returns `LlmStructuredResponse<T>`. |
 
-### Error handling
+## Error handling
 
 All provider errors are normalized into `LlmError`:
 
@@ -91,7 +103,7 @@ try {
 }
 ```
 
-Retryable errors (429, 5xx, network) are retried automatically up to `maxRetries` times with exponential backoff + full jitter before throwing.
+Retryable errors (429, 5xx, network failures) are retried automatically with exponential backoff and full jitter before throwing.
 
 ## Token normalization
 
@@ -102,7 +114,7 @@ interface LlmUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
-  cacheCreationTokens?: number; // Anthropic only
-  cacheReadTokens?: number;     // Anthropic only
+  cacheCreationTokens?: number; // Anthropic prompt cache only
+  cacheReadTokens?: number;     // Anthropic prompt cache only
 }
 ```
