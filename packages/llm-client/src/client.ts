@@ -7,18 +7,16 @@
  * Provider dispatch:
  *   'anthropic'  → fully implemented (Week 2)
  *   'openai'     → fully implemented (Week 2)
- *   'gemini'     → stub, throws "not yet implemented" (Week 3)
- *   'deepseek'   → stub, throws "not yet implemented" (Week 3)
+ *   'gemini'     → fully implemented (Week 3)
+ *   'deepseek'   → fully implemented (Week 3)
  *   'perplexity' → stub, throws "not yet implemented" (later week)
  */
 
 import { createAnthropicProvider } from './providers/anthropic.js';
+import { createDeepSeekProvider } from './providers/deepseek.js';
+import { createGeminiProvider } from './providers/gemini.js';
 import { createOpenAIProvider } from './providers/openai.js';
-import {
-  createDeepSeekProvider,
-  createGeminiProvider,
-  createPerplexityProvider,
-} from './providers/stubs.js';
+import { createPerplexityProvider } from './providers/stubs.js';
 import type { LlmClient, LlmClientConfig } from './types.js';
 import { LlmError } from './types.js';
 
@@ -26,9 +24,8 @@ import { LlmError } from './types.js';
  * Create an LlmClient for the given provider and config.
  * Dispatches to the provider-specific implementation.
  *
- * Anthropic and OpenAI are fully implemented in Week 2.
- * Gemini, DeepSeek, and Perplexity are type-registered stubs that throw
- * "not yet implemented" until Week 3+.
+ * Anthropic, OpenAI, Gemini, and DeepSeek are fully implemented.
+ * Perplexity is a type-registered stub that throws "not yet implemented".
  */
 export function createClient(config: LlmClientConfig): LlmClient {
   switch (config.provider) {

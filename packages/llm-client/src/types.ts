@@ -23,7 +23,7 @@ export interface LlmClientConfig {
   timeoutMs?: number; // default: 30000
 }
 
-// Normalised token usage — same shape regardless of provider
+// Normalized token usage — same shape regardless of provider
 export interface LlmUsage {
   inputTokens: number;
   outputTokens: number;
@@ -46,7 +46,7 @@ export interface LlmStreamChunk {
   usage?: LlmUsage; // present only on the final chunk
 }
 
-// Normalised error — wraps provider-specific errors
+// Normalized error — wraps provider-specific errors
 export class LlmError extends Error {
   override readonly name = 'LlmError';
   readonly provider: string;

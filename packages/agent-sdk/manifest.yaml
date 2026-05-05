@@ -35,7 +35,7 @@ contracts:
     note: "buffers records when ingestion endpoint is temporarily unreachable"
   disabled_mode:
     trigger: "config.disabled = true"
-    behaviour: "all instrumentation skipped — LlmClient passthrough only"
+    behavior: "all instrumentation skipped — LlmClient passthrough only"
 
 failure_modes:
   - trigger: "Ingestion endpoint down"

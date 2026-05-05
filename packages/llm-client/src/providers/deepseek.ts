@@ -1,18 +1,26 @@
 /**
- * OpenAI provider for @diabolicallabs/llm-client.
+ * DeepSeek provider for @diabolicallabs/llm-client.
+ *
+ * DeepSeek's chat completions API is fully OpenAI-compatible, so this provider
+ * uses the OpenAI SDK pointed at DeepSeek's base URL.
+ *
+ * API base URL: https://api.deepseek.com
+ * Docs: https://platform.deepseek.com/api-docs/
  *
  * Implements: complete(), stream(), structured()
  *
  * Token normalization:
- *   OpenAI: prompt_tokens / completion_tokens
+ *   DeepSeek returns standard OpenAI-format usage: prompt_tokens / completion_tokens / total_tokens
  *   → LlmUsage: inputTokens / outputTokens / totalTokens
  *
  * Error mapping:
- *   APIStatusError.status → LlmError.statusCode + retryable flag
  *   APIConnectionError → retryable: true
+ *   APIError with status 429 / 5xx → retryable: true
+ *   Other APIErrors → non-retryable
  *
- * Structured output uses OpenAI's response_format: { type: 'json_object' }.
- * For strict schema enforcement, the schema is described in the system prompt.
+ * Note: DeepSeek does not support the json_object response_format on all models.
+ * structured() injects a system prompt and parses the raw response. If the model
+ * includes markdown fences, they are stripped before parsing.
  */
 
 import OpenAI from 'openai';
@@ -28,9 +36,10 @@ import type {
 } from '../types.js';
 import { LlmError } from '../types.js';
 
-const PROVIDER = 'openai';
+const PROVIDER = 'deepseek';
+const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 
-/** Normalize OpenAI's usage object to LlmUsage. */
+/** Normalize OpenAI-format usage object to LlmUsage. */
 function normalizeUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUsage {
   const inputTokens = usage?.prompt_tokens ?? 0;
   const outputTokens = usage?.completion_tokens ?? 0;
@@ -41,8 +50,8 @@ function normalizeUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUs
   };
 }
 
-/** Convert LlmMessages to OpenAI's chat message format. */
-function buildOpenAIMessages(messages: LlmMessage[]): OpenAI.Chat.ChatCompletionMessageParam[] {
+/** Convert LlmMessages to OpenAI-format chat message params (compatible with DeepSeek). */
+function buildMessages(messages: LlmMessage[]): OpenAI.Chat.ChatCompletionMessageParam[] {
   return messages.map((m) => ({
     role: m.role,
     content: m.content,
@@ -50,15 +59,17 @@ function buildOpenAIMessages(messages: LlmMessage[]): OpenAI.Chat.ChatCompletion
 }
 
 /**
- * Normalize any OpenAI SDK error into LlmError.
+ * Normalize any DeepSeek / OpenAI SDK error into LlmError.
  * Exported for direct unit testing of the normalization logic.
+ *
+ * Uses the same OpenAI SDK error hierarchy (APIConnectionError before APIError)
+ * since the client is an OpenAI instance pointed at DeepSeek's API.
  */
-export function normalizeOpenAIError(err: unknown): LlmError {
+export function normalizeDeepSeekError(err: unknown): LlmError {
   if (err instanceof LlmError) return err;
 
-  // OpenAI SDK v6+: uses OpenAI.APIError as the base class with a `.status` field.
-  // APIConnectionError is a subclass of APIError with status: undefined — check it first
-  // so network failures are always retryable regardless of the missing status code.
+  // APIConnectionError is a subclass of APIError with status: undefined —
+  // check it first so network failures are always retryable.
   if (typeof OpenAI.APIConnectionError === 'function' && err instanceof OpenAI.APIConnectionError) {
     return new LlmError({
       message: err.message,
@@ -68,8 +79,7 @@ export function normalizeOpenAIError(err: unknown): LlmError {
     });
   }
 
-  // Catch all other APIError subclasses: RateLimitError (429), AuthenticationError (401),
-  // InternalServerError (500), etc. Retryability is determined by HTTP status code.
+  // Catch all other APIError subclasses: RateLimitError (429), AuthenticationError (401), etc.
   if (typeof OpenAI.APIError === 'function' && err instanceof OpenAI.APIError) {
     const status: number | undefined = err.status;
     if (status !== undefined) {
@@ -88,12 +98,14 @@ export function normalizeOpenAIError(err: unknown): LlmError {
   return normalizeThrownError(err, PROVIDER);
 }
 
-/** Create the OpenAI provider implementation. */
-export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
+/** Create the DeepSeek provider implementation. */
+export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
+  // OpenAI SDK pointed at DeepSeek's OpenAI-compatible endpoint
   const client = new OpenAI({
     apiKey: config.apiKey,
+    baseURL: DEEPSEEK_BASE_URL,
     timeout: config.timeoutMs ?? 30_000,
-    maxRetries: 0, // We manage retries ourselves via withRetry
+    maxRetries: 0, // Retries managed by withRetry
   });
 
   const retryOpts = {
@@ -107,14 +119,14 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
   ): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
-    const openAIMessages = buildOpenAIMessages(messages);
+    const chatMessages = buildMessages(messages);
     const start = Date.now();
 
     return withRetry(async () => {
       try {
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
           model,
-          messages: openAIMessages,
+          messages: chatMessages,
           stream: false,
         };
 
@@ -125,7 +137,6 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
         if (temperature !== undefined) params.temperature = temperature;
 
         const response = await client.chat.completions.create(params);
-
         const content = response.choices.map((c) => c.message.content ?? '').join('');
 
         return {
@@ -135,7 +146,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
           latencyMs: Date.now() - start,
         };
       } catch (err) {
-        throw normalizeOpenAIError(err);
+        throw normalizeDeepSeekError(err);
       }
     }, retryOpts);
   }
@@ -145,11 +156,11 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
-    const openAIMessages = buildOpenAIMessages(messages);
+    const chatMessages = buildMessages(messages);
 
     const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
       model,
-      messages: openAIMessages,
+      messages: chatMessages,
       stream: true,
       stream_options: { include_usage: true },
     };
@@ -165,29 +176,27 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     try {
       sdkStream = await client.chat.completions.create(params);
     } catch (err) {
-      throw normalizeOpenAIError(err);
+      throw normalizeDeepSeekError(err);
     }
 
     let finalUsage: LlmUsage | undefined;
 
     try {
       for await (const chunk of sdkStream) {
-        // Token chunks arrive in choices[0].delta.content
         const delta = chunk.choices[0]?.delta.content;
         if (delta !== undefined && delta !== null && delta.length > 0) {
           yield { token: delta };
         }
 
-        // Usage arrives in the final chunk (stream_options.include_usage must be true)
+        // Usage arrives in the final chunk when stream_options.include_usage is true
         if (chunk.usage !== undefined && chunk.usage !== null) {
           finalUsage = normalizeUsage(chunk.usage);
         }
       }
     } catch (err) {
-      throw normalizeOpenAIError(err);
+      throw normalizeDeepSeekError(err);
     }
 
-    // Yield usage on the final sentinel chunk
     if (finalUsage !== undefined) {
       yield { token: '', usage: finalUsage };
     }
@@ -198,8 +207,8 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     schema: { parse: (data: unknown) => T },
     options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
   ): Promise<LlmStructuredResponse<T>> {
-    // OpenAI JSON mode: response_format: { type: 'json_object' }
-    // The system prompt must instruct the model to output JSON — OpenAI requires this.
+    // Inject JSON-only system instruction. DeepSeek does not guarantee json_object
+    // response_format support across all models, so we rely on prompt-level enforcement.
     const jsonSystemInstruction: LlmMessage = {
       role: 'system',
       content:
@@ -208,16 +217,15 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
     const augmentedMessages = [jsonSystemInstruction, ...messages];
     const model = options?.model ?? config.model;
-    const openAIMessages = buildOpenAIMessages(augmentedMessages);
+    const chatMessages = buildMessages(augmentedMessages);
     const start = Date.now();
 
     const rawResponse = await withRetry(async () => {
       try {
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
           model,
-          messages: openAIMessages,
+          messages: chatMessages,
           stream: false,
-          response_format: { type: 'json_object' },
         };
 
         const maxTokens = options?.maxTokens ?? config.maxTokens;
@@ -228,7 +236,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
         return await client.chat.completions.create(params);
       } catch (err) {
-        throw normalizeOpenAIError(err);
+        throw normalizeDeepSeekError(err);
       }
     }, retryOpts);
 
@@ -236,10 +244,15 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
     let parsed: unknown;
     try {
-      parsed = JSON.parse(rawContent);
+      // Strip markdown fences if the model included them despite the instruction
+      const cleaned = rawContent
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/, '')
+        .trim();
+      parsed = JSON.parse(cleaned);
     } catch (err) {
       throw new LlmError({
-        message: `OpenAI structured output: response is not valid JSON. Raw: ${rawContent.slice(0, 200)}`,
+        message: `DeepSeek structured output: response is not valid JSON. Raw: ${rawContent.slice(0, 200)}`,
         provider: PROVIDER,
         retryable: false,
         cause: err,
@@ -251,7 +264,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       data = schema.parse(parsed);
     } catch (err) {
       throw new LlmError({
-        message: `OpenAI structured output: response failed schema validation. ${String(err)}`,
+        message: `DeepSeek structured output: response failed schema validation. ${String(err)}`,
         provider: PROVIDER,
         retryable: false,
         cause: err,

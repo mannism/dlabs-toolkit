@@ -15,7 +15,7 @@ Shared platform infrastructure for the Diabolical Labs and Diana Ismail project 
 
 - **TypeScript strict.** No `any`, no implicit `any`, no unused locals/params.
 - **ESM-only.** Modern Node (≥20) and modern bundlers only. No CJS dual-publish.
-- **UK English in docs and copy.** Code identifiers follow standard JavaScript/TypeScript conventions.
+- **US English in docs, code identifiers, and copy.** Per `/Users/mann/Documents/Claude/decisions.md` (2026-05-04): dlabs-toolkit and `@diabolicallabs` packages are commercial-surface infrastructure, not personal-brand. Use `normalize`, `serialize`, `color`, `behavior`, `analyze` etc. — not `normalise`, `serialise`, `colour`, `behaviour`, `analyse`. Applies to function names, variable names, JSDoc, error messages, READMEs, and all public API surface.
 - **Independent versioning per package** via Changesets (or equivalent — confirm in platform brief). Semver discipline mandatory.
 - **No package ships without tests.** Quinn audits.
 - **Manifest files** per global manifest schema (`/Users/mann/Documents/Claude/manifest-schema.md`) — Sable creates and maintains for each package.

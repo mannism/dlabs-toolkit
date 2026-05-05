@@ -8,9 +8,9 @@ Schema: [`/Users/mann/Documents/Claude/manifest-schema.md`](https://github.com/m
 
 | Package | Status | Path | Description |
 |---|---|---|---|
-| `@diabolicallabs/llm-client` | in-progress | [`packages/llm-client/manifest.yaml`](packages/llm-client/manifest.yaml) | Unified LLM API — Anthropic (impl), OpenAI (impl), Gemini/DeepSeek/Perplexity (stubs). Streaming, retry, structured output, token normalisation. |
+| `@diabolicallabs/llm-client` | in-progress | [`packages/llm-client/manifest.yaml`](packages/llm-client/manifest.yaml) | Unified LLM API — Anthropic, OpenAI, Gemini, DeepSeek (impl); Perplexity (stub). Streaming, retry, structured output, token normalization. |
 | `@diabolicallabs/agent-sdk` | scaffolded | [`packages/agent-sdk/manifest.yaml`](packages/agent-sdk/manifest.yaml) | Cost-tracking middleware wrapping llm-client. Fire-and-forget ingestion to Agent Spend Dashboard. |
-| `@diabolicallabs/notion` | scaffolded | [`packages/notion/manifest.yaml`](packages/notion/manifest.yaml) | Notion REST API helpers — page creation, property serialisation, conflict retry, rate-limit backoff. |
+| `@diabolicallabs/notion` | scaffolded | [`packages/notion/manifest.yaml`](packages/notion/manifest.yaml) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
 | `@diabolicallabs/rate-limiter` | scaffolded | [`packages/rate-limiter/manifest.yaml`](packages/rate-limiter/manifest.yaml) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
 
 ---

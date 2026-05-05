@@ -3,10 +3,10 @@ purpose: >
   Unified LLM API across Anthropic, OpenAI, Gemini, DeepSeek, and Perplexity.
   Provides a single LlmClient interface with streaming, non-streaming, and
   structured output (Zod-validated). Handles retry with exponential backoff +
-  full jitter, error normalisation into LlmError, and token usage normalisation
+  full jitter, error normalization into LlmError, and token usage normalization
   into a consistent LlmUsage shape regardless of provider.
-  Week 2: Anthropic + OpenAI fully implemented. Gemini/DeepSeek/Perplexity are
-  type-registered stubs (Week 3+).
+  Week 2: Anthropic + OpenAI fully implemented.
+  Week 3: Gemini + DeepSeek fully implemented. Perplexity remains a stub (later week).
 owner: Sable
 status: in-progress
 
@@ -65,7 +65,8 @@ performance:
   notes: "Token counting is done from the provider response, not via tiktoken. No sync-heavy computation."
 
 notes: |
-  Status 'scaffolded': types and factory stubs are in place; provider implementations
-  ship in Week 2 (Anthropic + OpenAI) and Week 3 (Google + DeepSeek).
+  Week 2 shipped: Anthropic + OpenAI providers, retry, structured output, 80%+ test coverage.
+  Week 3 shipped: Gemini (via @google/genai SDK) + DeepSeek (OpenAI SDK with baseURL override).
   Provider SDKs are devDependencies — bundled into dist at build time via tsup.
   Consumers do not need to install provider SDKs directly.
+  Perplexity is a type-registered stub; implementation deferred to a later week.

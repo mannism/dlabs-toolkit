@@ -6,7 +6,7 @@
  * - isRetryableErrorCode: correct classification of network error codes
  * - computeBackoffMs: stays within [0, baseDelay * 2^attempt]
  * - withRetry: retries retryable errors; does not retry non-retryable; exhausts and throws
- * - normaliseThrownError: maps various error shapes to LlmError
+ * - normalizeThrownError: maps various error shapes to LlmError
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,7 @@ import {
   computeBackoffMs,
   isRetryableErrorCode,
   isRetryableStatus,
-  normaliseThrownError,
+  normalizeThrownError,
   withRetry,
 } from './retry.js';
 import { LlmError } from './types.js';
@@ -204,16 +204,16 @@ describe('withRetry', () => {
   });
 });
 
-describe('normaliseThrownError', () => {
+describe('normalizeThrownError', () => {
   it('passes through LlmError unchanged', () => {
     const err = new LlmError({ message: 'original', provider: 'test', retryable: false });
-    const result = normaliseThrownError(err, 'different');
+    const result = normalizeThrownError(err, 'different');
     expect(result).toBe(err);
   });
 
   it('maps Error with status code to LlmError', () => {
     const err = Object.assign(new Error('not found'), { status: 404 });
-    const result = normaliseThrownError(err, 'openai');
+    const result = normalizeThrownError(err, 'openai');
     expect(result).toBeInstanceOf(LlmError);
     expect(result.statusCode).toBe(404);
     expect(result.retryable).toBe(false);
@@ -222,33 +222,33 @@ describe('normaliseThrownError', () => {
 
   it('maps Error with retryable status code correctly', () => {
     const err = Object.assign(new Error('rate limited'), { status: 429 });
-    const result = normaliseThrownError(err, 'openai');
+    const result = normalizeThrownError(err, 'openai');
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBe(429);
   });
 
   it('maps Error with retryable error code (ECONNRESET)', () => {
     const err = Object.assign(new Error('connection reset'), { code: 'ECONNRESET' });
-    const result = normaliseThrownError(err, 'anthropic');
+    const result = normalizeThrownError(err, 'anthropic');
     expect(result.retryable).toBe(true);
     expect(result.provider).toBe('anthropic');
   });
 
   it('maps plain Error without status to non-retryable LlmError', () => {
     const err = new Error('some error');
-    const result = normaliseThrownError(err, 'anthropic');
+    const result = normalizeThrownError(err, 'anthropic');
     expect(result.retryable).toBe(false);
     expect(result.cause).toBe(err);
   });
 
   it('maps non-Error throws to LlmError', () => {
-    const result = normaliseThrownError('string error', 'test');
+    const result = normalizeThrownError('string error', 'test');
     expect(result).toBeInstanceOf(LlmError);
     expect(result.retryable).toBe(false);
   });
 
   it('maps null to LlmError', () => {
-    const result = normaliseThrownError(null, 'test');
+    const result = normalizeThrownError(null, 'test');
     expect(result).toBeInstanceOf(LlmError);
     expect(result.retryable).toBe(false);
   });

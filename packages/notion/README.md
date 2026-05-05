@@ -1,6 +1,6 @@
 # @diabolicallabs/notion
 
-Notion REST API helpers — database page creation, property serialisation, conflict retry, and rate-limit backoff. © Diabolical Labs
+Notion REST API helpers — database page creation, property serialization, conflict retry, and rate-limit backoff. © Diabolical Labs
 
 ## Status
 
@@ -75,7 +75,7 @@ type NotionPropertyValue =
   | { type: 'relation'; pageIds: string[] };
 ```
 
-## Retry behaviour
+## Retry behavior
 
 - `conflict_error` from Notion (concurrent writes): retried automatically with exponential backoff
 - HTTP 429 (rate limited): retried after delay

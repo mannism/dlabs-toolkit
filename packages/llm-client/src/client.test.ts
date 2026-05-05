@@ -2,8 +2,8 @@
  * Unit tests for client.ts — createClient and createClientFromEnv.
  *
  * Test coverage:
- * - createClient: dispatches to the correct provider for anthropic + openai
- * - createClient: stub providers (gemini, deepseek, perplexity) throw "not yet implemented"
+ * - createClient: dispatches to the correct provider for all four implemented providers
+ * - createClient: stub provider (perplexity) throws "not yet implemented"
  * - createClientFromEnv: reads correct env var per provider
  * - createClientFromEnv: throws LlmError when env var is missing
  */
@@ -12,7 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient, createClientFromEnv } from './client.js';
 import { LlmError } from './types.js';
 
-// Mock the provider modules to avoid real SDK initialisation
+// Mock all four implemented provider modules to avoid real SDK initialisation.
+// vi.mock is hoisted to the top of the file — factories cannot reference local variables.
 vi.mock('./providers/anthropic.js', () => ({
   createAnthropicProvider: vi.fn(() => ({
     config: {},
@@ -31,7 +32,25 @@ vi.mock('./providers/openai.js', () => ({
   })),
 }));
 
-// We do NOT mock stubs.ts — we test that they throw at runtime
+vi.mock('./providers/gemini.js', () => ({
+  createGeminiProvider: vi.fn(() => ({
+    config: {},
+    complete: vi.fn(),
+    stream: vi.fn(),
+    structured: vi.fn(),
+  })),
+}));
+
+vi.mock('./providers/deepseek.js', () => ({
+  createDeepSeekProvider: vi.fn(() => ({
+    config: {},
+    complete: vi.fn(),
+    stream: vi.fn(),
+    structured: vi.fn(),
+  })),
+}));
+
+// We do NOT mock stubs.ts — we test that perplexity throws at runtime
 
 describe('createClient', () => {
   it('returns an object with LlmClient shape for anthropic', () => {
@@ -54,18 +73,26 @@ describe('createClient', () => {
     expect(typeof client.complete).toBe('function');
   });
 
-  it('returns a stub for gemini that throws on complete()', async () => {
-    const client = createClient({ provider: 'gemini', model: 'gemini-2.5-flash', apiKey: 'x' });
-    await expect(client.complete([])).rejects.toMatchObject({
-      message: expect.stringContaining('not yet implemented'),
+  it('returns an object with LlmClient shape for gemini', () => {
+    const client = createClient({
+      provider: 'gemini',
+      model: 'gemini-2.0-flash',
+      apiKey: 'test',
     });
+    expect(typeof client.complete).toBe('function');
+    expect(typeof client.stream).toBe('function');
+    expect(typeof client.structured).toBe('function');
   });
 
-  it('returns a stub for deepseek that throws on complete()', async () => {
-    const client = createClient({ provider: 'deepseek', model: 'deepseek-chat', apiKey: 'x' });
-    await expect(client.complete([])).rejects.toMatchObject({
-      message: expect.stringContaining('not yet implemented'),
+  it('returns an object with LlmClient shape for deepseek', () => {
+    const client = createClient({
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+      apiKey: 'test',
     });
+    expect(typeof client.complete).toBe('function');
+    expect(typeof client.stream).toBe('function');
+    expect(typeof client.structured).toBe('function');
   });
 
   it('returns a stub for perplexity that throws on complete()', async () => {
@@ -75,8 +102,8 @@ describe('createClient', () => {
     });
   });
 
-  it('stub stream() throws not-yet-implemented', async () => {
-    const client = createClient({ provider: 'gemini', model: 'gemini-2.5-flash', apiKey: 'x' });
+  it('perplexity stub stream() throws not-yet-implemented', async () => {
+    const client = createClient({ provider: 'perplexity', model: 'sonar', apiKey: 'x' });
     async function consumeStream() {
       for await (const _ of client.stream([])) {
         // should not iterate
@@ -87,15 +114,15 @@ describe('createClient', () => {
     });
   });
 
-  it('stub structured() throws not-yet-implemented', async () => {
-    const client = createClient({ provider: 'deepseek', model: 'deepseek-chat', apiKey: 'x' });
+  it('perplexity stub structured() throws not-yet-implemented', async () => {
+    const client = createClient({ provider: 'perplexity', model: 'sonar', apiKey: 'x' });
     await expect(client.structured([], { parse: (d) => d })).rejects.toMatchObject({
       message: expect.stringContaining('not yet implemented'),
     });
   });
 
-  it('stub config getter throws not-yet-implemented', () => {
-    const client = createClient({ provider: 'gemini', model: 'gemini-2.5-flash', apiKey: 'x' });
+  it('perplexity stub config getter throws not-yet-implemented', () => {
+    const client = createClient({ provider: 'perplexity', model: 'sonar', apiKey: 'x' });
     expect(() => {
       void client.config;
     }).toThrowError(/not yet implemented/);
@@ -155,10 +182,27 @@ describe('createClientFromEnv', () => {
     }
   });
 
-  it('throws LlmError when GOOGLE_AI_API_KEY is missing (gemini stub)', () => {
+  it('throws LlmError when GOOGLE_AI_API_KEY is missing', () => {
     setTestEnv('GOOGLE_AI_API_KEY', undefined);
-    // Throws on env resolution, before even calling the stub
-    expect(() => createClientFromEnv('gemini', 'gemini-2.5-flash')).toThrow(LlmError);
+    // Throws on env resolution, before calling the provider
+    expect(() => createClientFromEnv('gemini', 'gemini-2.0-flash')).toThrow(LlmError);
+  });
+
+  it('throws LlmError when DEEPSEEK_API_KEY is missing', () => {
+    setTestEnv('DEEPSEEK_API_KEY', undefined);
+    expect(() => createClientFromEnv('deepseek', 'deepseek-chat')).toThrow(LlmError);
+  });
+
+  it('reads GOOGLE_AI_API_KEY for gemini provider', () => {
+    setTestEnv('GOOGLE_AI_API_KEY', 'aistudio-test-key');
+    const client = createClientFromEnv('gemini', 'gemini-2.0-flash');
+    expect(client).toBeDefined();
+  });
+
+  it('reads DEEPSEEK_API_KEY for deepseek provider', () => {
+    setTestEnv('DEEPSEEK_API_KEY', 'sk-deepseek-test');
+    const client = createClientFromEnv('deepseek', 'deepseek-chat');
+    expect(client).toBeDefined();
   });
 
   it('applies overrides to the config', () => {

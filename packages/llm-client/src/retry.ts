@@ -45,7 +45,7 @@ export interface RetryOptions {
 }
 
 /**
- * Execute `fn` with retry logic. Wraps the result in structured error normalisation.
+ * Execute `fn` with retry logic. Wraps the result in structured error normalization.
  * `fn` receives the current attempt number (0-indexed).
  *
  * Throws LlmError after all retries are exhausted.
@@ -60,7 +60,7 @@ export async function withRetry<T>(
     try {
       return await fn(attempt);
     } catch (err) {
-      const llmErr = normaliseThrownError(err, opts.provider);
+      const llmErr = normalizeThrownError(err, opts.provider);
 
       if (!llmErr.retryable || attempt === opts.maxRetries) {
         throw llmErr;
@@ -84,8 +84,8 @@ export async function withRetry<T>(
   );
 }
 
-/** Normalise any thrown value into an LlmError. */
-export function normaliseThrownError(err: unknown, provider: string): LlmError {
+/** Normalize any thrown value into an LlmError. */
+export function normalizeThrownError(err: unknown, provider: string): LlmError {
   if (err instanceof LlmError) return err;
 
   if (err instanceof Error) {

@@ -14,7 +14,9 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mannism/dlabs-toolkit.git",
@@ -45,6 +47,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.94.0",
+    "@google/genai": "^1.52.0",
     "openai": "^6.36.0",
     "zod": "^4.4.3"
   }

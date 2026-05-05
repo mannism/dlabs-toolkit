@@ -35,8 +35,8 @@ contracts:
     atomicity: "single redis.multi().exec() call"
   fail_closed:
     trigger: "redis.multi().exec() throws"
-    check_behaviour: "returns { allowed: false, remaining: 0, resetMs: windowMs }"
-    enforce_behaviour: "throws RateLimitError"
+    check_behavior: "returns { allowed: false, remaining: 0, resetMs: windowMs }"
+    enforce_behavior: "throws RateLimitError"
 
 failure_modes:
   - trigger: "Redis unreachable"

@@ -1,7 +1,7 @@
 name: "@diabolicallabs/notion"
 purpose: >
   Notion REST API helpers. Handles the repetitive parts of the Notion API:
-  authentication headers, Notion-Version header pinning, property serialisation
+  authentication headers, Notion-Version header pinning, property serialization
   for all common property types, conflict_error retry (common on concurrent
   page writes), and the 3-req/s rate-limit backoff. Wraps the REST API
   directly — not the official Notion SDK — for precise control.
@@ -54,4 +54,4 @@ notes: |
   ships Week 5. Wraps Notion REST API directly — not the @notionhq/client SDK
   — for control over version header and retry logic.
   Acceptance gate: usage-parser writeToNotion() can be reimplemented using
-  this package with no behaviour change.
+  this package with no behavior change.

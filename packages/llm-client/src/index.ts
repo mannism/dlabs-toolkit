@@ -3,7 +3,7 @@
  *
  * Unified LLM API across Anthropic, OpenAI, Gemini, DeepSeek, and Perplexity.
  * Provides a single LlmClient interface with streaming, structured output,
- * exponential-backoff retry, and normalised token usage across all providers.
+ * exponential-backoff retry, and normalized token usage across all providers.
  *
  * Week 2: Anthropic + OpenAI fully implemented.
  * Week 3: Gemini + DeepSeek.
