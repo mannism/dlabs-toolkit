@@ -28,7 +28,7 @@ const client = instrumentClient(base, {
 
 // Identical API to LlmClient — instrumentation is invisible to the caller
 const response = await client.complete([
-  { role: 'user', content: 'Analyse this URL...' },
+  { role: 'user', content: 'Analyze this URL...' },
 ]);
 // CallRecord dispatched asynchronously — response returned immediately
 ```
@@ -72,7 +72,7 @@ interface CallRecord {
 }
 ```
 
-## Failure behaviour
+## Failure behavior
 
 Ingestion failures are **always silent** — they never surface to the caller.
 

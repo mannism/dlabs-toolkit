@@ -19,7 +19,7 @@ describe('@diabolicallabs/agent-sdk', () => {
   });
 
   it('instrumentClient throws not-implemented before Week 4', () => {
-    // The stub throws — this is expected behaviour documented in sdk.ts
+    // The stub throws — this is expected behavior documented in sdk.ts
     expect(() => {
       instrumentClient(
         // Minimal shape cast — we only care that the function throws

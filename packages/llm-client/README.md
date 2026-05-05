@@ -77,7 +77,7 @@ Reads the API key from the environment:
 
 ### Error handling
 
-All provider errors are normalised into `LlmError`:
+All provider errors are normalized into `LlmError`:
 
 ```typescript
 import { LlmError } from '@diabolicallabs/llm-client';
@@ -93,7 +93,7 @@ try {
 
 Retryable errors (429, 5xx, network) are retried automatically up to `maxRetries` times with exponential backoff + full jitter before throwing.
 
-## Token normalisation
+## Token normalization
 
 All providers return `LlmUsage` in a consistent shape regardless of the underlying API's field names:
 

@@ -3,7 +3,7 @@ purpose: >
   Unified LLM API across Anthropic, OpenAI, Gemini, DeepSeek, and Perplexity.
   Provides a single LlmClient interface with streaming, non-streaming, and
   structured output (Zod-validated). Handles retry with exponential backoff +
-  full jitter, error normalisation into LlmError, and token usage normalisation
+  full jitter, error normalization into LlmError, and token usage normalization
   into a consistent LlmUsage shape regardless of provider.
   Week 2: Anthropic + OpenAI fully implemented.
   Week 3: Gemini + DeepSeek fully implemented. Perplexity remains a stub (later week).

@@ -49,9 +49,9 @@ try {
 }
 ```
 
-## Fail-closed behaviour
+## Fail-closed behavior
 
-If Redis is unreachable, the rate limiter **rejects the request** (never passes through). This is the correct behaviour for a public API endpoint.
+If Redis is unreachable, the rate limiter **rejects the request** (never passes through). This is the correct behavior for a public API endpoint.
 
 - `check()` returns `{ allowed: false, remaining: 0, resetMs: windowMs }` on Redis error
 - `enforce()` throws `RateLimitError` on Redis error
