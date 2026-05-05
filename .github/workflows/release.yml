@@ -29,9 +29,8 @@ jobs:
           fetch-depth: 0
 
       - name: Setup pnpm
+        # No version pin — pnpm/action-setup@v4 reads from packageManager in package.json
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
