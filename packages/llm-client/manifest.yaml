@@ -1,22 +1,28 @@
 name: "@diabolicallabs/llm-client"
 purpose: >
-  Unified LLM API across Anthropic, OpenAI, Google, and DeepSeek. Provides a
-  single LlmClient interface with streaming, non-streaming, and structured
-  output (Zod-validated). Handles retry with exponential backoff + full jitter,
-  error normalisation into LlmError, and token usage normalisation into a
-  consistent LlmUsage shape regardless of provider.
+  Unified LLM API across Anthropic, OpenAI, Gemini, DeepSeek, and Perplexity.
+  Provides a single LlmClient interface with streaming, non-streaming, and
+  structured output (Zod-validated). Handles retry with exponential backoff +
+  full jitter, error normalisation into LlmError, and token usage normalisation
+  into a consistent LlmUsage shape regardless of provider.
+  Week 2: Anthropic + OpenAI fully implemented. Gemini/DeepSeek/Perplexity are
+  type-registered stubs (Week 3+).
 owner: Sable
-status: scaffolded
+status: in-progress
 
 depends_on:
   - name: "@anthropic-ai/sdk"
     why: "Anthropic Claude provider — Week 2 implementation"
   - name: "openai"
     why: "OpenAI provider — Week 2 implementation"
+  - name: "zod"
+    why: "Structured output schema validation. Used in structured() to parse and validate JSON responses."
   - name: "@google/genai"
     why: "Google Gemini provider — Week 3 implementation"
   - name: "deepseek (fetch-based)"
     why: "DeepSeek provider — Week 3 implementation. DeepSeek's API is OpenAI-compatible; uses the openai SDK with a base URL override."
+  - name: "perplexity"
+    why: "Perplexity provider — later week. Type-registered stub in Week 2."
 
 depended_on_by:
   - name: "@diabolicallabs/agent-sdk"

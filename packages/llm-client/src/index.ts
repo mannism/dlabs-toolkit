@@ -1,11 +1,13 @@
 /**
  * @diabolicallabs/llm-client
  *
- * Unified LLM API across Anthropic, OpenAI, Google, and DeepSeek.
+ * Unified LLM API across Anthropic, OpenAI, Gemini, DeepSeek, and Perplexity.
  * Provides a single LlmClient interface with streaming, structured output,
  * exponential-backoff retry, and normalised token usage across all providers.
  *
- * Implementation begins Week 2. This file exports the public type surface only.
+ * Week 2: Anthropic + OpenAI fully implemented.
+ * Week 3: Gemini + DeepSeek.
+ * Later: Perplexity.
  */
 
 // Core message format shared across all providers
@@ -22,5 +24,5 @@ export type { LlmClient } from './types.js';
 // Error class — exported as value, not just type
 export { LlmError } from './types.js';
 
-// Factory functions — implementation stubs until Week 2
+// Factory functions — Anthropic + OpenAI implemented. Gemini/DeepSeek/Perplexity stubs.
 export { createClient, createClientFromEnv } from './client.js';
