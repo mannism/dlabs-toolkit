@@ -12,9 +12,9 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { type MockInstance, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
-import type { LlmClientConfig } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
 
 // Mock the Anthropic SDK so tests never make real API calls
@@ -249,7 +249,7 @@ describe('Anthropic provider — stream()', () => {
 
     const client = createAnthropicProvider(TEST_CONFIG);
     const chunks: string[] = [];
-    let finalUsage = undefined;
+    let finalUsage: LlmUsage | undefined;
 
     for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }])) {
       if (chunk.usage !== undefined) {

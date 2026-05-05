@@ -19,8 +19,9 @@
  *   1 — one or more tests failed (errors printed to stderr)
  */
 
-import { createClientFromEnv } from '../packages/llm-client/src/index.js';
 import { z } from 'zod';
+import { createClientFromEnv } from '../packages/llm-client/src/index.js';
+import type { LlmUsage } from '../packages/llm-client/src/types.js';
 
 // Color helpers for terminal output
 const GREEN = '\x1b[32m';
@@ -101,15 +102,15 @@ async function main(): Promise<void> {
     pass(
       'anthropic.complete()',
       `content=${result.content.slice(0, 60).replace(/\n/g, ' ')} | ` +
-      `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
-      `latency=${latency}ms`
+        `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
+        `latency=${latency}ms`
     );
   });
 
   await runTest('anthropic.stream()', async () => {
     const start = Date.now();
     const tokens: string[] = [];
-    let finalUsage = undefined;
+    let finalUsage: LlmUsage | undefined;
 
     for await (const chunk of anthropic.stream([
       { role: 'user', content: 'Count from 1 to 5, one number per line.' },
@@ -128,15 +129,20 @@ async function main(): Promise<void> {
     pass(
       'anthropic.stream()',
       `chunks=${tokens.length} | content=${content.slice(0, 40).replace(/\n/g, ' ')} | ` +
-      `tokens=${finalUsage?.inputTokens ?? '?'}in/${finalUsage?.outputTokens ?? '?'}out | ` +
-      `latency=${Date.now() - start}ms`
+        `tokens=${finalUsage?.inputTokens ?? '?'}in/${finalUsage?.outputTokens ?? '?'}out | ` +
+        `latency=${Date.now() - start}ms`
     );
   });
 
   await runTest('anthropic.structured()', async () => {
     const start = Date.now();
     const result = await anthropic.structured<Person>(
-      [{ role: 'user', content: 'Return a JSON object with name, occupation, and city for a fictional person.' }],
+      [
+        {
+          role: 'user',
+          content: 'Return a JSON object with name, occupation, and city for a fictional person.',
+        },
+      ],
       PersonSchema
     );
     if (!result.data.name || !result.data.occupation || !result.data.city) {
@@ -145,8 +151,8 @@ async function main(): Promise<void> {
     pass(
       'anthropic.structured()',
       `data=${JSON.stringify(result.data)} | ` +
-      `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
-      `latency=${Date.now() - start}ms`
+        `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
+        `latency=${Date.now() - start}ms`
     );
   });
 
@@ -172,15 +178,15 @@ async function main(): Promise<void> {
     pass(
       'openai.complete()',
       `content=${result.content.slice(0, 60).replace(/\n/g, ' ')} | ` +
-      `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
-      `latency=${latency}ms`
+        `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
+        `latency=${latency}ms`
     );
   });
 
   await runTest('openai.stream()', async () => {
     const start = Date.now();
     const tokens: string[] = [];
-    let finalUsage = undefined;
+    let finalUsage: LlmUsage | undefined;
 
     for await (const chunk of openai.stream([
       { role: 'user', content: 'Count from 1 to 5, one number per line.' },
@@ -199,15 +205,20 @@ async function main(): Promise<void> {
     pass(
       'openai.stream()',
       `chunks=${tokens.length} | content=${content.slice(0, 40).replace(/\n/g, ' ')} | ` +
-      `tokens=${finalUsage?.inputTokens ?? '?'}in/${finalUsage?.outputTokens ?? '?'}out | ` +
-      `latency=${Date.now() - start}ms`
+        `tokens=${finalUsage?.inputTokens ?? '?'}in/${finalUsage?.outputTokens ?? '?'}out | ` +
+        `latency=${Date.now() - start}ms`
     );
   });
 
   await runTest('openai.structured()', async () => {
     const start = Date.now();
     const result = await openai.structured<Person>(
-      [{ role: 'user', content: 'Return a JSON object with name, occupation, and city for a fictional person.' }],
+      [
+        {
+          role: 'user',
+          content: 'Return a JSON object with name, occupation, and city for a fictional person.',
+        },
+      ],
       PersonSchema
     );
     if (!result.data.name || !result.data.occupation || !result.data.city) {
@@ -216,8 +227,8 @@ async function main(): Promise<void> {
     pass(
       'openai.structured()',
       `data=${JSON.stringify(result.data)} | ` +
-      `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
-      `latency=${Date.now() - start}ms`
+        `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
+        `latency=${Date.now() - start}ms`
     );
   });
 
@@ -226,7 +237,7 @@ async function main(): Promise<void> {
   // ───────────────────────────────────────────────────────────────────────────
   section('Gemini — gemini-2.0-flash');
 
-  if (!process.env['GOOGLE_AI_API_KEY']) {
+  if (!process.env.GOOGLE_AI_API_KEY) {
     skipSection('gemini', 'GOOGLE_AI_API_KEY not set');
   } else {
     const gemini = createClientFromEnv('gemini', 'gemini-2.0-flash', {
@@ -246,15 +257,15 @@ async function main(): Promise<void> {
       pass(
         'gemini.complete()',
         `content=${result.content.slice(0, 60).replace(/\n/g, ' ')} | ` +
-        `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
-        `latency=${latency}ms`
+          `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
+          `latency=${latency}ms`
       );
     });
 
     await runTest('gemini.stream()', async () => {
       const start = Date.now();
       const tokens: string[] = [];
-      let finalUsage = undefined;
+      let finalUsage: LlmUsage | undefined;
 
       for await (const chunk of gemini.stream([
         { role: 'user', content: 'Count from 1 to 5, one number per line.' },
@@ -273,15 +284,20 @@ async function main(): Promise<void> {
       pass(
         'gemini.stream()',
         `chunks=${tokens.length} | content=${content.slice(0, 40).replace(/\n/g, ' ')} | ` +
-        `tokens=${finalUsage?.inputTokens ?? '?'}in/${finalUsage?.outputTokens ?? '?'}out | ` +
-        `latency=${Date.now() - start}ms`
+          `tokens=${finalUsage?.inputTokens ?? '?'}in/${finalUsage?.outputTokens ?? '?'}out | ` +
+          `latency=${Date.now() - start}ms`
       );
     });
 
     await runTest('gemini.structured()', async () => {
       const start = Date.now();
       const result = await gemini.structured<Person>(
-        [{ role: 'user', content: 'Return a JSON object with name, occupation, and city for a fictional person.' }],
+        [
+          {
+            role: 'user',
+            content: 'Return a JSON object with name, occupation, and city for a fictional person.',
+          },
+        ],
         PersonSchema
       );
       if (!result.data.name || !result.data.occupation || !result.data.city) {
@@ -290,8 +306,8 @@ async function main(): Promise<void> {
       pass(
         'gemini.structured()',
         `data=${JSON.stringify(result.data)} | ` +
-        `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
-        `latency=${Date.now() - start}ms`
+          `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
+          `latency=${Date.now() - start}ms`
       );
     });
   }
@@ -301,7 +317,7 @@ async function main(): Promise<void> {
   // ───────────────────────────────────────────────────────────────────────────
   section('DeepSeek — deepseek-chat');
 
-  if (!process.env['DEEPSEEK_API_KEY']) {
+  if (!process.env.DEEPSEEK_API_KEY) {
     skipSection('deepseek', 'DEEPSEEK_API_KEY not set');
   } else {
     const deepseek = createClientFromEnv('deepseek', 'deepseek-chat', {
@@ -321,15 +337,15 @@ async function main(): Promise<void> {
       pass(
         'deepseek.complete()',
         `content=${result.content.slice(0, 60).replace(/\n/g, ' ')} | ` +
-        `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
-        `latency=${latency}ms`
+          `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
+          `latency=${latency}ms`
       );
     });
 
     await runTest('deepseek.stream()', async () => {
       const start = Date.now();
       const tokens: string[] = [];
-      let finalUsage = undefined;
+      let finalUsage: LlmUsage | undefined;
 
       for await (const chunk of deepseek.stream([
         { role: 'user', content: 'Count from 1 to 5, one number per line.' },
@@ -348,15 +364,20 @@ async function main(): Promise<void> {
       pass(
         'deepseek.stream()',
         `chunks=${tokens.length} | content=${content.slice(0, 40).replace(/\n/g, ' ')} | ` +
-        `tokens=${finalUsage?.inputTokens ?? '?'}in/${finalUsage?.outputTokens ?? '?'}out | ` +
-        `latency=${Date.now() - start}ms`
+          `tokens=${finalUsage?.inputTokens ?? '?'}in/${finalUsage?.outputTokens ?? '?'}out | ` +
+          `latency=${Date.now() - start}ms`
       );
     });
 
     await runTest('deepseek.structured()', async () => {
       const start = Date.now();
       const result = await deepseek.structured<Person>(
-        [{ role: 'user', content: 'Return a JSON object with name, occupation, and city for a fictional person.' }],
+        [
+          {
+            role: 'user',
+            content: 'Return a JSON object with name, occupation, and city for a fictional person.',
+          },
+        ],
         PersonSchema
       );
       if (!result.data.name || !result.data.occupation || !result.data.city) {
@@ -365,8 +386,8 @@ async function main(): Promise<void> {
       pass(
         'deepseek.structured()',
         `data=${JSON.stringify(result.data)} | ` +
-        `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
-        `latency=${Date.now() - start}ms`
+          `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
+          `latency=${Date.now() - start}ms`
       );
     });
   }
@@ -374,7 +395,7 @@ async function main(): Promise<void> {
   // ───────────────────────────────────────────────────────────────────────────
   // RESULTS
   // ───────────────────────────────────────────────────────────────────────────
-  console.log('\n' + '─'.repeat(60));
+  console.log(`\n${'─'.repeat(60)}`);
   if (skipCount > 0) {
     console.log(`${BLUE}${skipCount} test(s) skipped (API keys not set).${RESET}`);
   }

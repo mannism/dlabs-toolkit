@@ -10,19 +10,18 @@
  * Later: Perplexity.
  */
 
-// Core message format shared across all providers
-export type { LlmMessage } from './types.js';
-
-// Client config, usage, response, streaming, error types
-export type { LlmClientConfig } from './types.js';
-export type { LlmUsage } from './types.js';
-export type { LlmResponse } from './types.js';
-export type { LlmStreamChunk } from './types.js';
-export type { LlmStructuredResponse } from './types.js';
-export type { LlmClient } from './types.js';
-
-// Error class — exported as value, not just type
-export { LlmError } from './types.js';
-
 // Factory functions — Anthropic + OpenAI implemented. Gemini/DeepSeek/Perplexity stubs.
 export { createClient, createClientFromEnv } from './client.js';
+// Core message format shared across all providers
+// Client config, usage, response, streaming, error types
+export type {
+  LlmClient,
+  LlmClientConfig,
+  LlmMessage,
+  LlmResponse,
+  LlmStreamChunk,
+  LlmStructuredResponse,
+  LlmUsage,
+} from './types.js';
+// Error class — exported as value, not just type
+export { LlmError } from './types.js';

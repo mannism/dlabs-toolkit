@@ -13,8 +13,8 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { type MockInstance, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LlmClientConfig } from '../types.js';
+import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createGeminiProvider } from './gemini.js';
 
@@ -215,7 +215,7 @@ describe('Gemini provider — stream()', () => {
 
     const client = createGeminiProvider(TEST_CONFIG);
     const tokens: string[] = [];
-    let finalUsage = undefined;
+    let finalUsage: LlmUsage | undefined;
 
     for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }])) {
       if (chunk.usage !== undefined) {

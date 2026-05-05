@@ -13,10 +13,11 @@
 
 // Factory functions
 export { createNotionClient, createNotionClientFromEnv } from './client.js';
-
 // Types
-export type { NotionClientConfig } from './types.js';
-export type { NotionPropertyValue } from './types.js';
-export type { NotionProperties } from './types.js';
-export type { NotionPage } from './types.js';
-export type { NotionClient } from './types.js';
+export type {
+  NotionClient,
+  NotionClientConfig,
+  NotionPage,
+  NotionProperties,
+  NotionPropertyValue,
+} from './types.js';
