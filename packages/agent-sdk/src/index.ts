@@ -16,7 +16,4 @@
 export { instrumentClient } from './sdk.js';
 
 // Types: agent identity, SDK config, instrumented client, call record
-export type { AgentIdentity } from './types.js';
-export type { AgentSdkConfig } from './types.js';
-export type { InstrumentedLlmClient } from './types.js';
-export type { CallRecord } from './types.js';
+export type { AgentIdentity, AgentSdkConfig, CallRecord, InstrumentedLlmClient } from './types.js';

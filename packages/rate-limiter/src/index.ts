@@ -21,10 +21,7 @@
 // Factory function
 export { createRateLimiter } from './limiter.js';
 
+// Types
+export type { RateLimiter, RateLimiterConfig, RateLimitResult } from './types.js';
 // Error class — exported as value
 export { RateLimitError } from './types.js';
-
-// Types
-export type { RateLimiterConfig } from './types.js';
-export type { RateLimitResult } from './types.js';
-export type { RateLimiter } from './types.js';

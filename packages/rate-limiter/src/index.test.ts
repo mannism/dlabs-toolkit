@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { RateLimitError, createRateLimiter } from './index.js';
+import { createRateLimiter, RateLimitError } from './index.js';
 
 describe('@diabolicallabs/rate-limiter', () => {
   it('exports createRateLimiter as a function', () => {
