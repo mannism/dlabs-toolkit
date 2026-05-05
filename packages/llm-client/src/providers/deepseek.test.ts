@@ -14,8 +14,8 @@
  */
 
 import OpenAI from 'openai';
-import { type MockInstance, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LlmClientConfig } from '../types.js';
+import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createDeepSeekProvider, normalizeDeepSeekError } from './deepseek.js';
 
@@ -247,7 +247,7 @@ describe('DeepSeek provider — stream()', () => {
 
     const client = createDeepSeekProvider(TEST_CONFIG);
     const tokens: string[] = [];
-    let usageChunk = undefined;
+    let usageChunk: LlmUsage | undefined;
 
     for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }])) {
       if (chunk.usage !== undefined) {
