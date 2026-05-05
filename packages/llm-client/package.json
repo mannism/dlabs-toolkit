@@ -42,9 +42,6 @@
     "tsup": "^8.3.5",
     "vitest": "^3.2.4"
   },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.94.0",
     "@google/genai": "^1.52.0",

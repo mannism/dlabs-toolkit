@@ -56,13 +56,15 @@ jobs:
         env:
           TURBO_TELEMETRY_DISABLED: 1
 
-      - name: Create Release PR or Publish
+      - name: Create Release PR or Tag
         # changesets/action does one of two things on each main push:
         # 1. If changeset files are present: opens/updates a "Version Packages" PR
         #    that bumps versions, updates CHANGELOG.md files, and removes the
-        #    changeset files. No publish yet.
+        #    changeset files. No release yet.
         # 2. If the "Version Packages" PR is merged (no changeset files remain):
-        #    publishes changed packages to the registry and creates GitHub Releases.
+        #    runs `pnpm release` (which calls `changeset tag`) to create git tags
+        #    and GitHub Releases. No registry publish — tag-only stopgap until
+        #    @diabolicallabs org is registered on npmjs.com and NPM_TOKEN is set.
         uses: changesets/action@v1
         with:
           publish: pnpm release
@@ -70,7 +72,4 @@ jobs:
           commit: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # NODE_AUTH_TOKEN authenticates pnpm publish against GitHub Packages.
-          # Uses the built-in GITHUB_TOKEN PAT — no additional secrets required
-          # for publishing to the repo owner's GitHub Packages namespace.
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
