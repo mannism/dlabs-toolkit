@@ -485,4 +485,16 @@ describe('DeepSeek provider — structured()', () => {
     // DeepSeek does not use json_object response_format — relies on system prompt instead
     expect(callArgs.response_format).toBeUndefined();
   });
+
+  it('throws LlmError when the API call itself rejects', async () => {
+    // Exercises the catch block in structured()'s withRetry callback (deepseek.ts lines 239-240).
+    // maxRetries: 0 so the error propagates immediately without retry.
+    mockCreate.mockRejectedValue(new Error('connection reset'));
+    const schema = { parse: (data: unknown) => data };
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    await expect(
+      client.structured([{ role: 'user', content: 'Return data' }], schema)
+    ).rejects.toBeInstanceOf(LlmError);
+  });
 });

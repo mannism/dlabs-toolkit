@@ -153,6 +153,20 @@ describe('normaliseOpenAIError — real OpenAI SDK error classes', () => {
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('openai');
   });
+
+  it('maps OpenAI.APIError with undefined status to non-retryable LlmError', () => {
+    // status === undefined is possible for an APIError subclass that is NOT an APIConnectionError
+    // (which is always retryable). APIError.generate(undefined) produces APIConnectionError, so
+    // we use Object.create to construct an APIError instance that bypasses the APIConnectionError
+    // check. Exercises the else branch at lines 85-86 in openai.ts.
+    const apiErr = Object.create(OpenAI.APIError.prototype) as InstanceType<typeof OpenAI.APIError>;
+    Object.assign(apiErr, { status: undefined, message: 'no status code available' });
+    const result = normaliseOpenAIError(apiErr);
+    expect(result).toBeInstanceOf(LlmError);
+    expect(result.provider).toBe('openai');
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBeUndefined();
+  });
 });
 
 describe('normaliseGeminiError — real @google/genai ApiError class', () => {
@@ -250,5 +264,17 @@ describe('normaliseDeepSeekError — OpenAI SDK error classes (same hierarchy as
       retryable: false,
     });
     expect(normaliseDeepSeekError(llmErr)).toBe(llmErr);
+  });
+
+  it('maps OpenAI.APIError with undefined status to non-retryable LlmError with deepseek provider', () => {
+    // Exercises the else branch (deepseek.ts lines 95-96) where status is undefined.
+    // See normaliseOpenAIError test above for why Object.create is used here.
+    const apiErr = Object.create(OpenAI.APIError.prototype) as InstanceType<typeof OpenAI.APIError>;
+    Object.assign(apiErr, { status: undefined, message: 'no status code available' });
+    const result = normaliseDeepSeekError(apiErr);
+    expect(result).toBeInstanceOf(LlmError);
+    expect(result.provider).toBe('deepseek');
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBeUndefined();
   });
 });

@@ -460,4 +460,23 @@ describe('Gemini provider — structured()', () => {
     };
     expect(callArgs.config?.systemInstruction).toContain('valid JSON');
   });
+
+  it('throws LlmError when the API call itself rejects', async () => {
+    // Exercises the catch block in structured()'s withRetry callback (gemini.ts line 255).
+    // maxRetries: 0 so the error propagates immediately without retry.
+    mockGenerateContent.mockRejectedValue(
+      new LlmError({
+        message: 'Service unavailable',
+        provider: 'gemini',
+        statusCode: 503,
+        retryable: false,
+      })
+    );
+    const schema = { parse: (data: unknown) => data };
+
+    const client = createGeminiProvider(TEST_CONFIG);
+    await expect(
+      client.structured([{ role: 'user', content: 'Return data' }], schema)
+    ).rejects.toBeInstanceOf(LlmError);
+  });
 });

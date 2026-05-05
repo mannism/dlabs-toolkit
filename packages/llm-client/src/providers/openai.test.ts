@@ -511,4 +511,16 @@ describe('OpenAI provider — structured()', () => {
     const systemMsg = callArgs.messages.find((m) => m.role === 'system');
     expect(systemMsg?.content).toContain('valid JSON');
   });
+
+  it('throws LlmError when the API call itself rejects', async () => {
+    // Exercises the catch block in structured()'s withRetry callback (openai.ts lines 231-232).
+    // maxRetries: 0 so the error propagates immediately without retry.
+    mockCreate.mockRejectedValue(new Error('connection reset'));
+    const schema = { parse: (data: unknown) => data };
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await expect(
+      client.structured([{ role: 'user', content: 'Return data' }], schema)
+    ).rejects.toBeInstanceOf(LlmError);
+  });
 });
