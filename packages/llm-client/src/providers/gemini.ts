@@ -5,7 +5,7 @@
  *
  * Implements: complete(), stream(), structured()
  *
- * Token normalisation:
+ * Token normalization:
  *   Gemini: usageMetadata.promptTokenCount / candidatesTokenCount / totalTokenCount
  *   → LlmUsage: inputTokens / outputTokens / totalTokens
  *
@@ -13,7 +13,7 @@
  *   ApiError (public SDK class, status: number always defined):
  *     retryable for 429 / 5xx
  *     non-retryable for 4xx (except 429)
- *   Other errors → normaliseThrownError (handles ECONNRESET / ETIMEDOUT as retryable)
+ *   Other errors → normalizeThrownError (handles ECONNRESET / ETIMEDOUT as retryable)
  *
  * API notes:
  *   - System instructions are passed via config.systemInstruction (not mixed into contents)
@@ -26,7 +26,7 @@
  *   The @google/genai public API exports only ApiError (lowercase 'a'), which has status: number.
  *   Internal APIError / APIConnectionError classes (uppercase) are NOT exported from the package
  *   root and must not be imported from internal dist paths.
- *   Network errors (ECONNRESET, ETIMEDOUT) arrive as plain Error objects caught by normaliseThrownError.
+ *   Network errors (ECONNRESET, ETIMEDOUT) arrive as plain Error objects caught by normalizeThrownError.
  */
 
 import {
@@ -37,7 +37,7 @@ import {
   type GenerateContentResponseUsageMetadata,
   GoogleGenAI,
 } from '@google/genai';
-import { normaliseThrownError, withRetry } from '../retry.js';
+import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmClient,
   LlmClientConfig,
@@ -51,8 +51,8 @@ import { LlmError } from '../types.js';
 
 const PROVIDER = 'gemini';
 
-/** Normalise Gemini's usageMetadata to LlmUsage. */
-function normaliseUsage(meta: GenerateContentResponseUsageMetadata | undefined): LlmUsage {
+/** Normalize Gemini's usageMetadata to LlmUsage. */
+function normalizeUsage(meta: GenerateContentResponseUsageMetadata | undefined): LlmUsage {
   const inputTokens = meta?.promptTokenCount ?? 0;
   const outputTokens = meta?.candidatesTokenCount ?? 0;
   return {
@@ -86,14 +86,14 @@ function buildGeminiContents(messages: LlmMessage[]): {
 }
 
 /**
- * Normalise any Gemini SDK error into LlmError.
- * Exported for direct unit testing of the normalisation logic.
+ * Normalize any Gemini SDK error into LlmError.
+ * Exported for direct unit testing of the normalization logic.
  *
  * ApiError (public SDK class) always has status: number, so there is no undefined-status branch.
- * Network errors (no HTTP status) arrive as plain Error objects; normaliseThrownError
+ * Network errors (no HTTP status) arrive as plain Error objects; normalizeThrownError
  * handles retryable error codes (ECONNRESET, ETIMEDOUT, etc.).
  */
-export function normaliseGeminiError(err: unknown): LlmError {
+export function normalizeGeminiError(err: unknown): LlmError {
   if (err instanceof LlmError) return err;
 
   // ApiError is the only publicly-exported SDK error class.
@@ -110,8 +110,8 @@ export function normaliseGeminiError(err: unknown): LlmError {
   }
 
   // Network errors (ECONNRESET, ETIMEDOUT, etc.) arrive as plain Error objects.
-  // normaliseThrownError classifies retryable codes and handles the unknown-error case.
-  return normaliseThrownError(err, PROVIDER);
+  // normalizeThrownError classifies retryable codes and handles the unknown-error case.
+  return normalizeThrownError(err, PROVIDER);
 }
 
 /** Create the Gemini provider implementation. */
@@ -157,11 +157,11 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
         return {
           content: response.text ?? '',
           model,
-          usage: normaliseUsage(response.usageMetadata),
+          usage: normalizeUsage(response.usageMetadata),
           latencyMs: Date.now() - start,
         };
       } catch (err) {
-        throw normaliseGeminiError(err);
+        throw normalizeGeminiError(err);
       }
     }, retryOpts);
   }
@@ -190,7 +190,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
         config: geminiConfig,
       });
     } catch (err) {
-      throw normaliseGeminiError(err);
+      throw normalizeGeminiError(err);
     }
 
     let finalUsage: LlmUsage | undefined;
@@ -203,11 +203,11 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
         }
         // Capture usage from each chunk — the final chunk has the complete totals
         if (chunk.usageMetadata !== undefined) {
-          finalUsage = normaliseUsage(chunk.usageMetadata);
+          finalUsage = normalizeUsage(chunk.usageMetadata);
         }
       }
     } catch (err) {
-      throw normaliseGeminiError(err);
+      throw normalizeGeminiError(err);
     }
 
     if (finalUsage !== undefined) {
@@ -252,7 +252,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           config: geminiConfig,
         });
       } catch (err) {
-        throw normaliseGeminiError(err);
+        throw normalizeGeminiError(err);
       }
     }, retryOpts);
 
@@ -289,7 +289,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
 
     return {
       data,
-      usage: normaliseUsage(rawResponse.usageMetadata),
+      usage: normalizeUsage(rawResponse.usageMetadata),
       latencyMs: Date.now() - start,
     };
   }

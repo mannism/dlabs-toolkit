@@ -4,10 +4,10 @@
  * All tests use vi.mock to stub the openai SDK. No real API calls.
  *
  * Test coverage:
- * - complete(): happy path, token normalisation, model/options overrides, error normalisation
+ * - complete(): happy path, token normalization, model/options overrides, error normalization
  * - stream(): token chunks, usage on final chunk, error handling
  * - structured(): JSON mode, parse success/failure, schema validation failure
- * - Retry behaviour on retryable status codes
+ * - Retry behavior on retryable status codes
  */
 
 import OpenAI from 'openai';
@@ -67,7 +67,7 @@ describe('OpenAI provider — complete()', () => {
     );
   });
 
-  it('returns normalised LlmResponse on success', async () => {
+  it('returns normalized LlmResponse on success', async () => {
     const client = createOpenAIProvider(TEST_CONFIG);
     const result = await client.complete([{ role: 'user', content: 'Hi' }]);
 
@@ -137,7 +137,7 @@ describe('OpenAI provider — complete()', () => {
   });
 
   it('throws non-retryable LlmError on 403', async () => {
-    // Plain Error with .status goes through normaliseThrownError (SDK classes are mocked)
+    // Plain Error with .status goes through normalizeThrownError (SDK classes are mocked)
     const err = Object.assign(new Error('Forbidden'), { status: 403 });
     mockCreate.mockRejectedValue(err);
 
@@ -149,7 +149,7 @@ describe('OpenAI provider — complete()', () => {
     expect(thrown).toBeInstanceOf(LlmError);
     if (thrown instanceof LlmError) {
       expect(thrown.retryable).toBe(false);
-      // normaliseThrownError reads .status — verify via retryable flag
+      // normalizeThrownError reads .status — verify via retryable flag
       expect(thrown.message).toContain('Forbidden');
     }
   });

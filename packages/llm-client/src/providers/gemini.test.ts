@@ -4,11 +4,11 @@
  * All tests use vi.mock to stub @google/genai. No real API calls.
  *
  * Test coverage:
- * - complete(): happy path, usage normalisation, model override, system message, error handling
+ * - complete(): happy path, usage normalization, model override, system message, error handling
  * - stream(): token chunks, usage on final chunk, error handling
  * - structured(): JSON parse success, markdown fence stripping, parse failure, schema failure
  *
- * Note: normaliseGeminiError() is tested separately in error-normalise.test.ts which
+ * Note: normalizeGeminiError() is tested separately in error-normalize.test.ts which
  * does not mock @google/genai, allowing real ApiError instanceof checks to work correctly.
  */
 
@@ -63,7 +63,7 @@ describe('Gemini provider — complete()', () => {
     );
   });
 
-  it('returns normalised LlmResponse on success', async () => {
+  it('returns normalized LlmResponse on success', async () => {
     const client = createGeminiProvider(TEST_CONFIG);
     const result = await client.complete([{ role: 'user', content: 'Hi' }]);
 
@@ -137,7 +137,7 @@ describe('Gemini provider — complete()', () => {
     expect(result.content).toBe('');
   });
 
-  it('normalises usage to zeros when usageMetadata is absent', async () => {
+  it('normalizes usage to zeros when usageMetadata is absent', async () => {
     mockGenerateContent.mockResolvedValue({ text: 'Hi', usageMetadata: undefined });
     const client = createGeminiProvider(TEST_CONFIG);
     const result = await client.complete([{ role: 'user', content: 'Hi' }]);
@@ -147,8 +147,8 @@ describe('Gemini provider — complete()', () => {
   });
 
   it('throws LlmError on error', async () => {
-    // Use a pre-constructed LlmError to simulate what normaliseGeminiError produces.
-    // Real ApiError instanceof checks are tested in error-normalise.test.ts (unmocked).
+    // Use a pre-constructed LlmError to simulate what normalizeGeminiError produces.
+    // Real ApiError instanceof checks are tested in error-normalize.test.ts (unmocked).
     const err = new LlmError({
       message: 'Unauthorized',
       provider: 'gemini',

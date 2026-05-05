@@ -1,8 +1,8 @@
 /**
- * Unit tests for types.ts — specifically LlmError, which has runtime behaviour.
+ * Unit tests for types.ts — specifically LlmError, which has runtime behavior.
  *
  * LlmMessage, LlmUsage, LlmResponse, etc. are pure interfaces with no runtime
- * behaviour to test — their correctness is enforced at compile time.
+ * behavior to test — their correctness is enforced at compile time.
  */
 
 import { describe, expect, it } from 'vitest';

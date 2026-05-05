@@ -22,7 +22,7 @@
 import { createClientFromEnv } from '../packages/llm-client/src/index.js';
 import { z } from 'zod';
 
-// Colour helpers for terminal output
+// Color helpers for terminal output
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';
 const YELLOW = '\x1b[33m';

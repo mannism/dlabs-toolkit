@@ -4,11 +4,11 @@
  * All tests use vi.mock to stub @anthropic-ai/sdk. No real API calls.
  *
  * Test coverage:
- * - complete(): happy path, usage normalisation, model override, error normalisation
+ * - complete(): happy path, usage normalization, model override, error normalization
  * - stream(): token chunks, usage on final chunk, error handling
  * - structured(): JSON parse success, JSON parse failure, schema validation failure
  * - System message extraction
- * - Retry behaviour on retryable status codes
+ * - Retry behavior on retryable status codes
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -62,7 +62,7 @@ describe('Anthropic provider — complete()', () => {
     );
   });
 
-  it('returns normalised LlmResponse on success', async () => {
+  it('returns normalized LlmResponse on success', async () => {
     const client = createAnthropicProvider(TEST_CONFIG);
     const result = await client.complete([{ role: 'user', content: 'Hi' }]);
 
@@ -109,7 +109,7 @@ describe('Anthropic provider — complete()', () => {
     expect(callArgs.temperature).toBe(0.5);
   });
 
-  it('normalises cache tokens when present', async () => {
+  it('normalizes cache tokens when present', async () => {
     mockCreate.mockResolvedValue(
       mockMessageResponse({
         usage: {
@@ -130,7 +130,7 @@ describe('Anthropic provider — complete()', () => {
   });
 
   it('throws LlmError on a 401 status error', async () => {
-    // Use a plain Error with .status — tests normaliseThrownError path
+    // Use a plain Error with .status — tests normalizeThrownError path
     // (SDK class constructors are not available when the module is mocked)
     const err = Object.assign(new Error('Unauthorized'), { status: 401 });
     mockCreate.mockRejectedValue(err);
@@ -142,7 +142,7 @@ describe('Anthropic provider — complete()', () => {
   });
 
   it('throws non-retryable LlmError on 401', async () => {
-    // Simulate what normaliseAnthropicError does with a plain status error
+    // Simulate what normalizeAnthropicError does with a plain status error
     const err = Object.assign(new Error('Unauthorized'), { status: 401 });
     mockCreate.mockRejectedValue(err);
 
@@ -158,7 +158,7 @@ describe('Anthropic provider — complete()', () => {
   });
 
   it('retries on 429 and eventually succeeds', async () => {
-    // LlmError with retryable: true simulates what normaliseAnthropicError produces for 429
+    // LlmError with retryable: true simulates what normalizeAnthropicError produces for 429
     const retryableErr = new LlmError({
       message: 'Rate limited',
       provider: PROVIDER,

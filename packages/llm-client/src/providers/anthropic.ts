@@ -3,7 +3,7 @@
  *
  * Implements: complete(), stream(), structured()
  *
- * Token normalisation:
+ * Token normalization:
  *   Anthropic: input_tokens / output_tokens / cache_creation_input_tokens / cache_read_input_tokens
  *   → LlmUsage: inputTokens / outputTokens / totalTokens / cacheCreationTokens / cacheReadTokens
  *
@@ -13,7 +13,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { normaliseThrownError, withRetry } from '../retry.js';
+import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmClient,
   LlmClientConfig,
@@ -27,8 +27,8 @@ import { LlmError } from '../types.js';
 
 const PROVIDER = 'anthropic';
 
-/** Normalise Anthropic's usage object to LlmUsage. */
-function normaliseUsage(usage: Anthropic.Usage | undefined): LlmUsage {
+/** Normalize Anthropic's usage object to LlmUsage. */
+function normalizeUsage(usage: Anthropic.Usage | undefined): LlmUsage {
   const inputTokens = usage?.input_tokens ?? 0;
   const outputTokens = usage?.output_tokens ?? 0;
   return {
@@ -64,10 +64,10 @@ function buildAnthropicMessages(messages: LlmMessage[]): {
 }
 
 /**
- * Normalise any Anthropic SDK error into LlmError.
- * Exported for direct unit testing of the normalisation logic.
+ * Normalize any Anthropic SDK error into LlmError.
+ * Exported for direct unit testing of the normalization logic.
  */
-export function normaliseAnthropicError(err: unknown): LlmError {
+export function normalizeAnthropicError(err: unknown): LlmError {
   if (err instanceof LlmError) return err;
 
   // Anthropic SDK v0.94+: uses Anthropic.APIError as the base class with a `.status` field.
@@ -102,7 +102,7 @@ export function normaliseAnthropicError(err: unknown): LlmError {
     return new LlmError({ message: err.message, provider: PROVIDER, retryable: false, cause: err });
   }
 
-  return normaliseThrownError(err, PROVIDER);
+  return normalizeThrownError(err, PROVIDER);
 }
 
 /** Create the Anthropic provider implementation. */
@@ -152,11 +152,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
         return {
           content,
           model: response.model,
-          usage: normaliseUsage(response.usage),
+          usage: normalizeUsage(response.usage),
           latencyMs: Date.now() - start,
         };
       } catch (err) {
-        throw normaliseAnthropicError(err);
+        throw normalizeAnthropicError(err);
       }
     }, retryOpts);
   }
@@ -185,7 +185,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     try {
       sdkStream = client.messages.stream(params);
     } catch (err) {
-      throw normaliseAnthropicError(err);
+      throw normalizeAnthropicError(err);
     }
 
     // Accumulate usage — Anthropic sends it in the message_delta event at stream end
@@ -198,13 +198,13 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
         } else if (event.type === 'message_delta' && 'usage' in event) {
           // Merge input tokens from message_start with output tokens from message_delta
           const accum = await sdkStream.finalMessage();
-          finalUsage = normaliseUsage(accum.usage);
+          finalUsage = normalizeUsage(accum.usage);
         }
       }
     } catch (err) {
-      // Propagate as a normalised LlmError regardless of whether streaming had started.
+      // Propagate as a normalized LlmError regardless of whether streaming had started.
       // Partial stream errors cannot be recovered from — the consumer must handle them.
-      throw normaliseAnthropicError(err);
+      throw normalizeAnthropicError(err);
     }
 
     // Yield usage on the final empty chunk

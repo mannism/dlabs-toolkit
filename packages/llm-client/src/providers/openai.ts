@@ -3,7 +3,7 @@
  *
  * Implements: complete(), stream(), structured()
  *
- * Token normalisation:
+ * Token normalization:
  *   OpenAI: prompt_tokens / completion_tokens
  *   → LlmUsage: inputTokens / outputTokens / totalTokens
  *
@@ -16,7 +16,7 @@
  */
 
 import OpenAI from 'openai';
-import { normaliseThrownError, withRetry } from '../retry.js';
+import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmClient,
   LlmClientConfig,
@@ -30,8 +30,8 @@ import { LlmError } from '../types.js';
 
 const PROVIDER = 'openai';
 
-/** Normalise OpenAI's usage object to LlmUsage. */
-function normaliseUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUsage {
+/** Normalize OpenAI's usage object to LlmUsage. */
+function normalizeUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUsage {
   const inputTokens = usage?.prompt_tokens ?? 0;
   const outputTokens = usage?.completion_tokens ?? 0;
   return {
@@ -50,10 +50,10 @@ function buildOpenAIMessages(messages: LlmMessage[]): OpenAI.Chat.ChatCompletion
 }
 
 /**
- * Normalise any OpenAI SDK error into LlmError.
- * Exported for direct unit testing of the normalisation logic.
+ * Normalize any OpenAI SDK error into LlmError.
+ * Exported for direct unit testing of the normalization logic.
  */
-export function normaliseOpenAIError(err: unknown): LlmError {
+export function normalizeOpenAIError(err: unknown): LlmError {
   if (err instanceof LlmError) return err;
 
   // OpenAI SDK v6+: uses OpenAI.APIError as the base class with a `.status` field.
@@ -85,7 +85,7 @@ export function normaliseOpenAIError(err: unknown): LlmError {
     return new LlmError({ message: err.message, provider: PROVIDER, retryable: false, cause: err });
   }
 
-  return normaliseThrownError(err, PROVIDER);
+  return normalizeThrownError(err, PROVIDER);
 }
 
 /** Create the OpenAI provider implementation. */
@@ -131,11 +131,11 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
         return {
           content,
           model: response.model,
-          usage: normaliseUsage(response.usage),
+          usage: normalizeUsage(response.usage),
           latencyMs: Date.now() - start,
         };
       } catch (err) {
-        throw normaliseOpenAIError(err);
+        throw normalizeOpenAIError(err);
       }
     }, retryOpts);
   }
@@ -165,7 +165,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     try {
       sdkStream = await client.chat.completions.create(params);
     } catch (err) {
-      throw normaliseOpenAIError(err);
+      throw normalizeOpenAIError(err);
     }
 
     let finalUsage: LlmUsage | undefined;
@@ -180,11 +180,11 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
         // Usage arrives in the final chunk (stream_options.include_usage must be true)
         if (chunk.usage !== undefined && chunk.usage !== null) {
-          finalUsage = normaliseUsage(chunk.usage);
+          finalUsage = normalizeUsage(chunk.usage);
         }
       }
     } catch (err) {
-      throw normaliseOpenAIError(err);
+      throw normalizeOpenAIError(err);
     }
 
     // Yield usage on the final sentinel chunk
@@ -228,7 +228,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
         return await client.chat.completions.create(params);
       } catch (err) {
-        throw normaliseOpenAIError(err);
+        throw normalizeOpenAIError(err);
       }
     }, retryOpts);
 
@@ -260,7 +260,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
     return {
       data,
-      usage: normaliseUsage(rawResponse.usage),
+      usage: normalizeUsage(rawResponse.usage),
       latencyMs: Date.now() - start,
     };
   }

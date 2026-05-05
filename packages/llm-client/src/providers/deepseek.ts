@@ -9,7 +9,7 @@
  *
  * Implements: complete(), stream(), structured()
  *
- * Token normalisation:
+ * Token normalization:
  *   DeepSeek returns standard OpenAI-format usage: prompt_tokens / completion_tokens / total_tokens
  *   → LlmUsage: inputTokens / outputTokens / totalTokens
  *
@@ -24,7 +24,7 @@
  */
 
 import OpenAI from 'openai';
-import { normaliseThrownError, withRetry } from '../retry.js';
+import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmClient,
   LlmClientConfig,
@@ -39,8 +39,8 @@ import { LlmError } from '../types.js';
 const PROVIDER = 'deepseek';
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 
-/** Normalise OpenAI-format usage object to LlmUsage. */
-function normaliseUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUsage {
+/** Normalize OpenAI-format usage object to LlmUsage. */
+function normalizeUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUsage {
   const inputTokens = usage?.prompt_tokens ?? 0;
   const outputTokens = usage?.completion_tokens ?? 0;
   return {
@@ -59,13 +59,13 @@ function buildMessages(messages: LlmMessage[]): OpenAI.Chat.ChatCompletionMessag
 }
 
 /**
- * Normalise any DeepSeek / OpenAI SDK error into LlmError.
- * Exported for direct unit testing of the normalisation logic.
+ * Normalize any DeepSeek / OpenAI SDK error into LlmError.
+ * Exported for direct unit testing of the normalization logic.
  *
  * Uses the same OpenAI SDK error hierarchy (APIConnectionError before APIError)
  * since the client is an OpenAI instance pointed at DeepSeek's API.
  */
-export function normaliseDeepSeekError(err: unknown): LlmError {
+export function normalizeDeepSeekError(err: unknown): LlmError {
   if (err instanceof LlmError) return err;
 
   // APIConnectionError is a subclass of APIError with status: undefined —
@@ -95,7 +95,7 @@ export function normaliseDeepSeekError(err: unknown): LlmError {
     return new LlmError({ message: err.message, provider: PROVIDER, retryable: false, cause: err });
   }
 
-  return normaliseThrownError(err, PROVIDER);
+  return normalizeThrownError(err, PROVIDER);
 }
 
 /** Create the DeepSeek provider implementation. */
@@ -142,11 +142,11 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
         return {
           content,
           model: response.model,
-          usage: normaliseUsage(response.usage),
+          usage: normalizeUsage(response.usage),
           latencyMs: Date.now() - start,
         };
       } catch (err) {
-        throw normaliseDeepSeekError(err);
+        throw normalizeDeepSeekError(err);
       }
     }, retryOpts);
   }
@@ -176,7 +176,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     try {
       sdkStream = await client.chat.completions.create(params);
     } catch (err) {
-      throw normaliseDeepSeekError(err);
+      throw normalizeDeepSeekError(err);
     }
 
     let finalUsage: LlmUsage | undefined;
@@ -190,11 +190,11 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
 
         // Usage arrives in the final chunk when stream_options.include_usage is true
         if (chunk.usage !== undefined && chunk.usage !== null) {
-          finalUsage = normaliseUsage(chunk.usage);
+          finalUsage = normalizeUsage(chunk.usage);
         }
       }
     } catch (err) {
-      throw normaliseDeepSeekError(err);
+      throw normalizeDeepSeekError(err);
     }
 
     if (finalUsage !== undefined) {
@@ -236,7 +236,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
 
         return await client.chat.completions.create(params);
       } catch (err) {
-        throw normaliseDeepSeekError(err);
+        throw normalizeDeepSeekError(err);
       }
     }, retryOpts);
 
@@ -273,7 +273,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
 
     return {
       data,
-      usage: normaliseUsage(rawResponse.usage),
+      usage: normalizeUsage(rawResponse.usage),
       latencyMs: Date.now() - start,
     };
   }

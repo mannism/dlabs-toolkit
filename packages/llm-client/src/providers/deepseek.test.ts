@@ -6,18 +6,18 @@
  * mirrors the OpenAI provider tests.
  *
  * Test coverage:
- * - complete(): happy path, usage normalisation, model/options overrides, error normalisation
+ * - complete(): happy path, usage normalization, model/options overrides, error normalization
  * - stream(): token chunks, usage on final chunk, error handling
  * - structured(): JSON parse success, markdown fence stripping, parse failure, schema failure
- * - normaliseDeepSeekError(): retryability for 429/5xx, non-retryable for 4xx, connection errors
- * - Retry behaviour on retryable status codes
+ * - normalizeDeepSeekError(): retryability for 429/5xx, non-retryable for 4xx, connection errors
+ * - Retry behavior on retryable status codes
  */
 
 import OpenAI from 'openai';
 import { type MockInstance, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LlmClientConfig } from '../types.js';
 import { LlmError } from '../types.js';
-import { createDeepSeekProvider, normaliseDeepSeekError } from './deepseek.js';
+import { createDeepSeekProvider, normalizeDeepSeekError } from './deepseek.js';
 
 vi.mock('openai');
 
@@ -56,31 +56,31 @@ function mockChatCompletion(
   };
 }
 
-describe('normaliseDeepSeekError()', () => {
+describe('normalizeDeepSeekError()', () => {
   it('returns the same LlmError if already an LlmError', () => {
     const err = new LlmError({ message: 'test', provider: 'deepseek', retryable: false });
-    expect(normaliseDeepSeekError(err)).toBe(err);
+    expect(normalizeDeepSeekError(err)).toBe(err);
   });
 
   it('maps OpenAI.APIConnectionError → retryable LlmError with no statusCode', () => {
     // Cannot directly instantiate OpenAI.APIConnectionError when module is mocked,
-    // but normaliseDeepSeekError also handles plain errors via normaliseThrownError.
+    // but normalizeDeepSeekError also handles plain errors via normalizeThrownError.
     // Test the LlmError passthrough path as the integration boundary.
     const err = new LlmError({ message: 'conn failed', provider: 'deepseek', retryable: true });
-    const result = normaliseDeepSeekError(err);
+    const result = normalizeDeepSeekError(err);
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBeUndefined();
   });
 
-  it('maps plain Error with no status → LlmError via normaliseThrownError', () => {
+  it('maps plain Error with no status → LlmError via normalizeThrownError', () => {
     const err = new Error('ECONNRESET');
-    const result = normaliseDeepSeekError(err);
+    const result = normalizeDeepSeekError(err);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('deepseek');
   });
 
   it('maps unknown thrown value → LlmError', () => {
-    const result = normaliseDeepSeekError('unexpected string');
+    const result = normalizeDeepSeekError('unexpected string');
     expect(result).toBeInstanceOf(LlmError);
   });
 });
@@ -99,7 +99,7 @@ describe('DeepSeek provider — complete()', () => {
     );
   });
 
-  it('returns normalised LlmResponse on success', async () => {
+  it('returns normalized LlmResponse on success', async () => {
     const client = createDeepSeekProvider(TEST_CONFIG);
     const result = await client.complete([{ role: 'user', content: 'Hi' }]);
 
@@ -184,7 +184,7 @@ describe('DeepSeek provider — complete()', () => {
     expect(mockCreate).toHaveBeenCalledTimes(2);
   });
 
-  it('normalises usage to zeros when response.usage is absent', async () => {
+  it('normalizes usage to zeros when response.usage is absent', async () => {
     // Omit usage from the mock rather than setting to undefined (exactOptionalPropertyTypes)
     const { usage: _omit, ...baseCompletion } = mockChatCompletion('Hi');
     mockCreate.mockResolvedValue(baseCompletion);

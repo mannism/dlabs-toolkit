@@ -1,8 +1,8 @@
 /**
- * Error normalisation tests for Anthropic, OpenAI, and Gemini providers.
+ * Error normalization tests for Anthropic, OpenAI, and Gemini providers.
  *
  * These tests use the real SDK error classes (no vi.mock) to verify that
- * SDK errors are correctly normalised to LlmError.
+ * SDK errors are correctly normalized to LlmError.
  * This exercises the guarded instanceof branches that cannot be reached when
  * the SDK modules are mocked in other test files.
  *
@@ -15,12 +15,12 @@ import { ApiError } from '@google/genai';
 import OpenAI from 'openai';
 import { describe, expect, it } from 'vitest';
 import { LlmError } from '../types.js';
-import { normaliseAnthropicError } from './anthropic.js';
-import { normaliseDeepSeekError } from './deepseek.js';
-import { normaliseGeminiError } from './gemini.js';
-import { normaliseOpenAIError } from './openai.js';
+import { normalizeAnthropicError } from './anthropic.js';
+import { normalizeDeepSeekError } from './deepseek.js';
+import { normalizeGeminiError } from './gemini.js';
+import { normalizeOpenAIError } from './openai.js';
 
-describe('normaliseAnthropicError — real Anthropic SDK error classes', () => {
+describe('normalizeAnthropicError — real Anthropic SDK error classes', () => {
   it('maps Anthropic.APIError 429 to retryable LlmError', () => {
     // This exercises the `typeof Anthropic.APIError === 'function' && instanceof` branch
     const apiErr = Anthropic.APIError.generate(
@@ -29,7 +29,7 @@ describe('normaliseAnthropicError — real Anthropic SDK error classes', () => {
       'Rate limited',
       new Headers()
     );
-    const result = normaliseAnthropicError(apiErr);
+    const result = normalizeAnthropicError(apiErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('anthropic');
     expect(result.statusCode).toBe(429);
@@ -43,7 +43,7 @@ describe('normaliseAnthropicError — real Anthropic SDK error classes', () => {
       'Unauthorized',
       new Headers()
     );
-    const result = normaliseAnthropicError(apiErr);
+    const result = normalizeAnthropicError(apiErr);
     expect(result.retryable).toBe(false);
     expect(result.statusCode).toBe(401);
   });
@@ -55,7 +55,7 @@ describe('normaliseAnthropicError — real Anthropic SDK error classes', () => {
       'Internal server error',
       new Headers()
     );
-    const result = normaliseAnthropicError(apiErr);
+    const result = normalizeAnthropicError(apiErr);
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBe(500);
   });
@@ -64,7 +64,7 @@ describe('normaliseAnthropicError — real Anthropic SDK error classes', () => {
     const connErr = new Anthropic.APIConnectionError({
       message: 'Connection refused',
     });
-    const result = normaliseAnthropicError(connErr);
+    const result = normalizeAnthropicError(connErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBeUndefined();
@@ -76,18 +76,18 @@ describe('normaliseAnthropicError — real Anthropic SDK error classes', () => {
       provider: 'anthropic',
       retryable: false,
     });
-    expect(normaliseAnthropicError(llmErr)).toBe(llmErr);
+    expect(normalizeAnthropicError(llmErr)).toBe(llmErr);
   });
 
-  it('falls through to normaliseThrownError for plain Error', () => {
+  it('falls through to normalizeThrownError for plain Error', () => {
     const plainErr = new Error('network problem');
-    const result = normaliseAnthropicError(plainErr);
+    const result = normalizeAnthropicError(plainErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('anthropic');
   });
 });
 
-describe('normaliseOpenAIError — real OpenAI SDK error classes', () => {
+describe('normalizeOpenAIError — real OpenAI SDK error classes', () => {
   it('maps OpenAI.APIError 429 to retryable LlmError', () => {
     const apiErr = OpenAI.APIError.generate(
       429,
@@ -95,7 +95,7 @@ describe('normaliseOpenAIError — real OpenAI SDK error classes', () => {
       'Rate limited',
       new Headers()
     );
-    const result = normaliseOpenAIError(apiErr);
+    const result = normalizeOpenAIError(apiErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('openai');
     expect(result.statusCode).toBe(429);
@@ -111,7 +111,7 @@ describe('normaliseOpenAIError — real OpenAI SDK error classes', () => {
       'Unauthorized',
       new Headers()
     );
-    const result = normaliseOpenAIError(apiErr);
+    const result = normalizeOpenAIError(apiErr);
     expect(result.retryable).toBe(false);
     expect(result.statusCode).toBe(401);
   });
@@ -123,7 +123,7 @@ describe('normaliseOpenAIError — real OpenAI SDK error classes', () => {
       'Internal error',
       new Headers()
     );
-    const result = normaliseOpenAIError(apiErr);
+    const result = normalizeOpenAIError(apiErr);
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBe(500);
   });
@@ -132,7 +132,7 @@ describe('normaliseOpenAIError — real OpenAI SDK error classes', () => {
     const connErr = new OpenAI.APIConnectionError({
       message: 'Connection refused',
     });
-    const result = normaliseOpenAIError(connErr);
+    const result = normalizeOpenAIError(connErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBeUndefined();
@@ -144,12 +144,12 @@ describe('normaliseOpenAIError — real OpenAI SDK error classes', () => {
       provider: 'openai',
       retryable: false,
     });
-    expect(normaliseOpenAIError(llmErr)).toBe(llmErr);
+    expect(normalizeOpenAIError(llmErr)).toBe(llmErr);
   });
 
-  it('falls through to normaliseThrownError for plain Error', () => {
+  it('falls through to normalizeThrownError for plain Error', () => {
     const plainErr = new Error('unexpected');
-    const result = normaliseOpenAIError(plainErr);
+    const result = normalizeOpenAIError(plainErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('openai');
   });
@@ -161,7 +161,7 @@ describe('normaliseOpenAIError — real OpenAI SDK error classes', () => {
     // check. Exercises the else branch at lines 85-86 in openai.ts.
     const apiErr = Object.create(OpenAI.APIError.prototype) as InstanceType<typeof OpenAI.APIError>;
     Object.assign(apiErr, { status: undefined, message: 'no status code available' });
-    const result = normaliseOpenAIError(apiErr);
+    const result = normalizeOpenAIError(apiErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('openai');
     expect(result.retryable).toBe(false);
@@ -169,11 +169,11 @@ describe('normaliseOpenAIError — real OpenAI SDK error classes', () => {
   });
 });
 
-describe('normaliseGeminiError — real @google/genai ApiError class', () => {
+describe('normalizeGeminiError — real @google/genai ApiError class', () => {
   it('maps ApiError 429 to retryable LlmError', () => {
     // ApiError is publicly exported and directly constructable
     const apiErr = new ApiError({ status: 429, message: 'Rate limited' });
-    const result = normaliseGeminiError(apiErr);
+    const result = normalizeGeminiError(apiErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('gemini');
     expect(result.statusCode).toBe(429);
@@ -182,29 +182,29 @@ describe('normaliseGeminiError — real @google/genai ApiError class', () => {
 
   it('maps ApiError 401 to non-retryable LlmError', () => {
     const apiErr = new ApiError({ status: 401, message: 'Unauthorized' });
-    const result = normaliseGeminiError(apiErr);
+    const result = normalizeGeminiError(apiErr);
     expect(result.retryable).toBe(false);
     expect(result.statusCode).toBe(401);
   });
 
   it('maps ApiError 500 to retryable LlmError', () => {
     const apiErr = new ApiError({ status: 500, message: 'Internal server error' });
-    const result = normaliseGeminiError(apiErr);
+    const result = normalizeGeminiError(apiErr);
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBe(500);
   });
 
   it('maps ApiError 503 to retryable LlmError', () => {
     const apiErr = new ApiError({ status: 503, message: 'Service unavailable' });
-    const result = normaliseGeminiError(apiErr);
+    const result = normalizeGeminiError(apiErr);
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBe(503);
   });
 
-  it('maps plain network Error to retryable LlmError via normaliseThrownError', () => {
+  it('maps plain network Error to retryable LlmError via normalizeThrownError', () => {
     // Simulate ECONNRESET — arrives as plain Error with .code
     const netErr = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
-    const result = normaliseGeminiError(netErr);
+    const result = normalizeGeminiError(netErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('gemini');
     expect(result.retryable).toBe(true);
@@ -216,11 +216,11 @@ describe('normaliseGeminiError — real @google/genai ApiError class', () => {
       provider: 'gemini',
       retryable: false,
     });
-    expect(normaliseGeminiError(llmErr)).toBe(llmErr);
+    expect(normalizeGeminiError(llmErr)).toBe(llmErr);
   });
 });
 
-describe('normaliseDeepSeekError — OpenAI SDK error classes (same hierarchy as OpenAI provider)', () => {
+describe('normalizeDeepSeekError — OpenAI SDK error classes (same hierarchy as OpenAI provider)', () => {
   it('maps OpenAI.APIError 429 to retryable LlmError with deepseek provider', () => {
     const apiErr = OpenAI.APIError.generate(
       429,
@@ -228,7 +228,7 @@ describe('normaliseDeepSeekError — OpenAI SDK error classes (same hierarchy as
       'Rate limited',
       new Headers()
     );
-    const result = normaliseDeepSeekError(apiErr);
+    const result = normalizeDeepSeekError(apiErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('deepseek');
     expect(result.statusCode).toBe(429);
@@ -244,14 +244,14 @@ describe('normaliseDeepSeekError — OpenAI SDK error classes (same hierarchy as
       'Unauthorized',
       new Headers()
     );
-    const result = normaliseDeepSeekError(apiErr);
+    const result = normalizeDeepSeekError(apiErr);
     expect(result.retryable).toBe(false);
     expect(result.statusCode).toBe(401);
   });
 
   it('maps OpenAI.APIConnectionError to retryable LlmError with no statusCode', () => {
     const connErr = new OpenAI.APIConnectionError({ message: 'Connection refused' });
-    const result = normaliseDeepSeekError(connErr);
+    const result = normalizeDeepSeekError(connErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBeUndefined();
@@ -263,15 +263,15 @@ describe('normaliseDeepSeekError — OpenAI SDK error classes (same hierarchy as
       provider: 'deepseek',
       retryable: false,
     });
-    expect(normaliseDeepSeekError(llmErr)).toBe(llmErr);
+    expect(normalizeDeepSeekError(llmErr)).toBe(llmErr);
   });
 
   it('maps OpenAI.APIError with undefined status to non-retryable LlmError with deepseek provider', () => {
     // Exercises the else branch (deepseek.ts lines 95-96) where status is undefined.
-    // See normaliseOpenAIError test above for why Object.create is used here.
+    // See normalizeOpenAIError test above for why Object.create is used here.
     const apiErr = Object.create(OpenAI.APIError.prototype) as InstanceType<typeof OpenAI.APIError>;
     Object.assign(apiErr, { status: undefined, message: 'no status code available' });
-    const result = normaliseDeepSeekError(apiErr);
+    const result = normalizeDeepSeekError(apiErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('deepseek');
     expect(result.retryable).toBe(false);
