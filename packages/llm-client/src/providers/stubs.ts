@@ -1,8 +1,6 @@
 /**
- * Type-only stubs for providers not yet implemented in Week 2.
+ * Type-only stubs for providers not yet implemented.
  *
- * Gemini — Week 3 implementation
- * DeepSeek — Week 3 implementation (uses OpenAI SDK with base URL override)
  * Perplexity — later week (internal tooling, separate decision)
  *
  * All stubs throw a clear "not yet implemented" LlmError.
@@ -37,7 +35,7 @@ function rejectingStream(err: LlmError): AsyncGenerator<LlmStreamChunk> {
 
 function notImplemented(provider: string): LlmClient {
   const err = new LlmError({
-    message: `[dlabs-toolkit] Provider '${provider}' is not yet implemented. Anthropic and OpenAI are available in Week 2; Gemini and DeepSeek ship in Week 3.`,
+    message: `[dlabs-toolkit] Provider '${provider}' is not yet implemented. Anthropic, OpenAI, Gemini, and DeepSeek are available; Perplexity ships in a later week.`,
     provider,
     retryable: false,
   });
@@ -53,18 +51,6 @@ function notImplemented(provider: string): LlmClient {
     stream: () => rejectingStream(err),
     structured: () => Promise.reject(err),
   };
-}
-
-/** Gemini provider stub — Week 3. */
-export function createGeminiProvider(config: LlmClientConfig): LlmClient {
-  void config; // Type-checked but intentionally unused until Week 3
-  return notImplemented('gemini');
-}
-
-/** DeepSeek provider stub — Week 3. */
-export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
-  void config;
-  return notImplemented('deepseek');
 }
 
 /** Perplexity provider stub — later week. */
