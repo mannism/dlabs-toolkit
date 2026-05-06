@@ -24,7 +24,7 @@ Shared platform infrastructure for the Diabolical Labs and Diana Ismail project 
 
 - **Published under:** Diabolical Labs (Diana Ismail's sole proprietor trade name).
 - **Copyright footer:** "© Diabolical Labs" for package metadata; "© Diana Ismail trading as Diabolical Labs" for any contract-grade artefact.
-- **License:** TBD pending Reid's brand-architecture pass and Owner decision. Default state (no LICENSE file) = all rights reserved.
+- **License:** [MIT](LICENSE) — adopted 2026-05-06. Single canonical `LICENSE` file at the monorepo root. Each `package.json` carries `"license": "MIT"`. New packages added to the toolkit default to MIT unless their own brief explicitly overrides.
 
 ## Where Things Live
 
