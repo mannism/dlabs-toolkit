@@ -43,8 +43,8 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
-          # Authenticate against GitHub Packages for publishing
-          registry-url: 'https://npm.pkg.github.com'
+          # Authenticate against npmjs.com for publishing
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -56,15 +56,15 @@ jobs:
         env:
           TURBO_TELEMETRY_DISABLED: 1
 
-      - name: Create Release PR or Tag
+      - name: Create Release PR or Publish
         # changesets/action does one of two things on each main push:
         # 1. If changeset files are present: opens/updates a "Version Packages" PR
         #    that bumps versions, updates CHANGELOG.md files, and removes the
         #    changeset files. No release yet.
         # 2. If the "Version Packages" PR is merged (no changeset files remain):
-        #    runs `pnpm release` (which calls `changeset tag`) to create git tags
-        #    and GitHub Releases. No registry publish — tag-only stopgap until
-        #    @diabolicallabs org is registered on npmjs.com and NPM_TOKEN is set.
+        #    runs `pnpm release` (which calls `changeset publish`) to publish
+        #    packages to npmjs.com under the @diabolicallabs scope, then creates
+        #    git tags and GitHub Releases.
         uses: changesets/action@v1
         with:
           publish: pnpm release
@@ -72,4 +72,4 @@ jobs:
           commit: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
