@@ -1,7 +1,7 @@
 {
   "name": "@diabolicallabs/notion",
   "version": "0.0.1",
-  "description": "Notion REST API helpers — database page creation, property serialisation, conflict retry, rate-limit backoff. © Diabolical Labs",
+  "description": "Notion REST API helpers — database page creation, property serialization, conflict retry, rate-limit backoff. © Diabolical Labs",
   "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
   "publisher": "Diabolical Labs",
   "license": "UNLICENSED",
