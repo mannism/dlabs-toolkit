@@ -26,13 +26,15 @@
     "sourceMap": true,
 
     // ESM interop
-    // verbatimModuleSyntax is the TS6 canonical replacement for esModuleInterop
-    // and allowSyntheticDefaultImports. Both legacy flags are still accepted in
-    // TS6 (deprecated, slated for removal in TS7) but ignoreDeprecations was
-    // itself removed in TS6. Explicit false keeps intent readable during transition.
+    // verbatimModuleSyntax is the canonical TS6 replacement for the legacy flags.
+    // esModuleInterop and allowSyntheticDefaultImports are deprecated in TS6 (TS5107).
+    // They remain set here explicitly for clarity during the TS6→7 transition window;
+    // ignoreDeprecations: "6.0" silences the TS5107 errors. Also silences TS5101 for
+    // baseUrl, which tsup's DTS rollup injects programmatically into the compiler options.
     "esModuleInterop": false,
     "allowSyntheticDefaultImports": false,
     "verbatimModuleSyntax": true,
+    "ignoreDeprecations": "6.0",
 
     // Ensure consistent casing across OS
     "forceConsistentCasingInFileNames": true,

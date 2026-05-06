@@ -39,6 +39,9 @@ importers:
         specifier: workspace:*
         version: link:../llm-client
     devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
       '@vitest/coverage-v8':
         specifier: ^4.1.5
         version: 4.1.5(vitest@4.1.5)
