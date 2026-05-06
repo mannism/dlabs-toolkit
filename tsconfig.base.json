@@ -26,6 +26,10 @@
     "sourceMap": true,
 
     // ESM interop
+    // verbatimModuleSyntax is the TS6 canonical replacement for esModuleInterop
+    // and allowSyntheticDefaultImports. Both legacy flags are still accepted in
+    // TS6 (deprecated, slated for removal in TS7) but ignoreDeprecations was
+    // itself removed in TS6. Explicit false keeps intent readable during transition.
     "esModuleInterop": false,
     "allowSyntheticDefaultImports": false,
     "verbatimModuleSyntax": true,
