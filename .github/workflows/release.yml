@@ -72,4 +72,8 @@ jobs:
           commit: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NPM_TOKEN: read by changesets/action to choose token auth over OIDC.
+          # NODE_AUTH_TOKEN: read by the npm CLI (configured via setup-node's registry-url).
+          # Both required — different layers of the publish stack read different names.
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
