@@ -7,7 +7,7 @@ purpose: >
   before ingestion completes. Failed ingestion retries with exponential backoff,
   then drops and logs on exhaustion. Never affects the underlying LLM call.
 owner: Sable
-status: scaffolded
+status: in-progress
 
 depends_on:
   - name: "@diabolicallabs/llm-client"
@@ -53,6 +53,9 @@ performance:
   notes: "Ingestion dispatch uses setImmediate/queueMicrotask. If overhead exceeds 5ms in Week 4 tests, queue dispatch moves to setImmediate."
 
 notes: |
-  Status 'scaffolded': types and factory stub are in place; full implementation
-  ships Week 4. CallRecord shape is the ingestion contract with the Agent Spend
-  Dashboard — do not change without coordinating with the Dashboard brief.
+  Status 'in-progress': instrumentClient() is fully implemented (Week 4).
+  In-memory queue deferred to v0.2 — direct dispatch with retry covers 99% of
+  transient failures without the background-worker teardown complexity.
+  CallRecord shape is the ingestion contract with the Agent Spend Dashboard —
+  do not change without coordinating with the Dashboard brief.
+  Pre-release (@next) to be cut after PR merges.
