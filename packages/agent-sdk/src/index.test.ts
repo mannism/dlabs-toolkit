@@ -1,31 +1,488 @@
 /**
- * Placeholder test for @diabolicallabs/agent-sdk.
+ * Full unit test suite for @diabolicallabs/agent-sdk instrumentClient().
  *
- * Full unit test coverage ships in Week 4 alongside the instrumentClient
- * implementation. This file exists to:
- *  1. Satisfy passWithNoTests: false in vitest config (CI fails without a test file)
- *  2. Verify the package's public exports are present at the module level
+ * Coverage target: ≥80% across lines, functions, branches, statements.
  *
- * Coverage gate: 80% applies to src/ — stubs have minimal coverage by design.
- * Week 4 will bring coverage up to gate on real implementation.
+ * Test areas:
+ *   - disabled mode: passthrough, no fetch calls
+ *   - complete(): happy path, LlmError propagation, CallRecord shape
+ *   - stream(): token passthrough, CallRecord after final chunk, stream error
+ *   - structured(): happy path, CallRecord dispatched
+ *   - Ingestion: success, retry on failure, exhaustion drops record
+ *   - CallRecord: required fields, correct values
+ *   - ingestionKey used as Bearer token
  */
 
-import { describe, expect, it } from 'vitest';
+import type { LlmClient, LlmClientConfig, LlmUsage } from '@diabolicallabs/llm-client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { instrumentClient } from './index.js';
+import type { AgentSdkConfig } from './types.js';
 
-describe('@diabolicallabs/agent-sdk', () => {
-  it('exports instrumentClient as a function', () => {
-    expect(typeof instrumentClient).toBe('function');
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+const mockConfig: Readonly<LlmClientConfig> = {
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
+  apiKey: 'test-key',
+};
+
+const mockUsage: LlmUsage = {
+  inputTokens: 100,
+  outputTokens: 50,
+  totalTokens: 150,
+};
+
+const sdkConfig: AgentSdkConfig = {
+  identity: {
+    agentId: 'agent-uuid-1234',
+    taskLabel: 'test-task',
+    projectId: 'proj-abc',
+  },
+  ingestionUrl: 'https://spend.example.com/api/ingest',
+  ingestionKey: 'secret-bearer-token',
+  maxIngestionRetries: 2,
+  ingestionTimeoutMs: 1000,
+};
+
+const mockMessages = [{ role: 'user' as const, content: 'Hello' }];
+
+function makeMockClient(overrides?: Partial<LlmClient>): LlmClient {
+  return {
+    config: mockConfig,
+    complete: vi.fn().mockResolvedValue({
+      content: 'Hello back',
+      model: 'claude-sonnet-4-6',
+      usage: mockUsage,
+      latencyMs: 200,
+    }),
+    stream: vi.fn(),
+    structured: vi.fn(),
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Drains an AsyncGenerator into an array. */
+async function drainStream<T>(gen: AsyncGenerator<T>): Promise<T[]> {
+  const results: T[] = [];
+  for await (const item of gen) {
+    results.push(item);
+  }
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// Setup: mock fetch globally
+// ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 } as Response));
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+// ---------------------------------------------------------------------------
+// disabled mode
+// ---------------------------------------------------------------------------
+
+describe('disabled mode', () => {
+  it('returns a client with sdkConfig but no fetch calls on complete()', async () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, { ...sdkConfig, disabled: true });
+
+    await instrumented.complete(mockMessages);
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(instrumented.sdkConfig).toBe(instrumented.sdkConfig);
+    expect(instrumented.sdkConfig.disabled).toBe(true);
   });
 
-  it('instrumentClient throws not-implemented before Week 4', () => {
-    // The stub throws — this is expected behavior documented in sdk.ts
-    expect(() => {
-      instrumentClient(
-        // Minimal shape cast — we only care that the function throws
-        {} as Parameters<typeof instrumentClient>[0],
-        {} as Parameters<typeof instrumentClient>[1]
-      );
-    }).toThrow('not yet implemented');
+  it('exposes the underlying config unchanged', () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, { ...sdkConfig, disabled: true });
+
+    expect(instrumented.config).toBe(client.config);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// complete()
+// ---------------------------------------------------------------------------
+
+describe('complete()', () => {
+  it('returns the LLM response to the caller', async () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    const response = await instrumented.complete(mockMessages);
+
+    expect(response.content).toBe('Hello back');
+    expect(response.usage).toEqual(mockUsage);
+  });
+
+  it('dispatches a CallRecord asynchronously (fetch called once)', async () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.complete(mockMessages);
+    // Allow microtasks to settle
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it('sends CallRecord to the ingestionUrl with correct method and headers', async () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const [url, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toBe(sdkConfig.ingestionUrl);
+    expect(init.method).toBe('POST');
+    expect((init.headers as Record<string, string>)['Authorization']).toBe(
+      `Bearer ${sdkConfig.ingestionKey}`
+    );
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+  });
+
+  it('CallRecord contains all required fields with correct values', async () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const body = JSON.parse(
+      ((fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [string, RequestInit])[1]
+        .body as string
+    ) as Record<string, unknown>;
+
+    expect(body['agent_id']).toBe(sdkConfig.identity.agentId);
+    expect(body['model']).toBe('claude-sonnet-4-6');
+    expect(body['prompt_tokens']).toBe(mockUsage.inputTokens);
+    expect(body['completion_tokens']).toBe(mockUsage.outputTokens);
+    expect(body['task_label']).toBe(sdkConfig.identity.taskLabel);
+    expect(body['project_id']).toBe(sdkConfig.identity.projectId);
+    expect(typeof body['latency_ms']).toBe('number');
+    expect(typeof body['timestamp']).toBe('string');
+    // ISO 8601 UTC — ends with Z or +00:00
+    expect(body['timestamp']).toMatch(/Z$/);
+    // UUID v4 format
+    expect(body['call_id']).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+  });
+
+  it('includes cache tokens in CallRecord when present', async () => {
+    const usageWithCache: LlmUsage = {
+      ...mockUsage,
+      cacheCreationTokens: 20,
+      cacheReadTokens: 10,
+    };
+    const client = makeMockClient({
+      complete: vi.fn().mockResolvedValue({
+        content: 'ok',
+        model: 'claude-sonnet-4-6',
+        usage: usageWithCache,
+        latencyMs: 100,
+      }),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const body = JSON.parse(
+      ((fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [string, RequestInit])[1]
+        .body as string
+    ) as Record<string, unknown>;
+
+    expect(body['cache_creation_tokens']).toBe(20);
+    expect(body['cache_read_tokens']).toBe(10);
+  });
+
+  it('omits optional CallRecord fields when identity fields are absent', async () => {
+    const client = makeMockClient();
+    const minimalConfig: AgentSdkConfig = {
+      identity: { agentId: 'agent-min' },
+      ingestionUrl: 'https://spend.example.com/api/ingest',
+      ingestionKey: 'key',
+    };
+    const instrumented = instrumentClient(client, minimalConfig);
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const body = JSON.parse(
+      ((fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [string, RequestInit])[1]
+        .body as string
+    ) as Record<string, unknown>;
+
+    expect(body['task_label']).toBeUndefined();
+    expect(body['project_id']).toBeUndefined();
+    expect(body['cache_creation_tokens']).toBeUndefined();
+    expect(body['cache_read_tokens']).toBeUndefined();
+  });
+
+  it('propagates LlmError to the caller', async () => {
+    const error = new Error('Rate limit exceeded');
+    const client = makeMockClient({
+      complete: vi.fn().mockRejectedValue(error),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await expect(instrumented.complete(mockMessages)).rejects.toThrow('Rate limit exceeded');
+    // No dispatch on error
+    await new Promise<void>((r) => setTimeout(r, 0));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stream()
+// ---------------------------------------------------------------------------
+
+describe('stream()', () => {
+  async function* makeStream(chunks: Array<{ token: string; usage?: LlmUsage }>) {
+    for (const chunk of chunks) {
+      yield chunk;
+    }
+  }
+
+  it('yields all tokens through to the caller', async () => {
+    const chunks = [{ token: 'Hello' }, { token: ' world' }, { token: '!', usage: mockUsage }];
+    const client = makeMockClient({
+      stream: vi.fn().mockReturnValue(makeStream(chunks)),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    const received = await drainStream(instrumented.stream(mockMessages));
+
+    expect(received).toHaveLength(3);
+    expect(received[0]?.token).toBe('Hello');
+    expect(received[1]?.token).toBe(' world');
+    expect(received[2]?.token).toBe('!');
+  });
+
+  it('dispatches CallRecord after stream ends (usage from final chunk)', async () => {
+    const chunks = [{ token: 'A' }, { token: 'B', usage: mockUsage }];
+    const client = makeMockClient({
+      stream: vi.fn().mockReturnValue(makeStream(chunks)),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await drainStream(instrumented.stream(mockMessages));
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const body = JSON.parse(
+      ((fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [string, RequestInit])[1]
+        .body as string
+    ) as Record<string, unknown>;
+    expect(body['prompt_tokens']).toBe(mockUsage.inputTokens);
+    expect(body['completion_tokens']).toBe(mockUsage.outputTokens);
+  });
+
+  it('does not dispatch CallRecord when no usage chunk arrives', async () => {
+    const chunks = [{ token: 'A' }, { token: 'B' }];
+    const client = makeMockClient({
+      stream: vi.fn().mockReturnValue(makeStream(chunks)),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await drainStream(instrumented.stream(mockMessages));
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('propagates stream errors to the caller without dispatching', async () => {
+    async function* failingStream() {
+      yield { token: 'partial' };
+      throw new Error('Stream interrupted');
+    }
+    const client = makeMockClient({
+      stream: vi.fn().mockReturnValue(failingStream()),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await expect(drainStream(instrumented.stream(mockMessages))).rejects.toThrow(
+      'Stream interrupted'
+    );
+    await new Promise<void>((r) => setTimeout(r, 0));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// structured()
+// ---------------------------------------------------------------------------
+
+describe('structured()', () => {
+  it('returns the structured response to the caller', async () => {
+    const schema = { parse: (data: unknown) => data as { answer: string } };
+    const client = makeMockClient({
+      structured: vi.fn().mockResolvedValue({
+        data: { answer: '42' },
+        usage: mockUsage,
+        latencyMs: 300,
+      }),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    const result = await instrumented.structured(mockMessages, schema);
+
+    expect(result.data).toEqual({ answer: '42' });
+  });
+
+  it('dispatches a CallRecord after structured() completes', async () => {
+    const schema = { parse: (data: unknown) => data };
+    const client = makeMockClient({
+      structured: vi.fn().mockResolvedValue({
+        data: null,
+        usage: mockUsage,
+        latencyMs: 100,
+      }),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.structured(mockMessages, schema);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ingestion retry and exhaustion
+// ---------------------------------------------------------------------------
+
+describe('ingestion retry', () => {
+  it('retries failed dispatch and succeeds on second attempt', async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500 } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200 } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, {
+      ...sdkConfig,
+      maxIngestionRetries: 2,
+      ingestionTimeoutMs: 100,
+    });
+
+    await instrumented.complete(mockMessages);
+    // Wait for retry (first fail + delay + second attempt)
+    await new Promise<void>((r) => setTimeout(r, 700));
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops the record and logs a warning after all retries fail — never throws to caller', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 503 } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, {
+      ...sdkConfig,
+      maxIngestionRetries: 1,
+      ingestionTimeoutMs: 100,
+    });
+
+    // complete() must not throw even when all ingestion retries fail
+    await expect(instrumented.complete(mockMessages)).resolves.toBeDefined();
+
+    // Wait for both attempts (attempt 0 + 500ms delay + attempt 1)
+    await new Promise<void>((r) => setTimeout(r, 700));
+
+    // fetch called maxRetries + 1 times (attempts 0 and 1)
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(warnSpy).toHaveBeenCalledOnce();
+
+    const warned = warnSpy.mock.calls[0]?.[0] as string;
+    const parsed = JSON.parse(warned) as Record<string, unknown>;
+    expect(parsed['event']).toBe('ingestion_exhausted');
+    expect(parsed['call_id']).toBeDefined();
+    // ingestionKey must never appear in logs
+    expect(warned).not.toContain(sdkConfig.ingestionKey);
+  });
+
+  it('handles fetch network errors (throws) the same as HTTP failures', async () => {
+    const mockFetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+    vi.stubGlobal('fetch', mockFetch);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, {
+      ...sdkConfig,
+      maxIngestionRetries: 0,
+      ingestionTimeoutMs: 100,
+    });
+
+    await expect(instrumented.complete(mockMessages)).resolves.toBeDefined();
+    await new Promise<void>((r) => setTimeout(r, 50));
+
+    expect(warnSpy).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Security: ingestionKey must never be logged
+// ---------------------------------------------------------------------------
+
+describe('security', () => {
+  it('uses ingestionKey as Authorization Bearer header', async () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const init = (
+      (fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [string, RequestInit]
+    )[1];
+    expect((init.headers as Record<string, string>)['Authorization']).toBe(
+      `Bearer ${sdkConfig.ingestionKey}`
+    );
+  });
+
+  it('warning log on exhaustion never contains ingestionKey', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 500 } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, {
+      ...sdkConfig,
+      maxIngestionRetries: 0,
+    });
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 50));
+
+    for (const call of warnSpy.mock.calls) {
+      expect(String(call[0])).not.toContain(sdkConfig.ingestionKey);
+    }
   });
 });
