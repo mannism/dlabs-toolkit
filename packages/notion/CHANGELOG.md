@@ -1,5 +1,11 @@
 # @diabolicallabs/notion
 
+## 0.0.2
+
+### Patch Changes
+
+- 0ae6f0a: Adopt MIT license across all packages. Adds `LICENSE` at the monorepo root and sets `"license": "MIT"` in each package's `package.json`. Resolves the "no license granted" warning consumers see on npm.
+
 ## 0.0.1
 
 ### Patch Changes

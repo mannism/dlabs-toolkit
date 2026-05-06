@@ -1,5 +1,13 @@
 # @diabolicallabs/agent-sdk
 
+## 0.1.1
+
+### Patch Changes
+
+- 0ae6f0a: Adopt MIT license across all packages. Adds `LICENSE` at the monorepo root and sets `"license": "MIT"` in each package's `package.json`. Resolves the "no license granted" warning consumers see on npm.
+- Updated dependencies [0ae6f0a]
+  - @diabolicallabs/llm-client@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
