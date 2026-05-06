@@ -52,15 +52,14 @@ describe('Gemini provider — complete()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGenerateContent = vi.fn().mockResolvedValue(mockGeminiResponse());
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({
-          models: {
-            generateContent: mockGenerateContent,
-            generateContentStream: vi.fn(),
-          },
-        }) as unknown as GoogleGenAI
-    );
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: vi.fn(),
+        },
+      };
+    });
   });
 
   it('returns normalized LlmResponse on success', async () => {
@@ -203,15 +202,14 @@ describe('Gemini provider — stream()', () => {
     }
 
     const mockGenerateContentStream = vi.fn().mockResolvedValue(fakeStream());
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({
-          models: {
-            generateContent: vi.fn(),
-            generateContentStream: mockGenerateContentStream,
-          },
-        }) as unknown as GoogleGenAI
-    );
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: vi.fn(),
+          generateContentStream: mockGenerateContentStream,
+        },
+      };
+    });
 
     const client = createGeminiProvider(TEST_CONFIG);
     const tokens: string[] = [];
@@ -236,15 +234,14 @@ describe('Gemini provider — stream()', () => {
   it('throws LlmError when stream init fails', async () => {
     const err = new LlmError({ message: 'Connection failed', provider: 'gemini', retryable: true });
     const mockGenerateContentStream = vi.fn().mockRejectedValue(err);
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({
-          models: {
-            generateContent: vi.fn(),
-            generateContentStream: mockGenerateContentStream,
-          },
-        }) as unknown as GoogleGenAI
-    );
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: vi.fn(),
+          generateContentStream: mockGenerateContentStream,
+        },
+      };
+    });
 
     const client = createGeminiProvider(TEST_CONFIG);
 
@@ -271,15 +268,14 @@ describe('Gemini provider — stream()', () => {
     }
 
     const mockGenerateContentStream = vi.fn().mockResolvedValue(failingStream());
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({
-          models: {
-            generateContent: vi.fn(),
-            generateContentStream: mockGenerateContentStream,
-          },
-        }) as unknown as GoogleGenAI
-    );
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: vi.fn(),
+          generateContentStream: mockGenerateContentStream,
+        },
+      };
+    });
 
     const client = createGeminiProvider(TEST_CONFIG);
 
@@ -298,15 +294,14 @@ describe('Gemini provider — stream()', () => {
     }
 
     const mockGenerateContentStream = vi.fn().mockResolvedValue(noUsageStream());
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({
-          models: {
-            generateContent: vi.fn(),
-            generateContentStream: mockGenerateContentStream,
-          },
-        }) as unknown as GoogleGenAI
-    );
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: vi.fn(),
+          generateContentStream: mockGenerateContentStream,
+        },
+      };
+    });
 
     const client = createGeminiProvider(TEST_CONFIG);
     const usageChunks: unknown[] = [];
@@ -325,15 +320,14 @@ describe('Gemini provider — stream()', () => {
     }
 
     const mockGenerateContentStream = vi.fn().mockResolvedValue(streamWithEmpty());
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({
-          models: {
-            generateContent: vi.fn(),
-            generateContentStream: mockGenerateContentStream,
-          },
-        }) as unknown as GoogleGenAI
-    );
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: vi.fn(),
+          generateContentStream: mockGenerateContentStream,
+        },
+      };
+    });
 
     const client = createGeminiProvider(TEST_CONFIG);
     const tokens: string[] = [];
@@ -352,15 +346,14 @@ describe('Gemini provider — structured()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGenerateContent = vi.fn();
-    vi.mocked(GoogleGenAI).mockImplementation(
-      () =>
-        ({
-          models: {
-            generateContent: mockGenerateContent,
-            generateContentStream: vi.fn(),
-          },
-        }) as unknown as GoogleGenAI
-    );
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: vi.fn(),
+        },
+      };
+    });
   });
 
   it('parses valid JSON response and validates schema', async () => {

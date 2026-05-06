@@ -91,12 +91,11 @@ describe('DeepSeek provider — complete()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('Hello, world!'));
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
   });
 
   it('returns normalized LlmResponse on success', async () => {
@@ -238,12 +237,11 @@ describe('DeepSeek provider — stream()', () => {
     };
 
     const mockCreate = vi.fn().mockResolvedValue(mockStream);
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
 
     const client = createDeepSeekProvider(TEST_CONFIG);
     const tokens: string[] = [];
@@ -273,12 +271,11 @@ describe('DeepSeek provider — stream()', () => {
       retryable: true,
     });
     const mockCreate = vi.fn().mockRejectedValue(streamErr);
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
 
     const client = createDeepSeekProvider(TEST_CONFIG);
 
@@ -316,12 +313,11 @@ describe('DeepSeek provider — stream()', () => {
     };
 
     const mockCreate = vi.fn().mockResolvedValue(mockStream);
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
 
     const client = createDeepSeekProvider(TEST_CONFIG);
 
@@ -368,12 +364,11 @@ describe('DeepSeek provider — stream()', () => {
       },
     };
     const mockCreate = vi.fn().mockResolvedValue(mockStream);
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
 
     const client = createDeepSeekProvider(TEST_CONFIG);
     const tokens: string[] = [];
@@ -391,12 +386,11 @@ describe('DeepSeek provider — structured()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreate = vi.fn();
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
   });
 
   it('parses valid JSON response and validates schema', async () => {
