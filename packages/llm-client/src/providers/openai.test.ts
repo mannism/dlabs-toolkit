@@ -59,12 +59,11 @@ describe('OpenAI provider — complete()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('Hello, world!'));
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
   });
 
   it('returns normalized LlmResponse on success', async () => {
@@ -240,12 +239,11 @@ describe('OpenAI provider — stream()', () => {
     };
 
     const mockCreate = vi.fn().mockResolvedValue(mockStream);
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
 
     const client = createOpenAIProvider(TEST_CONFIG);
     const tokens: string[] = [];
@@ -277,12 +275,11 @@ describe('OpenAI provider — stream()', () => {
       retryable: true,
     });
     const mockCreate = vi.fn().mockRejectedValue(streamErr);
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
 
     const client = createOpenAIProvider(TEST_CONFIG);
 
@@ -329,12 +326,11 @@ describe('OpenAI provider — stream()', () => {
       },
     };
     const mockCreate = vi.fn().mockResolvedValue(mockStream);
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
 
     const client = createOpenAIProvider(TEST_CONFIG);
     const tokens: string[] = [];
@@ -364,12 +360,11 @@ describe('OpenAI provider — stream()', () => {
       },
     };
     const mockCreate = vi.fn().mockResolvedValue(mockStream);
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
 
     const client = createOpenAIProvider(TEST_CONFIG);
     const usageChunks: unknown[] = [];
@@ -403,12 +398,11 @@ describe('OpenAI provider — stream()', () => {
       },
     };
     const mockCreate = vi.fn().mockResolvedValue(mockStream);
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
 
     const client = createOpenAIProvider(TEST_CONFIG);
 
@@ -428,12 +422,11 @@ describe('OpenAI provider — structured()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreate = vi.fn();
-    vi.mocked(OpenAI).mockImplementation(
-      () =>
-        ({
-          chat: { completions: { create: mockCreate } },
-        }) as unknown as OpenAI
-    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
   });
 
   it('parses valid JSON response and validates schema', async () => {

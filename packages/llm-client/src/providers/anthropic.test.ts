@@ -54,12 +54,11 @@ describe('Anthropic provider — complete()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreate = vi.fn().mockResolvedValue(mockMessageResponse());
-    vi.mocked(Anthropic).mockImplementation(
-      () =>
-        ({
-          messages: { create: mockCreate, stream: vi.fn() },
-        }) as unknown as Anthropic
-    );
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+      };
+    });
   });
 
   it('returns normalized LlmResponse on success', async () => {
@@ -237,15 +236,14 @@ describe('Anthropic provider — stream()', () => {
       finalMessage: vi.fn().mockResolvedValue(mockFinalMessage),
     };
 
-    vi.mocked(Anthropic).mockImplementation(
-      () =>
-        ({
-          messages: {
-            create: vi.fn(),
-            stream: vi.fn().mockReturnValue(mockStream),
-          },
-        }) as unknown as Anthropic
-    );
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn(),
+          stream: vi.fn().mockReturnValue(mockStream),
+        },
+      };
+    });
 
     const client = createAnthropicProvider(TEST_CONFIG);
     const chunks: string[] = [];
@@ -287,15 +285,14 @@ describe('Anthropic provider — stream()', () => {
       finalMessage: vi.fn().mockResolvedValue(mockMessageResponse()),
     };
 
-    vi.mocked(Anthropic).mockImplementation(
-      () =>
-        ({
-          messages: {
-            create: vi.fn(),
-            stream: vi.fn().mockReturnValue(mockStream),
-          },
-        }) as unknown as Anthropic
-    );
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn(),
+          stream: vi.fn().mockReturnValue(mockStream),
+        },
+      };
+    });
 
     const client = createAnthropicProvider(TEST_CONFIG);
 
@@ -315,17 +312,16 @@ describe('Anthropic provider — stream()', () => {
       retryable: true,
     });
 
-    vi.mocked(Anthropic).mockImplementation(
-      () =>
-        ({
-          messages: {
-            create: vi.fn(),
-            stream: vi.fn().mockImplementation(() => {
-              throw streamErr;
-            }),
-          },
-        }) as unknown as Anthropic
-    );
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn(),
+          stream: vi.fn().mockImplementation(() => {
+            throw streamErr;
+          }),
+        },
+      };
+    });
 
     const client = createAnthropicProvider(TEST_CONFIG);
 
@@ -352,15 +348,14 @@ describe('Anthropic provider — stream()', () => {
       finalMessage: vi.fn(),
     };
 
-    vi.mocked(Anthropic).mockImplementation(
-      () =>
-        ({
-          messages: {
-            create: vi.fn(),
-            stream: vi.fn().mockReturnValue(mockStream),
-          },
-        }) as unknown as Anthropic
-    );
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn(),
+          stream: vi.fn().mockReturnValue(mockStream),
+        },
+      };
+    });
 
     const client = createAnthropicProvider(TEST_CONFIG);
     const usageChunks: unknown[] = [];
@@ -380,15 +375,14 @@ describe('Anthropic provider — stream()', () => {
     };
 
     const mockStreamFn = vi.fn().mockReturnValue(mockStream);
-    vi.mocked(Anthropic).mockImplementation(
-      () =>
-        ({
-          messages: {
-            create: vi.fn(),
-            stream: mockStreamFn,
-          },
-        }) as unknown as Anthropic
-    );
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn(),
+          stream: mockStreamFn,
+        },
+      };
+    });
 
     const client = createAnthropicProvider({ ...TEST_CONFIG, temperature: 0.7 });
 
@@ -407,12 +401,11 @@ describe('Anthropic provider — structured()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreate = vi.fn();
-    vi.mocked(Anthropic).mockImplementation(
-      () =>
-        ({
-          messages: { create: mockCreate, stream: vi.fn() },
-        }) as unknown as Anthropic
-    );
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+      };
+    });
   });
 
   it('parses valid JSON response and validates schema', async () => {

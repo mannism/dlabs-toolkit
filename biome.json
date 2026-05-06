@@ -57,6 +57,9 @@
         "rules": {
           "suspicious": {
             "noExplicitAny": "warn"
+          },
+          "complexity": {
+            "useArrowFunction": "off"
           }
         }
       }
