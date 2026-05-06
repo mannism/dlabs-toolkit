@@ -4,7 +4,7 @@
   "description": "Cost-tracking middleware for @diabolicallabs/llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. © Diabolical Labs",
   "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
   "publisher": "Diabolical Labs",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
