@@ -156,7 +156,7 @@ Authentication uses an automation token (`NPM_TOKEN` GitHub secret) scoped to th
 
 ## License
 
-TBD. Default state (no LICENSE file) = all rights reserved. © Diabolical Labs (Diana Ismail trading as Diabolical Labs).
+[MIT](LICENSE) — Copyright (c) 2026 Diana Ismail trading as Diabolical Labs.
 
 ---
 
