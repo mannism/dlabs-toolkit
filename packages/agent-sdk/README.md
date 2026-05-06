@@ -6,7 +6,7 @@ Cost-tracking middleware for `@diabolicallabs/llm-client`. Drop-in wrapper that 
 
 ## Status
 
-**Scaffolded.** Types and public API surface are defined. Full implementation ships Week 4.
+**Published — v0.1.0.** `instrumentClient()` is the canonical entry point. Types, public API surface, and full instrumentation runtime are shipped.
 
 ## Install
 

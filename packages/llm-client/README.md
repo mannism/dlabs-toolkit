@@ -11,16 +11,10 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, and DeepSeek. Single in
 ## Install
 
 ```bash
-# .npmrc must point @diabolicallabs scope at GitHub Packages
 pnpm add @diabolicallabs/llm-client
 ```
 
-Consumer `.npmrc`:
-
-```
-@diabolicallabs:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
-```
+Public on npmjs.com — no `.npmrc` config required.
 
 ## Usage
 
