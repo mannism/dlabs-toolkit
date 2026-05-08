@@ -10,10 +10,10 @@ Shared platform infrastructure for the Diabolical Labs and Diana Ismail project 
 
 | Package | Status | Description |
 |---|---|---|
-| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v0.1.0) | Unified LLM API — Anthropic, OpenAI, Gemini, DeepSeek (implemented); Perplexity (stub). Streaming, retry, structured output, token normalization. |
-| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v0.1.0) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. |
-| [`@diabolicallabs/notion`](packages/notion/) | scaffolded (v0.0.1) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
-| [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | scaffolded (v0.0.1) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
+| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v0.2.0) | Unified LLM API — Anthropic, OpenAI, Gemini, DeepSeek, Perplexity. Streaming, retry, structured output, token normalization, web-grounded citations, per-call `providerOptions` escape hatch. |
+| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v0.1.1) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. |
+| [`@diabolicallabs/notion`](packages/notion/) | scaffolded (v0.0.2) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
+| [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | scaffolded (v0.0.2) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
 
 See [`MODULES.md`](MODULES.md) for the full manifest index and build plan.
 
@@ -54,9 +54,9 @@ for await (const chunk of client.stream([{ role: 'user', content: 'Hello' }])) {
 | `openai` | Implemented | `OPENAI_API_KEY` |
 | `google` | Implemented | `GOOGLE_AI_API_KEY` |
 | `deepseek` | Implemented | `DEEPSEEK_API_KEY` |
-| `perplexity` | Stub — throws `LlmError` | — |
+| `perplexity` | Implemented | `PERPLEXITY_API_KEY` |
 
-The Perplexity stub throws an `LlmError` with a message listing all implemented providers and stating that Perplexity is planned for a future release.
+Perplexity is web-grounded — `complete()` returns `response.citations` (array of `{ url, title? }`) when sources are available. Stream mode does not include citations (Perplexity API limitation). Default model is `sonar`; reasoning is `sonar-reasoning-pro` (`sonar-reasoning` was deprecated December 2025). Perplexity-specific filters (`search_recency_filter`, `search_domain_filter`) flow through the per-call `providerOptions` escape hatch.
 
 ---
 
