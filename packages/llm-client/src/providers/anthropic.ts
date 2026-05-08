@@ -15,6 +15,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
+  LlmCallOptions,
   LlmClient,
   LlmClientConfig,
   LlmMessage,
@@ -119,10 +120,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     provider: PROVIDER,
   };
 
-  async function complete(
-    messages: LlmMessage[],
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
-  ): Promise<LlmResponse> {
+  async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages);
 
@@ -163,7 +161,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
 
   async function* stream(
     messages: LlmMessage[],
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
+    options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages);
@@ -216,7 +214,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
   async function structured<T>(
     messages: LlmMessage[],
     schema: { parse: (data: unknown) => T },
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
+    options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>> {
     // Anthropic JSON mode: append a system instruction to return only JSON.
     // We inject this into the messages so the provider returns parseable output.

@@ -5,8 +5,9 @@ purpose: >
   structured output (Zod-validated). Handles retry with exponential backoff +
   full jitter, error normalization into LlmError, and token usage normalization
   into a consistent LlmUsage shape regardless of provider.
-  Week 2: Anthropic + OpenAI fully implemented.
-  Week 3: Gemini + DeepSeek fully implemented. Perplexity remains a stub (later week).
+  Perplexity provider adds web-grounded responses with citation extraction,
+  deduplication, and providerOptions escape hatch for search filters.
+  All five providers fully implemented as of v0.2.0.
 owner: Sable
 status: published
 
@@ -21,8 +22,8 @@ depends_on:
     why: "Google Gemini provider — Week 3 implementation"
   - name: "deepseek (fetch-based)"
     why: "DeepSeek provider — Week 3 implementation. DeepSeek's API is OpenAI-compatible; uses the openai SDK with a base URL override."
-  - name: "perplexity"
-    why: "Perplexity provider — later week. Type-registered stub in Week 2."
+  - name: "perplexity (fetch-based)"
+    why: "Perplexity provider — fully implemented in Week 5. OpenAI SDK with baseURL override pointing at https://api.perplexity.ai. Returns web-grounded responses with citation URLs."
 
 depended_on_by:
   - name: "@diabolicallabs/agent-sdk"
@@ -38,7 +39,7 @@ exports:
   - "createClient(config: LlmClientConfig): LlmClient"
   - "createClientFromEnv(provider, model, overrides?): LlmClient"
   - "LlmError (class)"
-  - "Types: LlmMessage, LlmClientConfig, LlmUsage, LlmResponse, LlmStreamChunk, LlmStructuredResponse, LlmClient"
+  - "Types: LlmMessage, LlmClientConfig, LlmCallOptions, LlmUsage, LlmResponse, LlmStreamChunk, LlmStructuredResponse, LlmClient"
 
 contracts:
   retry:
@@ -67,6 +68,11 @@ performance:
 notes: |
   Week 2 shipped: Anthropic + OpenAI providers, retry, structured output, 80%+ test coverage.
   Week 3 shipped: Gemini (via @google/genai SDK) + DeepSeek (OpenAI SDK with baseURL override).
+  Week 5 shipped: Perplexity (OpenAI SDK with baseURL override at api.perplexity.ai).
+    - Citations: extracted from Perplexity citations[] string array, mapped to {url}, deduped by URL.
+    - providerOptions escape hatch: search_recency_filter, search_domain_filter, unknown fields pass-through.
+    - Reasoning: sonar-reasoning-pro supported; structured() strips <think> blocks before JSON parse.
+    - sonar-deep-research: treated as synchronous model; not verified live (may require async polling).
   Provider SDKs are devDependencies — bundled into dist at build time via tsup.
   Consumers do not need to install provider SDKs directly.
-  Perplexity is a type-registered stub; implementation deferred to a later week.
+  All five providers fully implemented as of v0.2.0.

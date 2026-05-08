@@ -39,6 +39,7 @@ import {
 } from '@google/genai';
 import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
+  LlmCallOptions,
   LlmClient,
   LlmClientConfig,
   LlmMessage,
@@ -129,10 +130,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     provider: PROVIDER,
   };
 
-  async function complete(
-    messages: LlmMessage[],
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
-  ): Promise<LlmResponse> {
+  async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
     const { system, contents } = buildGeminiContents(messages);
     const start = Date.now();
@@ -168,7 +166,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
 
   async function* stream(
     messages: LlmMessage[],
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
+    options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
     const { system, contents } = buildGeminiContents(messages);
@@ -218,7 +216,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
   async function structured<T>(
     messages: LlmMessage[],
     schema: { parse: (data: unknown) => T },
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
+    options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>> {
     const augmentedMessages: LlmMessage[] = [
       {
