@@ -95,37 +95,16 @@ describe('createClient', () => {
     expect(typeof client.structured).toBe('function');
   });
 
-  it('returns a stub for perplexity that throws on complete()', async () => {
-    const client = createClient({ provider: 'perplexity', model: 'sonar', apiKey: 'x' });
-    await expect(client.complete([])).rejects.toMatchObject({
-      message: expect.stringContaining('not yet implemented'),
-    });
-  });
-
-  it('perplexity stub stream() throws not-yet-implemented', async () => {
-    const client = createClient({ provider: 'perplexity', model: 'sonar', apiKey: 'x' });
-    async function consumeStream() {
-      for await (const _ of client.stream([])) {
-        // should not iterate
-      }
-    }
-    await expect(consumeStream()).rejects.toMatchObject({
-      message: expect.stringContaining('not yet implemented'),
-    });
-  });
-
-  it('perplexity stub structured() throws not-yet-implemented', async () => {
-    const client = createClient({ provider: 'perplexity', model: 'sonar', apiKey: 'x' });
-    await expect(client.structured([], { parse: (d) => d })).rejects.toMatchObject({
-      message: expect.stringContaining('not yet implemented'),
-    });
-  });
-
-  it('perplexity stub config getter throws not-yet-implemented', () => {
-    const client = createClient({ provider: 'perplexity', model: 'sonar', apiKey: 'x' });
-    expect(() => {
-      void client.config;
-    }).toThrowError(/not yet implemented/);
+  it('returns an object with LlmClient shape for perplexity (fully implemented)', () => {
+    // Perplexity was a stub until Week 5. It is now fully implemented.
+    // Verify the factory returns a real client object (not a stub that throws on config access).
+    const client = createClient({ provider: 'perplexity', model: 'sonar', apiKey: 'test-key' });
+    expect(typeof client.complete).toBe('function');
+    expect(typeof client.stream).toBe('function');
+    expect(typeof client.structured).toBe('function');
+    // config accessor must not throw — real provider, not a stub
+    expect(client.config.provider).toBe('perplexity');
+    expect(client.config.model).toBe('sonar');
   });
 });
 

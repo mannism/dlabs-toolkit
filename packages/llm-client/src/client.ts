@@ -9,23 +9,21 @@
  *   'openai'     → fully implemented (Week 2)
  *   'gemini'     → fully implemented (Week 3)
  *   'deepseek'   → fully implemented (Week 3)
- *   'perplexity' → stub, throws "not yet implemented" (later week)
+ *   'perplexity' → fully implemented (Week 5) — search-grounded, citations, providerOptions
  */
 
 import { createAnthropicProvider } from './providers/anthropic.js';
 import { createDeepSeekProvider } from './providers/deepseek.js';
 import { createGeminiProvider } from './providers/gemini.js';
 import { createOpenAIProvider } from './providers/openai.js';
-import { createPerplexityProvider } from './providers/stubs.js';
+import { createPerplexityProvider } from './providers/perplexity.js';
 import type { LlmClient, LlmClientConfig } from './types.js';
 import { LlmError } from './types.js';
 
 /**
  * Create an LlmClient for the given provider and config.
  * Dispatches to the provider-specific implementation.
- *
- * Anthropic, OpenAI, Gemini, and DeepSeek are fully implemented.
- * Perplexity is a type-registered stub that throws "not yet implemented".
+ * All five providers are fully implemented.
  */
 export function createClient(config: LlmClientConfig): LlmClient {
   switch (config.provider) {
@@ -65,7 +63,7 @@ export function createClient(config: LlmClientConfig): LlmClient {
  *   openai     → OPENAI_API_KEY
  *   gemini     → GOOGLE_AI_API_KEY
  *   deepseek   → DEEPSEEK_API_KEY
- *   perplexity → PERPLEXITY_API_KEY
+ *   perplexity → PERPLEXITY_API_KEY — recommended default model: 'sonar'
  *
  * Throws LlmError if the required env var is not set.
  */

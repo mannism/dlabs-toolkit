@@ -7,14 +7,15 @@
  *
  * Week 2: Anthropic + OpenAI fully implemented.
  * Week 3: Gemini + DeepSeek.
- * Later: Perplexity.
+ * Week 5: Perplexity — search-grounded, citations, providerOptions escape hatch.
  */
 
-// Factory functions — Anthropic + OpenAI implemented. Gemini/DeepSeek/Perplexity stubs.
+// Factory functions — all five providers fully implemented
 export { createClient, createClientFromEnv } from './client.js';
 // Core message format shared across all providers
 // Client config, usage, response, streaming, error types
 export type {
+  LlmCallOptions,
   LlmClient,
   LlmClientConfig,
   LlmMessage,
