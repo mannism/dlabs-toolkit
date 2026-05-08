@@ -19,6 +19,7 @@ import { normalizeAnthropicError } from './anthropic.js';
 import { normalizeDeepSeekError } from './deepseek.js';
 import { normalizeGeminiError } from './gemini.js';
 import { normalizeOpenAIError } from './openai.js';
+import { normalizePerplexityError } from './perplexity.js';
 
 describe('normalizeAnthropicError — real Anthropic SDK error classes', () => {
   it('maps Anthropic.APIError 429 to retryable LlmError', () => {
@@ -217,6 +218,75 @@ describe('normalizeGeminiError — real @google/genai ApiError class', () => {
       retryable: false,
     });
     expect(normalizeGeminiError(llmErr)).toBe(llmErr);
+  });
+});
+
+describe('normalizePerplexityError — OpenAI SDK error classes (same hierarchy as OpenAI/DeepSeek provider)', () => {
+  it('maps OpenAI.APIError 429 to retryable LlmError with perplexity provider', () => {
+    const apiErr = OpenAI.APIError.generate(
+      429,
+      { error: { message: 'Rate limited', type: 'tokens', code: null, param: null } },
+      'Rate limited',
+      new Headers()
+    );
+    const result = normalizePerplexityError(apiErr);
+    expect(result).toBeInstanceOf(LlmError);
+    expect(result.provider).toBe('perplexity');
+    expect(result.statusCode).toBe(429);
+    expect(result.retryable).toBe(true);
+  });
+
+  it('maps OpenAI.APIError 401 to non-retryable LlmError', () => {
+    const apiErr = OpenAI.APIError.generate(
+      401,
+      {
+        error: { message: 'Unauthorized', type: 'invalid_request_error', code: null, param: null },
+      },
+      'Unauthorized',
+      new Headers()
+    );
+    const result = normalizePerplexityError(apiErr);
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBe(401);
+  });
+
+  it('maps OpenAI.APIError 500 to retryable LlmError with perplexity provider', () => {
+    const apiErr = OpenAI.APIError.generate(
+      500,
+      { error: { message: 'Internal error', type: 'server_error', code: null, param: null } },
+      'Internal error',
+      new Headers()
+    );
+    const result = normalizePerplexityError(apiErr);
+    expect(result.retryable).toBe(true);
+    expect(result.statusCode).toBe(500);
+  });
+
+  it('maps OpenAI.APIConnectionError to retryable LlmError with no statusCode', () => {
+    const connErr = new OpenAI.APIConnectionError({ message: 'Connection refused' });
+    const result = normalizePerplexityError(connErr);
+    expect(result).toBeInstanceOf(LlmError);
+    expect(result.retryable).toBe(true);
+    expect(result.statusCode).toBeUndefined();
+  });
+
+  it('passes through LlmError unchanged', () => {
+    const llmErr = new LlmError({
+      message: 'already wrapped',
+      provider: 'perplexity',
+      retryable: false,
+    });
+    expect(normalizePerplexityError(llmErr)).toBe(llmErr);
+  });
+
+  it('maps OpenAI.APIError with undefined status to non-retryable LlmError with perplexity provider', () => {
+    const apiErr = Object.create(OpenAI.APIError.prototype) as InstanceType<typeof OpenAI.APIError>;
+    Object.assign(apiErr, { status: undefined, message: 'no status code available' });
+    const result = normalizePerplexityError(apiErr);
+    expect(result).toBeInstanceOf(LlmError);
+    expect(result.provider).toBe('perplexity');
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBeUndefined();
   });
 });
 
