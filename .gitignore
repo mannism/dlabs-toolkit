@@ -48,3 +48,6 @@ Thumbs.db
 # Misc
 .changeset/.cache
 *.pem
+
+# Smoke test scripts (contain live API calls, not committed)
+scripts/smoke-*.ts
