@@ -18,6 +18,7 @@
 import OpenAI from 'openai';
 import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
+  LlmCallOptions,
   LlmClient,
   LlmClientConfig,
   LlmMessage,
@@ -102,10 +103,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     provider: PROVIDER,
   };
 
-  async function complete(
-    messages: LlmMessage[],
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
-  ): Promise<LlmResponse> {
+  async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
     const openAIMessages = buildOpenAIMessages(messages);
     const start = Date.now();
@@ -142,7 +140,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
   async function* stream(
     messages: LlmMessage[],
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
+    options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
     const openAIMessages = buildOpenAIMessages(messages);
@@ -196,7 +194,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
   async function structured<T>(
     messages: LlmMessage[],
     schema: { parse: (data: unknown) => T },
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
+    options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>> {
     // OpenAI JSON mode: response_format: { type: 'json_object' }
     // The system prompt must instruct the model to output JSON — OpenAI requires this.

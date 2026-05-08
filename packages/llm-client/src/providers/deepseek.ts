@@ -26,6 +26,7 @@
 import OpenAI from 'openai';
 import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
+  LlmCallOptions,
   LlmClient,
   LlmClientConfig,
   LlmMessage,
@@ -114,10 +115,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     provider: PROVIDER,
   };
 
-  async function complete(
-    messages: LlmMessage[],
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
-  ): Promise<LlmResponse> {
+  async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
     const chatMessages = buildMessages(messages);
     const start = Date.now();
@@ -153,7 +151,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
 
   async function* stream(
     messages: LlmMessage[],
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
+    options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
     const chatMessages = buildMessages(messages);
@@ -205,7 +203,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
   async function structured<T>(
     messages: LlmMessage[],
     schema: { parse: (data: unknown) => T },
-    options?: Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature'>>
+    options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>> {
     // Inject JSON-only system instruction. DeepSeek does not guarantee json_object
     // response_format support across all models, so we rely on prompt-level enforcement.
