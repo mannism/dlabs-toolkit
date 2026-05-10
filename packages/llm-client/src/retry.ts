@@ -58,6 +58,18 @@ export interface RetryOptions {
 }
 
 /**
+ * Merge base RetryOptions with an optional caller signal.
+ * Uses conditional spread to satisfy exactOptionalPropertyTypes — avoids spreading
+ * `{ signal: AbortSignal | undefined }` into the strictly-typed interface.
+ */
+export function mergeRetryOptsWithSignal(
+  base: Omit<RetryOptions, 'signal'>,
+  signal: AbortSignal | undefined
+): RetryOptions {
+  return signal !== undefined ? { ...base, signal } : { ...base };
+}
+
+/**
  * Execute `fn` with retry logic. Wraps the result in structured error normalization.
  * `fn` receives the current attempt number (0-indexed).
  *

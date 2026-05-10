@@ -17,7 +17,7 @@
 
 import OpenAI from 'openai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
-import { normalizeThrownError, withRetry } from '../retry.js';
+import { mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
   LlmClient,
@@ -140,7 +140,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       } finally {
         ctl.dispose();
       }
-    }, { ...retryOpts, signal: options?.signal });
+    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
   }
 
   async function* stream(
@@ -243,7 +243,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       } finally {
         ctl.dispose();
       }
-    }, { ...retryOpts, signal: options?.signal });
+    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
 
     const rawContent = rawResponse.choices[0]?.message.content ?? '';
 

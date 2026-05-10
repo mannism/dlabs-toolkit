@@ -14,7 +14,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
-import { normalizeThrownError, withRetry } from '../retry.js';
+import { mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
   LlmClient,
@@ -170,7 +170,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
       } finally {
         ctl.dispose();
       }
-    }, { ...retryOpts, signal: options?.signal });
+    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
   }
 
   async function* stream(
@@ -210,8 +210,15 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     let finalUsage: LlmUsage | undefined;
 
     try {
-      // Wrap the SDK stream with stall detection.
-      for await (const event of withStallTimeout(sdkStream, stallMs, ctl, PROVIDER)) {
+      // Wrap the SDK stream with stall detection. Explicitly cast the iterable so
+      // TypeScript can infer the generic parameter T = Anthropic.MessageStreamEvent.
+      const stallWrapped = withStallTimeout<Anthropic.MessageStreamEvent>(
+        sdkStream as AsyncIterable<Anthropic.MessageStreamEvent>,
+        stallMs,
+        ctl,
+        PROVIDER
+      );
+      for await (const event of stallWrapped) {
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
           yield { token: event.delta.text };
         } else if (event.type === 'message_delta' && 'usage' in event) {

@@ -122,8 +122,9 @@ export class LlmError extends Error {
    * Optional error kind discriminator. Present on errors produced by the abort/timeout/stall
    * machinery (v0.3.0+). May be undefined on errors from providers that pre-date the kind field
    * or on errors that fall through to the generic normalization path.
+   * Typed as LlmErrorKind | undefined to satisfy exactOptionalPropertyTypes.
    */
-  readonly kind?: LlmErrorKind;
+  readonly kind: LlmErrorKind | undefined;
   // `cause` is declared on Error in lib.es2022.error.d.ts as `cause?: unknown`
   // We override it here to make it always present (not optional) after construction.
   override readonly cause: unknown;
