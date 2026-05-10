@@ -76,7 +76,7 @@ The toolkit checks for Zod 4's internal `_zod` marker at runtime. If the schema 
 
 | Provider | Native mode | What's enforced | Known limits |
 |---|---|---|---|
-| OpenAI (`gpt-5.x`) | `response_format: { type: 'json_schema', strict: true }` | Schema structure guaranteed; model cannot produce off-schema output | No `format`, `pattern`, or recursive schemas (`z.lazy()`). Throws at conversion time with clear message. |
+| OpenAI (`gpt-4o`, `gpt-4o-mini`) | `response_format: { type: 'json_schema', strict: true }` | Schema structure guaranteed; model cannot produce off-schema output | No `format`, `pattern`, or recursive schemas (`z.lazy()`). Throws at conversion time with clear message. |
 | Anthropic | Tool-use with forced `tool_choice: { type: 'tool', name: 'extract' }` | Model must call the tool; `input` is pre-parsed JSON | Defense-in-depth `schema.parse()` still runs |
 | Gemini | `responseSchema` (OpenAPI 3.0) + `responseMimeType: 'application/json'` | Schema communicated to the model; belt-and-braces fence-strip retained | Tested via mocks only — file an issue if Gemini's API rejects the schema shape |
 | DeepSeek | None (prompt-only, API limitation) | System-prompt nudge + schema.parse() | Same as v0.3.0 |
