@@ -16,6 +16,7 @@
  */
 
 import OpenAI from 'openai';
+import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
@@ -106,9 +107,11 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
     const openAIMessages = buildOpenAIMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
     return withRetry(async () => {
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
       try {
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
           model,
@@ -122,7 +125,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
         const temperature = options?.temperature ?? config.temperature;
         if (temperature !== undefined) params.temperature = temperature;
 
-        const response = await client.chat.completions.create(params);
+        const response = await client.chat.completions.create(params, { signal: ctl.signal });
 
         const content = response.choices.map((c) => c.message.content ?? '').join('');
 
@@ -133,9 +136,11 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
           latencyMs: Date.now() - start,
         };
       } catch (err) {
-        throw normalizeOpenAIError(err);
+        throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
       }
-    }, retryOpts);
+    }, { ...retryOpts, signal: options?.signal });
   }
 
   async function* stream(
@@ -144,6 +149,8 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
     const openAIMessages = buildOpenAIMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
 
     const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
       model,
@@ -158,18 +165,20 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) params.temperature = temperature;
 
+    const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
     let sdkStream: Awaited<ReturnType<typeof client.chat.completions.create>>;
 
     try {
-      sdkStream = await client.chat.completions.create(params);
+      sdkStream = await client.chat.completions.create(params, { signal: ctl.signal });
     } catch (err) {
-      throw normalizeOpenAIError(err);
+      ctl.dispose();
+      throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
     }
 
     let finalUsage: LlmUsage | undefined;
 
     try {
-      for await (const chunk of sdkStream) {
+      for await (const chunk of withStallTimeout(sdkStream, stallMs, ctl, PROVIDER)) {
         // Token chunks arrive in choices[0].delta.content
         const delta = chunk.choices[0]?.delta.content;
         if (delta !== undefined && delta !== null && delta.length > 0) {
@@ -182,7 +191,9 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
         }
       }
     } catch (err) {
-      throw normalizeOpenAIError(err);
+      throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    } finally {
+      ctl.dispose();
     }
 
     // Yield usage on the final sentinel chunk
@@ -207,9 +218,11 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     const augmentedMessages = [jsonSystemInstruction, ...messages];
     const model = options?.model ?? config.model;
     const openAIMessages = buildOpenAIMessages(augmentedMessages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
     const rawResponse = await withRetry(async () => {
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
       try {
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
           model,
@@ -224,11 +237,13 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
         const temperature = options?.temperature ?? config.temperature;
         if (temperature !== undefined) params.temperature = temperature;
 
-        return await client.chat.completions.create(params);
+        return await client.chat.completions.create(params, { signal: ctl.signal });
       } catch (err) {
-        throw normalizeOpenAIError(err);
+        throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
       }
-    }, retryOpts);
+    }, { ...retryOpts, signal: options?.signal });
 
     const rawContent = rawResponse.choices[0]?.message.content ?? '';
 

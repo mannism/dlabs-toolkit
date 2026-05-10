@@ -24,6 +24,7 @@
  */
 
 import OpenAI from 'openai';
+import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
@@ -118,9 +119,11 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
     const chatMessages = buildMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
     return withRetry(async () => {
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
       try {
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
           model,
@@ -134,7 +137,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
         const temperature = options?.temperature ?? config.temperature;
         if (temperature !== undefined) params.temperature = temperature;
 
-        const response = await client.chat.completions.create(params);
+        const response = await client.chat.completions.create(params, { signal: ctl.signal });
         const content = response.choices.map((c) => c.message.content ?? '').join('');
 
         return {
@@ -144,9 +147,11 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
           latencyMs: Date.now() - start,
         };
       } catch (err) {
-        throw normalizeDeepSeekError(err);
+        throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
       }
-    }, retryOpts);
+    }, { ...retryOpts, signal: options?.signal });
   }
 
   async function* stream(
@@ -155,6 +160,8 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
     const chatMessages = buildMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
 
     const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
       model,
@@ -169,18 +176,20 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) params.temperature = temperature;
 
+    const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
     let sdkStream: Awaited<ReturnType<typeof client.chat.completions.create>>;
 
     try {
-      sdkStream = await client.chat.completions.create(params);
+      sdkStream = await client.chat.completions.create(params, { signal: ctl.signal });
     } catch (err) {
-      throw normalizeDeepSeekError(err);
+      ctl.dispose();
+      throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
     }
 
     let finalUsage: LlmUsage | undefined;
 
     try {
-      for await (const chunk of sdkStream) {
+      for await (const chunk of withStallTimeout(sdkStream, stallMs, ctl, PROVIDER)) {
         const delta = chunk.choices[0]?.delta.content;
         if (delta !== undefined && delta !== null && delta.length > 0) {
           yield { token: delta };
@@ -192,7 +201,9 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
         }
       }
     } catch (err) {
-      throw normalizeDeepSeekError(err);
+      throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    } finally {
+      ctl.dispose();
     }
 
     if (finalUsage !== undefined) {
@@ -216,9 +227,11 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     const augmentedMessages = [jsonSystemInstruction, ...messages];
     const model = options?.model ?? config.model;
     const chatMessages = buildMessages(augmentedMessages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
     const rawResponse = await withRetry(async () => {
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
       try {
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
           model,
@@ -232,11 +245,13 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
         const temperature = options?.temperature ?? config.temperature;
         if (temperature !== undefined) params.temperature = temperature;
 
-        return await client.chat.completions.create(params);
+        return await client.chat.completions.create(params, { signal: ctl.signal });
       } catch (err) {
-        throw normalizeDeepSeekError(err);
+        throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
       }
-    }, retryOpts);
+    }, { ...retryOpts, signal: options?.signal });
 
     const rawContent = rawResponse.choices[0]?.message.content ?? '';
 

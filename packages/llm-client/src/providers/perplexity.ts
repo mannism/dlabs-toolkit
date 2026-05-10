@@ -53,6 +53,7 @@
  */
 
 import OpenAI from 'openai';
+import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
@@ -198,10 +199,12 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
     const chatMessages = buildMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
     const extraParams = extractProviderOptions(options?.providerOptions);
 
     return withRetry(async () => {
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
       try {
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown> =
           {
@@ -218,7 +221,8 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
         if (temperature !== undefined) params.temperature = temperature;
 
         const rawResponse = await client.chat.completions.create(
-          params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming
+          params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+          { signal: ctl.signal }
         );
 
         // Cast to access Perplexity-specific extensions not present in OpenAI SDK types
@@ -238,9 +242,11 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
 
         return result;
       } catch (err) {
-        throw normalizePerplexityError(err);
+        throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
       }
-    }, retryOpts);
+    }, { ...retryOpts, signal: options?.signal });
   }
 
   async function* stream(
@@ -249,6 +255,8 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
     const chatMessages = buildMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
     const extraParams = extractProviderOptions(options?.providerOptions);
 
     const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming & Record<string, unknown> = {
@@ -265,20 +273,23 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) params.temperature = temperature;
 
+    const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
     let sdkStream: Awaited<ReturnType<typeof client.chat.completions.create>>;
 
     try {
       sdkStream = await client.chat.completions.create(
-        params as OpenAI.Chat.ChatCompletionCreateParamsStreaming
+        params as OpenAI.Chat.ChatCompletionCreateParamsStreaming,
+        { signal: ctl.signal }
       );
     } catch (err) {
-      throw normalizePerplexityError(err);
+      ctl.dispose();
+      throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
     }
 
     let finalUsage: LlmUsage | undefined;
 
     try {
-      for await (const chunk of sdkStream) {
+      for await (const chunk of withStallTimeout(sdkStream, stallMs, ctl, PROVIDER)) {
         const delta = chunk.choices[0]?.delta.content;
         if (delta !== undefined && delta !== null && delta.length > 0) {
           yield { token: delta };
@@ -290,7 +301,9 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
         }
       }
     } catch (err) {
-      throw normalizePerplexityError(err);
+      throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    } finally {
+      ctl.dispose();
     }
 
     // Note: citations are NOT available in streaming mode. Perplexity's streaming
@@ -318,10 +331,12 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     const augmentedMessages = [jsonSystemInstruction, ...messages];
     const model = options?.model ?? config.model;
     const chatMessages = buildMessages(augmentedMessages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
     const extraParams = extractProviderOptions(options?.providerOptions);
 
     const rawResponse = await withRetry(async () => {
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
       try {
         const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown> =
           {
@@ -338,12 +353,15 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
         if (temperature !== undefined) params.temperature = temperature;
 
         return await client.chat.completions.create(
-          params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming
+          params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+          { signal: ctl.signal }
         );
       } catch (err) {
-        throw normalizePerplexityError(err);
+        throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
       }
-    }, retryOpts);
+    }, { ...retryOpts, signal: options?.signal });
 
     const rawContent = rawResponse.choices[0]?.message.content ?? '';
 
