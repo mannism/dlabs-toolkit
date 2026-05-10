@@ -615,6 +615,153 @@ describe('OpenAI provider — structured() v0.4.0 strict mode', () => {
   });
 });
 
+// ─── v0.4.2 — Fix A: per-call timeoutMs threads into SDK RequestOptions ───────
+
+describe('OpenAI provider — Fix A: timeout propagates to SDK RequestOptions', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('Hello'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
+  });
+
+  it('complete(): per-call timeoutMs is passed as timeout in SDK RequestOptions', async () => {
+    const client = createOpenAIProvider({ ...TEST_CONFIG, timeoutMs: 30_000 });
+    await client.complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 120_000 });
+
+    // Second argument to create() is the RequestOptions object
+    const reqOpts = mockCreate.mock.calls[0]?.[1] as { timeout?: number; signal?: AbortSignal };
+    expect(reqOpts.timeout).toBe(120_000);
+  });
+
+  it('complete(): falls back to config.timeoutMs when no per-call override', async () => {
+    const client = createOpenAIProvider({ ...TEST_CONFIG, timeoutMs: 60_000 });
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    const reqOpts = mockCreate.mock.calls[0]?.[1] as { timeout?: number };
+    expect(reqOpts.timeout).toBe(60_000);
+  });
+
+  it('complete(): falls back to 30 000 ms hard default when neither config nor options sets timeoutMs', async () => {
+    const { timeoutMs: _omit, ...restConfig } = TEST_CONFIG;
+    const client = createOpenAIProvider(restConfig);
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    const reqOpts = mockCreate.mock.calls[0]?.[1] as { timeout?: number };
+    expect(reqOpts.timeout).toBe(30_000);
+  });
+
+  it('stream(): per-call timeoutMs is passed as timeout in SDK RequestOptions', async () => {
+    const mockStream = { [Symbol.asyncIterator]: async function* () {} };
+    mockCreate.mockResolvedValue(mockStream);
+
+    const client = createOpenAIProvider({ ...TEST_CONFIG, timeoutMs: 30_000 });
+    // Consume the stream to trigger the create() call
+    for await (const _ of client.stream([{ role: 'user', content: 'Hi' }], {
+      timeoutMs: 180_000,
+    })) {
+      /* consume */
+    }
+
+    const reqOpts = mockCreate.mock.calls[0]?.[1] as { timeout?: number };
+    expect(reqOpts.timeout).toBe(180_000);
+  });
+
+  it('structured() strict path: per-call timeoutMs is passed as timeout in SDK RequestOptions', async () => {
+    // Zod schema triggers the strict path
+    const { z } = await import('zod');
+    const zodSchema = z.object({ ok: z.boolean() });
+    mockCreate.mockResolvedValue(
+      mockChatCompletion('{"ok":true}', {
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: '{"ok":true}', refusal: null },
+            finish_reason: 'stop',
+            logprobs: null,
+          },
+        ],
+      })
+    );
+
+    const client = createOpenAIProvider({
+      ...TEST_CONFIG,
+      model: 'gpt-5.4-mini',
+      timeoutMs: 30_000,
+    });
+    await client.structured([{ role: 'user', content: 'Return data' }], zodSchema, {
+      timeoutMs: 240_000,
+    });
+
+    const reqOpts = mockCreate.mock.calls[0]?.[1] as { timeout?: number };
+    expect(reqOpts.timeout).toBe(240_000);
+  });
+
+  it('structured() prompt-fallback path: per-call timeoutMs is passed as timeout in SDK RequestOptions', async () => {
+    // Plain narrow schema triggers the prompt-fallback path
+    const narrowSchema = { parse: (data: unknown) => data as { ok: boolean } };
+    mockCreate.mockResolvedValue(mockChatCompletion('{"ok":true}'));
+
+    const client = createOpenAIProvider({ ...TEST_CONFIG, timeoutMs: 30_000 });
+    await client.structured([{ role: 'user', content: 'Return data' }], narrowSchema, {
+      timeoutMs: 200_000,
+    });
+
+    const reqOpts = mockCreate.mock.calls[0]?.[1] as { timeout?: number };
+    expect(reqOpts.timeout).toBe(200_000);
+  });
+});
+
+// ─── v0.4.2 — Fix B: APIConnectionTimeoutError → kind:'timeout' ──────────────
+
+describe('OpenAI provider — Fix B: APIConnectionTimeoutError classifies as kind:timeout', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('complete(): APIConnectionTimeoutError thrown by SDK → LlmError kind:timeout, retryable:true', async () => {
+    // Construct a real local class that instanceof-checks against itself, then assign
+    // it to OpenAI.APIConnectionTimeoutError so the normalizer's instanceof guard fires.
+    class FakeAPIConnectionTimeoutError extends Error {
+      constructor() {
+        super('Request timed out.');
+        this.name = 'APIConnectionTimeoutError';
+      }
+    }
+
+    // Assign to both slots so the normalizer's instanceof checks fire correctly.
+    // The normalizer checks APIConnectionTimeoutError first (order matters).
+    // noPropertyAccessFromIndexSignature requires bracket notation on Record<string,unknown>.
+    // Each access line carries its own biome-ignore for useLiteralKeys.
+    const openAIAsRecord = OpenAI as unknown as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string,unknown>
+    openAIAsRecord['APIConnectionTimeoutError'] = FakeAPIConnectionTimeoutError;
+    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string,unknown>
+    openAIAsRecord['APIConnectionError'] = FakeAPIConnectionTimeoutError;
+
+    const mockCreate = vi.fn().mockRejectedValue(new FakeAPIConnectionTimeoutError());
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createOpenAIProvider({ ...TEST_CONFIG, maxRetries: 0 });
+    const thrown = await client
+      .complete([{ role: 'user', content: 'Hi' }])
+      .catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('timeout');
+      expect(thrown.retryable).toBe(true);
+    }
+  });
+});
+
 // ─── Abort / timeout / stall smoke tests ─────────────────────────────────────
 
 describe('OpenAI provider — abort / timeout / stall', () => {

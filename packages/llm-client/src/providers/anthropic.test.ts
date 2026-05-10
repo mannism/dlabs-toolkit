@@ -600,6 +600,142 @@ describe('Anthropic provider — structured() v0.4.0 strict mode (tool-use)', ()
   });
 });
 
+// ─── v0.4.2 — Fix A: per-call timeoutMs threads into SDK RequestOptions ───────
+
+describe('Anthropic provider — Fix A: timeout propagates to SDK RequestOptions', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockMessageResponse());
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+      };
+    });
+  });
+
+  it('complete(): per-call timeoutMs is passed as timeout in SDK RequestOptions', async () => {
+    const client = createAnthropicProvider({ ...TEST_CONFIG, timeoutMs: 30_000 });
+    await client.complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 120_000 });
+
+    // Second argument to messages.create() is the RequestOptions object
+    const reqOpts = mockCreate.mock.calls[0]?.[1] as { timeout?: number; signal?: AbortSignal };
+    expect(reqOpts.timeout).toBe(120_000);
+  });
+
+  it('complete(): falls back to config.timeoutMs when no per-call override', async () => {
+    const client = createAnthropicProvider({ ...TEST_CONFIG, timeoutMs: 60_000 });
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    const reqOpts = mockCreate.mock.calls[0]?.[1] as { timeout?: number };
+    expect(reqOpts.timeout).toBe(60_000);
+  });
+
+  it('complete(): falls back to 30 000 ms hard default when neither config nor options sets timeoutMs', async () => {
+    const { timeoutMs: _omit, ...restConfig } = TEST_CONFIG;
+    const client = createAnthropicProvider(restConfig);
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    const reqOpts = mockCreate.mock.calls[0]?.[1] as { timeout?: number };
+    expect(reqOpts.timeout).toBe(30_000);
+  });
+
+  it('stream(): per-call timeoutMs is passed as timeout in SDK RequestOptions', async () => {
+    const mockStreamFn = vi.fn().mockReturnValue({
+      [Symbol.asyncIterator]: async function* (): AsyncGenerator<never> {},
+      finalMessage: vi.fn(),
+    });
+
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: vi.fn(), stream: mockStreamFn },
+      };
+    });
+
+    const client = createAnthropicProvider({ ...TEST_CONFIG, timeoutMs: 30_000 });
+    for await (const _ of client.stream([{ role: 'user', content: 'Hi' }], {
+      timeoutMs: 180_000,
+    })) {
+      /* consume */
+    }
+
+    const reqOpts = mockStreamFn.mock.calls[0]?.[1] as { timeout?: number };
+    expect(reqOpts.timeout).toBe(180_000);
+  });
+
+  it('structured() strict path: per-call timeoutMs is passed as timeout in SDK RequestOptions', async () => {
+    const { z } = await import('zod');
+    const zodSchema = z.object({ topic: z.string() });
+
+    // Simulate Anthropic tool_use response for the strict path
+    const toolUseResponse = mockMessageResponse({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'tool_abc',
+          name: 'extract',
+          input: { topic: 'AI' },
+        } as unknown as Anthropic.ContentBlock,
+      ],
+      stop_reason: 'tool_use',
+    });
+    mockCreate.mockResolvedValue(toolUseResponse);
+
+    const client = createAnthropicProvider({ ...TEST_CONFIG, timeoutMs: 30_000 });
+    await client.structured([{ role: 'user', content: 'Summarize' }], zodSchema, {
+      timeoutMs: 240_000,
+    });
+
+    const reqOpts = mockCreate.mock.calls[0]?.[1] as { timeout?: number };
+    expect(reqOpts.timeout).toBe(240_000);
+  });
+});
+
+// ─── v0.4.2 — Fix B: APIConnectionTimeoutError → kind:'timeout' ──────────────
+
+describe('Anthropic provider — Fix B: APIConnectionTimeoutError classifies as kind:timeout', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('complete(): APIConnectionTimeoutError thrown by SDK → LlmError kind:timeout, retryable:true', async () => {
+    // Construct a real local class so instanceof checks fire, then assign it to
+    // Anthropic.APIConnectionTimeoutError. The normalizer checks timeout before connection,
+    // so the timeout branch fires before the generic connection branch.
+    class FakeAPIConnectionTimeoutError extends Error {
+      constructor() {
+        super('Request timed out.');
+        this.name = 'APIConnectionTimeoutError';
+      }
+    }
+
+    // noPropertyAccessFromIndexSignature requires bracket notation on Record<string,unknown>.
+    // Each access line carries its own biome-ignore for useLiteralKeys.
+    const anthropicAsRecord = Anthropic as unknown as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string,unknown>
+    anthropicAsRecord['APIConnectionTimeoutError'] = FakeAPIConnectionTimeoutError;
+    // biome-ignore lint/complexity/useLiteralKeys: noPropertyAccessFromIndexSignature requires bracket notation on Record<string,unknown>
+    anthropicAsRecord['APIConnectionError'] = FakeAPIConnectionTimeoutError;
+
+    const mockCreate = vi.fn().mockRejectedValue(new FakeAPIConnectionTimeoutError());
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return { messages: { create: mockCreate, stream: vi.fn() } };
+    });
+
+    const client = createAnthropicProvider({ ...TEST_CONFIG, maxRetries: 0 });
+    const thrown = await client
+      .complete([{ role: 'user', content: 'Hi' }])
+      .catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('timeout');
+      expect(thrown.retryable).toBe(true);
+    }
+  });
+});
+
 // ─── Abort / timeout / stall smoke tests ─────────────────────────────────────
 //
 // These tests use vi.useFakeTimers so we can advance time synthetically rather
