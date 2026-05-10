@@ -125,7 +125,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
           };
 
           const maxTokens = options?.maxTokens ?? config.maxTokens;
-          if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          if (maxTokens !== undefined) params.max_completion_tokens = maxTokens;
 
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
@@ -167,7 +167,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     };
 
     const maxTokens = options?.maxTokens ?? config.maxTokens;
-    if (maxTokens !== undefined) params.max_tokens = maxTokens;
+    if (maxTokens !== undefined) params.max_completion_tokens = maxTokens;
 
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) params.temperature = temperature;
@@ -256,7 +256,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
           };
 
           const maxTokens = options?.maxTokens ?? config.maxTokens;
-          if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          if (maxTokens !== undefined) params.max_completion_tokens = maxTokens;
 
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
@@ -357,7 +357,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
           };
 
           const maxTokens = options?.maxTokens ?? config.maxTokens;
-          if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          if (maxTokens !== undefined) params.max_completion_tokens = maxTokens;
 
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;

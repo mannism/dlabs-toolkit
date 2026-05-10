@@ -111,11 +111,12 @@ describe('OpenAI provider — complete()', () => {
 
     const callArgs = mockCreate.mock
       .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
-    expect(callArgs.max_tokens).toBe(256);
+    expect(callArgs.max_completion_tokens).toBe(256);
+    expect(callArgs.max_tokens).toBeUndefined();
     expect(callArgs.temperature).toBe(0.3);
   });
 
-  it('does not set max_tokens when neither config nor options specifies it', async () => {
+  it('does not set max_completion_tokens when neither config nor options specifies it', async () => {
     const { maxTokens: _omit, ...restConfig } = TEST_CONFIG;
     const configWithoutMax: LlmClientConfig = restConfig;
     const client = createOpenAIProvider(configWithoutMax);
@@ -123,6 +124,7 @@ describe('OpenAI provider — complete()', () => {
 
     const callArgs = mockCreate.mock
       .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
+    expect(callArgs.max_completion_tokens).toBeUndefined();
     expect(callArgs.max_tokens).toBeUndefined();
   });
 
