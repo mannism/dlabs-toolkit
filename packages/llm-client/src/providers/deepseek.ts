@@ -18,9 +18,9 @@
  *   APIError with status 429 / 5xx → retryable: true
  *   Other APIErrors → non-retryable
  *
- * Note: DeepSeek does not support the json_object response_format on all models.
- * structured() injects a system prompt and parses the raw response. If the model
- * includes markdown fences, they are stripped before parsing.
+ * Note: DeepSeek does not support native schema mode. structured() always uses the
+ * system-prompt + parse path (v0.3.0 behavior). Return shape gains model and id fields
+ * in v0.4.0 for parity with strict-mode providers.
  */
 
 import OpenAI from 'openai';
@@ -122,36 +122,39 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
-    return withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
-          model,
-          messages: chatMessages,
-          stream: false,
-        };
+    return withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+            model,
+            messages: chatMessages,
+            stream: false,
+          };
 
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_tokens = maxTokens;
 
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) params.temperature = temperature;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
 
-        const response = await client.chat.completions.create(params, { signal: ctl.signal });
-        const content = response.choices.map((c) => c.message.content ?? '').join('');
+          const response = await client.chat.completions.create(params, { signal: ctl.signal });
+          const content = response.choices.map((c) => c.message.content ?? '').join('');
 
-        return {
-          content,
-          model: response.model,
-          usage: normalizeUsage(response.usage),
-          latencyMs: Date.now() - start,
-        };
-      } catch (err) {
-        throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return {
+            content,
+            model: response.model,
+            usage: normalizeUsage(response.usage),
+            latencyMs: Date.now() - start,
+          };
+        } catch (err) {
+          throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
   }
 
   async function* stream(
@@ -230,28 +233,31 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
-    const rawResponse = await withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
-          model,
-          messages: chatMessages,
-          stream: false,
-        };
+    const rawResponse = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+            model,
+            messages: chatMessages,
+            stream: false,
+          };
 
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_tokens = maxTokens;
 
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) params.temperature = temperature;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
 
-        return await client.chat.completions.create(params, { signal: ctl.signal });
-      } catch (err) {
-        throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return await client.chat.completions.create(params, { signal: ctl.signal });
+        } catch (err) {
+          throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
 
     const rawContent = rawResponse.choices[0]?.message.content ?? '';
 
@@ -286,6 +292,8 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
 
     return {
       data,
+      model: rawResponse.model,
+      id: rawResponse.id,
       usage: normalizeUsage(rawResponse.usage),
       latencyMs: Date.now() - start,
     };

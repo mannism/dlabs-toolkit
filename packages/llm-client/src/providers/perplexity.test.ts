@@ -379,8 +379,13 @@ describe('Perplexity provider — providerOptions', () => {
       providerOptions: { search_recency_filter: 'week' },
     });
 
-    const callArgs = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callArgs['search_recency_filter']).toBe('week');
+    type PerplexityCallArgs = {
+      search_recency_filter?: string;
+      search_domain_filter?: string[];
+      future_filter?: string;
+    };
+    const callArgs = mockCreate.mock.calls[0]?.[0] as PerplexityCallArgs;
+    expect(callArgs.search_recency_filter).toBe('week');
   });
 
   it('forwards search_domain_filter to the API call', async () => {
@@ -389,8 +394,9 @@ describe('Perplexity provider — providerOptions', () => {
       providerOptions: { search_domain_filter: ['nytimes.com', 'reuters.com'] },
     });
 
-    const callArgs = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callArgs['search_domain_filter']).toEqual(['nytimes.com', 'reuters.com']);
+    type PerplexityCallArgs = { search_domain_filter?: string[] };
+    const callArgs = mockCreate.mock.calls[0]?.[0] as PerplexityCallArgs;
+    expect(callArgs.search_domain_filter).toEqual(['nytimes.com', 'reuters.com']);
   });
 
   it('forwards multiple providerOptions fields together', async () => {
@@ -402,18 +408,20 @@ describe('Perplexity provider — providerOptions', () => {
       },
     });
 
-    const callArgs = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callArgs['search_recency_filter']).toBe('day');
-    expect(callArgs['search_domain_filter']).toEqual(['bbc.com']);
+    type PerplexityCallArgs = { search_recency_filter?: string; search_domain_filter?: string[] };
+    const callArgs = mockCreate.mock.calls[0]?.[0] as PerplexityCallArgs;
+    expect(callArgs.search_recency_filter).toBe('day');
+    expect(callArgs.search_domain_filter).toEqual(['bbc.com']);
   });
 
   it('does not inject providerOptions keys when providerOptions is absent', async () => {
     const client = createPerplexityProvider(TEST_CONFIG);
     await client.complete([{ role: 'user', content: 'Hi' }]);
 
-    const callArgs = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callArgs['search_recency_filter']).toBeUndefined();
-    expect(callArgs['search_domain_filter']).toBeUndefined();
+    type PerplexityCallArgs = { search_recency_filter?: string; search_domain_filter?: string[] };
+    const callArgs = mockCreate.mock.calls[0]?.[0] as PerplexityCallArgs;
+    expect(callArgs.search_recency_filter).toBeUndefined();
+    expect(callArgs.search_domain_filter).toBeUndefined();
   });
 
   it('passes through unknown providerOptions fields unchanged', async () => {
@@ -423,8 +431,9 @@ describe('Perplexity provider — providerOptions', () => {
       providerOptions: { future_filter: 'some_value' },
     });
 
-    const callArgs = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callArgs['future_filter']).toBe('some_value');
+    type PerplexityCallArgs = { future_filter?: string };
+    const callArgs = mockCreate.mock.calls[0]?.[0] as PerplexityCallArgs;
+    expect(callArgs.future_filter).toBe('some_value');
   });
 
   it('forwards providerOptions in stream() calls', async () => {
@@ -453,8 +462,8 @@ describe('Perplexity provider — providerOptions', () => {
       /* consume */
     }
 
-    const callArgs = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callArgs['search_recency_filter']).toBe('hour');
+    const callArgs = mockCreate.mock.calls[0]?.[0] as { search_recency_filter?: string };
+    expect(callArgs.search_recency_filter).toBe('hour');
   });
 });
 
@@ -803,28 +812,40 @@ describe('Perplexity provider — abort / timeout / stall', () => {
   });
 
   it('per-call timeoutMs override fires before client default', async () => {
-    const mockCreate = vi.fn().mockImplementation(
-      (_params: unknown, opts: { signal?: AbortSignal }) => {
+    const mockCreate = vi
+      .fn()
+      .mockImplementation((_params: unknown, opts: { signal?: AbortSignal }) => {
         const sig = opts?.signal;
         let settled = false;
         return new Promise<OpenAI.Chat.ChatCompletion>((_resolve, reject) => {
-          if (sig?.aborted) { settled = true; const e = new Error('AbortError'); e.name = 'AbortError'; reject(e); return; }
+          if (sig?.aborted) {
+            settled = true;
+            const e = new Error('AbortError');
+            e.name = 'AbortError';
+            reject(e);
+            return;
+          }
           const onAbort = (): void => {
-            if (settled) return; settled = true;
-            const e = new Error('AbortError'); e.name = 'AbortError'; reject(e);
+            if (settled) return;
+            settled = true;
+            const e = new Error('AbortError');
+            e.name = 'AbortError';
+            reject(e);
           };
           sig?.addEventListener('abort', onAbort, { once: true });
         });
-      }
-    );
+      });
     vi.mocked(OpenAI).mockImplementation(function () {
       return { chat: { completions: { create: mockCreate } } };
     });
 
     const client = createPerplexityProvider({ ...TEST_CONFIG, timeoutMs: 30_000, maxRetries: 0 });
     let caughtErr: unknown;
-    const p = client.complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 100 })
-      .catch((e: unknown) => { caughtErr = e; });
+    const p = client
+      .complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 100 })
+      .catch((e: unknown) => {
+        caughtErr = e;
+      });
 
     await vi.advanceTimersByTimeAsync(100);
     await p;
@@ -853,7 +874,10 @@ describe('Perplexity provider — abort / timeout / stall', () => {
   it('stream() stall → kind:"stream_stall" after first chunk', async () => {
     const mockChunks = [
       {
-        id: 'c1', object: 'chat.completion.chunk', created: 1, model: 'sonar',
+        id: 'c1',
+        object: 'chat.completion.chunk',
+        created: 1,
+        model: 'sonar',
         choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null, logprobs: null }],
         usage: null,
       },
@@ -877,13 +901,14 @@ describe('Perplexity provider — abort / timeout / stall', () => {
 
     const p = (async () => {
       try {
-        for await (const chunk of client.stream(
-          [{ role: 'user', content: 'Hi' }],
-          { streamStallTimeoutMs: 500 }
-        )) {
+        for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }], {
+          streamStallTimeoutMs: 500,
+        })) {
           if (chunk.token) chunks.push(chunk.token);
         }
-      } catch (e) { caughtError = e; }
+      } catch (e) {
+        caughtError = e;
+      }
     })();
 
     await vi.advanceTimersByTimeAsync(500);
@@ -891,5 +916,51 @@ describe('Perplexity provider — abort / timeout / stall', () => {
 
     expect((caughtError as { kind?: string }).kind).toBe('stream_stall');
     expect(chunks).toContain('hi');
+  });
+});
+
+// ─── v0.4.0 — return shape additions ─────────────────────────────────────────
+
+describe('Perplexity provider — structured() v0.4.0 return shape', () => {
+  it('structured() returns model, id, and citations from the API response', async () => {
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(
+        mockChatCompletion(
+          '{"topic":"AI","summary":"short"}',
+          ['https://example.com/a', 'https://example.com/b'],
+          { model: 'sonar-pro', id: 'chatcmpl-pplx-xyz' }
+        )
+      );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const schema = {
+      parse: (data: unknown) => data as { topic: string; summary: string },
+    };
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Summarize AI' }], schema);
+
+    expect(result.model).toBe('sonar-pro');
+    expect(result.id).toBe('chatcmpl-pplx-xyz');
+    expect(result.data.topic).toBe('AI');
+    expect(result.citations).toHaveLength(2);
+    expect(result.citations?.[0]?.url).toBe('https://example.com/a');
+  });
+
+  it('structured() has no citations when API returns none', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(
+      mockChatCompletion('{"value":1}') // no citations
+    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const schema = { parse: (data: unknown) => data as { value: number } };
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+
+    expect(result.citations).toBeUndefined();
   });
 });

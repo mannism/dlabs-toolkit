@@ -36,11 +36,11 @@
  *     search_domain_filter: string[]   — allowlist of domains to source from
  *   Unknown fields are passed through unchanged to support future Perplexity API additions.
  *
- * structured() strategy:
- *   Perplexity's response_format handling has limitations (especially on reasoning models
- *   where reasoning tokens appear before JSON output). We use system-prompt JSON instruction
- *   (same as DeepSeek) and strip both <think>...</think> reasoning blocks (sonar-reasoning-pro)
- *   and markdown fences before JSON.parse().
+ * structured() strategy (v0.4.0):
+ *   Perplexity has no native schema mode. Always uses system-prompt JSON instruction + fence
+ *   stripping and <think>...</think> reasoning block stripping (sonar-reasoning-pro).
+ *   Return shape gains model, id, and citations fields in v0.4.0 for parity with strict-mode
+ *   providers. Citations are propagated from the underlying complete() response.
  *
  * Token normalization:
  *   Perplexity returns standard OpenAI-format usage: prompt_tokens / completion_tokens / total_tokens
@@ -203,50 +203,53 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     const start = Date.now();
     const extraParams = extractProviderOptions(options?.providerOptions);
 
-    return withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown> =
-          {
+    return withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming &
+            Record<string, unknown> = {
             model,
             messages: chatMessages,
             stream: false,
             ...extraParams,
           };
 
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_tokens = maxTokens;
 
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) params.temperature = temperature;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
 
-        const rawResponse = await client.chat.completions.create(
-          params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-          { signal: ctl.signal }
-        );
+          const rawResponse = await client.chat.completions.create(
+            params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+            { signal: ctl.signal }
+          );
 
-        // Cast to access Perplexity-specific extensions not present in OpenAI SDK types
-        const response = rawResponse as OpenAI.Chat.ChatCompletion & PerplexityResponseExtensions;
+          // Cast to access Perplexity-specific extensions not present in OpenAI SDK types
+          const response = rawResponse as OpenAI.Chat.ChatCompletion & PerplexityResponseExtensions;
 
-        const content = response.choices.map((c) => c.message.content ?? '').join('');
+          const content = response.choices.map((c) => c.message.content ?? '').join('');
 
-        const result: LlmResponse = {
-          content,
-          model: response.model,
-          usage: normalizeUsage(response.usage),
-          latencyMs: Date.now() - start,
-        };
+          const result: LlmResponse = {
+            content,
+            model: response.model,
+            usage: normalizeUsage(response.usage),
+            latencyMs: Date.now() - start,
+          };
 
-        const citations = extractCitations(response);
-        if (citations !== undefined) result.citations = citations;
+          const citations = extractCitations(response);
+          if (citations !== undefined) result.citations = citations;
 
-        return result;
-      } catch (err) {
-        throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return result;
+        } catch (err) {
+          throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
   }
 
   async function* stream(
@@ -335,35 +338,40 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     const start = Date.now();
     const extraParams = extractProviderOptions(options?.providerOptions);
 
-    const rawResponse = await withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown> =
-          {
+    const rawResponse = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming &
+            Record<string, unknown> = {
             model,
             messages: chatMessages,
             stream: false,
             ...extraParams,
           };
 
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_tokens = maxTokens;
 
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) params.temperature = temperature;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
 
-        return await client.chat.completions.create(
-          params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-          { signal: ctl.signal }
-        );
-      } catch (err) {
-        throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return await client.chat.completions.create(
+            params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+            { signal: ctl.signal }
+          );
+        } catch (err) {
+          throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
 
-    const rawContent = rawResponse.choices[0]?.message.content ?? '';
+    // Cast to access Perplexity-specific extensions (citations field)
+    const response = rawResponse as OpenAI.Chat.ChatCompletion & PerplexityResponseExtensions;
+    const rawContent = response.choices[0]?.message.content ?? '';
 
     let parsed: unknown;
     try {
@@ -396,11 +404,18 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
       });
     }
 
-    return {
+    // Propagate citations from the underlying Perplexity response (v0.4.0)
+    const citations = extractCitations(response);
+
+    const result: LlmStructuredResponse<T> = {
       data,
-      usage: normalizeUsage(rawResponse.usage),
+      model: response.model,
+      id: response.id,
+      usage: normalizeUsage(response.usage),
       latencyMs: Date.now() - start,
     };
+    if (citations !== undefined) result.citations = citations;
+    return result;
   }
 
   return {

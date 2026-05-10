@@ -13,13 +13,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LlmError } from './types.js';
 import {
   cancellableSleep,
   classifyAbort,
   createAttemptController,
   withStallTimeout,
 } from './abort.js';
+import { LlmError } from './types.js';
 
 // ─── createAttemptController ──────────────────────────────────────────────────
 
@@ -197,7 +197,9 @@ describe('withStallTimeout', () => {
     const ctl = {
       signal: ac.signal,
       abortReason: () => undefined as 'timeout' | 'caller' | 'stall' | undefined,
-      abort: (_r: 'stall') => { ac.abort(); },
+      abort: (_r: 'stall') => {
+        ac.abort();
+      },
       dispose: () => {},
     };
 
@@ -221,7 +223,10 @@ describe('withStallTimeout', () => {
     const ctl = {
       signal: ac.signal,
       abortReason: () => reasonCapture,
-      abort: (r: 'stall') => { reasonCapture = r; ac.abort(); },
+      abort: (r: 'stall') => {
+        reasonCapture = r;
+        ac.abort();
+      },
       dispose: () => {},
     };
 
@@ -250,7 +255,9 @@ describe('withStallTimeout', () => {
     const ctl = {
       signal: ac.signal,
       abortReason: () => undefined as 'timeout' | 'caller' | 'stall' | undefined,
-      abort: (_r: 'stall') => { ac.abort(); },
+      abort: (_r: 'stall') => {
+        ac.abort();
+      },
       dispose: () => {},
     };
 

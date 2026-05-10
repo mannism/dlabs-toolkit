@@ -54,9 +54,10 @@ export function createAttemptController(
   (timer as unknown as { unref?: () => void }).unref?.();
 
   // Forward the caller signal into our internal controller.
+  // onCallerAbort is only registered/called when callerSignal is defined (see below).
   const onCallerAbort = (): void => {
     reason ??= 'caller';
-    internal.abort(callerSignal!.reason);
+    if (callerSignal !== undefined) internal.abort(callerSignal.reason);
   };
 
   if (callerSignal !== undefined) {
@@ -218,7 +219,6 @@ export function classifyAbort(
         retryable: true,
         cause: err,
       });
-    case 'caller':
     default:
       return new LlmError({
         message: 'llm-client: cancelled by caller',
@@ -233,7 +233,11 @@ export function classifyAbort(
 /** Returns true if the thrown value is a DOM/Node AbortError. */
 function isAbortError(err: unknown): boolean {
   if (err instanceof Error && err.name === 'AbortError') return true;
-  if (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError')
+  if (
+    typeof DOMException !== 'undefined' &&
+    err instanceof DOMException &&
+    err.name === 'AbortError'
+  )
     return true;
   return false;
 }

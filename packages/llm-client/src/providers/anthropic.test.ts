@@ -13,6 +13,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { z } from 'zod';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
@@ -507,6 +508,98 @@ describe('Anthropic provider — structured()', () => {
   });
 });
 
+// ─── v0.4.0 — strict structured output tests ─────────────────────────────────
+
+describe('Anthropic provider — structured() v0.4.0 strict mode (tool-use)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn();
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+      };
+    });
+  });
+
+  it('(a) Zod 4 schema → SDK params include tools + forced tool_choice; data extracted from tool_use.input', async () => {
+    const zodSchema = z.object({ topic: z.string(), bullets: z.array(z.string()) });
+
+    // Simulate Anthropic response with a tool_use block
+    const toolUseResponse = mockMessageResponse({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'tool_abc',
+          name: 'extract',
+          input: { topic: 'TypeScript', bullets: ['strict types', 'inference'] },
+        } as unknown as Anthropic.ContentBlock,
+      ],
+      stop_reason: 'tool_use',
+    });
+    mockCreate.mockResolvedValue(toolUseResponse);
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Summarize' }], zodSchema);
+
+    // Verify SDK was called with tools + tool_choice
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    expect(callArgs.tools).toHaveLength(1);
+    expect(callArgs.tools?.[0]?.name).toBe('extract');
+    expect(callArgs.tool_choice).toMatchObject({ type: 'tool', name: 'extract' });
+
+    // Verify data extracted from tool_use.input
+    expect(result.data.topic).toBe('TypeScript');
+    expect(result.data.bullets).toEqual(['strict types', 'inference']);
+    expect(result.model).toBe('claude-3-haiku-20240307');
+    expect(result.id).toBe('msg_123');
+  });
+
+  it('(b) model emits text-only (no tool_use block) → throws LlmError with text in message', async () => {
+    const zodSchema = z.object({ value: z.string() });
+
+    // Simulate a response with only text content (no tool_use)
+    const textOnlyResponse = mockMessageResponse({
+      content: [{ type: 'text', text: 'I cannot provide structured data.', citations: null }],
+      stop_reason: 'end_turn',
+    });
+    mockCreate.mockResolvedValue(textOnlyResponse);
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await expect(
+      client.structured([{ role: 'user', content: 'Return data' }], zodSchema)
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('did not call the extract tool'),
+      retryable: false,
+      kind: 'unknown',
+    });
+  });
+
+  it('(c) narrow {parse} schema falls through to prompt-only path (json text response)', async () => {
+    // A plain narrow schema (no _zod marker) should use the prompt-only fallback
+    const narrowSchema = { parse: (data: unknown) => data as { ok: boolean } };
+
+    // Prompt fallback uses complete() internally which calls messages.create
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({
+        content: [{ type: 'text', text: '{"ok":true}', citations: null }],
+      })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.structured(
+      [{ role: 'user', content: 'Return data' }],
+      narrowSchema
+    );
+
+    // No tools param (prompt fallback doesn't use tool-use)
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    expect(callArgs.tools).toBeUndefined();
+    expect(result.data.ok).toBe(true);
+  });
+});
+
 // ─── Abort / timeout / stall smoke tests ─────────────────────────────────────
 //
 // These tests use vi.useFakeTimers so we can advance time synthetically rather
@@ -528,27 +621,29 @@ describe('Anthropic provider — abort / timeout / stall', () => {
     // create() respects the signal: rejects with AbortError when signal fires.
     // This mirrors real Anthropic SDK behavior — the SDK rejects with an AbortError
     // when the RequestOptions.signal is aborted.
-    const mockCreate = vi.fn().mockImplementation(
-      (_params: unknown, opts: { signal?: AbortSignal }) => {
+    const mockCreate = vi
+      .fn()
+      .mockImplementation((_params: unknown, opts: { signal?: AbortSignal }) => {
         const sig = opts?.signal;
         let settled = false;
         return new Promise<Anthropic.Message>((_resolve, reject) => {
           if (sig?.aborted) {
             settled = true;
-            const e = new Error('AbortError'); e.name = 'AbortError';
+            const e = new Error('AbortError');
+            e.name = 'AbortError';
             reject(e);
             return;
           }
           const onAbort = (): void => {
             if (settled) return;
             settled = true;
-            const e = new Error('AbortError'); e.name = 'AbortError';
+            const e = new Error('AbortError');
+            e.name = 'AbortError';
             reject(e);
           };
           sig?.addEventListener('abort', onAbort, { once: true });
         });
-      }
-    );
+      });
 
     vi.mocked(Anthropic).mockImplementation(function () {
       return { messages: { create: mockCreate, stream: vi.fn() } };
@@ -556,10 +651,14 @@ describe('Anthropic provider — abort / timeout / stall', () => {
 
     const client = createAnthropicProvider({ ...TEST_CONFIG, timeoutMs: 30_000, maxRetries: 0 });
     let caughtErr: unknown;
-    const resultPromise = client.complete(
-      [{ role: 'user', content: 'Hi' }],
-      { timeoutMs: 100 } // far shorter than the client default
-    ).catch((e: unknown) => { caughtErr = e; });
+    const resultPromise = client
+      .complete(
+        [{ role: 'user', content: 'Hi' }],
+        { timeoutMs: 100 } // far shorter than the client default
+      )
+      .catch((e: unknown) => {
+        caughtErr = e;
+      });
 
     // Advance past the per-call timeout
     await vi.advanceTimersByTimeAsync(100);
@@ -619,10 +718,9 @@ describe('Anthropic provider — abort / timeout / stall', () => {
     // Collect error explicitly so the promise is always settled before we assert.
     const consumePromise = (async () => {
       try {
-        for await (const chunk of client.stream(
-          [{ role: 'user', content: 'Hi' }],
-          { streamStallTimeoutMs: 500 }
-        )) {
+        for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }], {
+          streamStallTimeoutMs: 500,
+        })) {
           if (chunk.token) chunks.push(chunk.token);
         }
       } catch (e) {

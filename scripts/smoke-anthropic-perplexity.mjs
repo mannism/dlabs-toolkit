@@ -107,4 +107,62 @@ try {
   }
 }
 
+// ─── v0.4.0 structured output smoke tests ────────────────────────────────────
+
+import { z } from '../packages/llm-client/node_modules/zod/v4/index.js';
+
+const STRUCTURED_SCHEMA = z.object({
+  topic: z.string(),
+  bullets: z.array(z.string()),
+});
+
+console.log('\n\n========== v0.4.0 STRUCTURED OUTPUT SMOKE ==========\n');
+
+// Case (d): Anthropic strict tool-use structured call
+console.log('--- Case (d): Anthropic strict tool-use structured (Zod 4 schema) ---');
+try {
+  const result = await anthropic.structured(
+    [{ role: 'user', content: 'Give me a JSON object with a "topic" field (string) describing TypeScript 5.7, and a "bullets" field (array of strings) with 2 key features.' }],
+    STRUCTURED_SCHEMA
+  );
+  const hasTopic = typeof result.data.topic === 'string' && result.data.topic.length > 0;
+  const hasBullets = Array.isArray(result.data.bullets) && result.data.bullets.length > 0;
+  const hasModel = typeof result.model === 'string' && result.model.length > 0;
+  const hasId = typeof result.id === 'string' && result.id.length > 0;
+  if (hasTopic && hasBullets && hasModel && hasId) {
+    console.log(`PASS  topic:"${result.data.topic.slice(0, 40)}"  bullets:${result.data.bullets.length}  model:${result.model}  id:${result.id.slice(0, 20)}...`);
+  } else {
+    console.error(`FAIL  data shape unexpected: ${JSON.stringify(result.data)}`);
+    console.error(`      model:"${result.model}"  id:"${result.id}"`);
+  }
+} catch (err) {
+  console.error(`FAIL  ${err?.kind ?? err?.message ?? err}`);
+  if (err?.cause) console.error('cause:', err.cause?.message ?? err.cause);
+}
+
+// Case (e): Perplexity prompt-fallback structured call (no native schema mode)
+console.log('\n--- Case (e): Perplexity structured prompt-fallback (Zod 4 schema) ---');
+try {
+  const result = await perplexity.structured(
+    [{ role: 'user', content: 'Give me a JSON object with a "topic" field (string) describing Perplexity AI, and a "bullets" field (array of strings) with 2 key features.' }],
+    STRUCTURED_SCHEMA
+  );
+  const hasTopic = typeof result.data.topic === 'string' && result.data.topic.length > 0;
+  const hasBullets = Array.isArray(result.data.bullets) && result.data.bullets.length > 0;
+  const hasModel = typeof result.model === 'string' && result.model.length > 0;
+  if (hasTopic && hasBullets && hasModel) {
+    console.log(`PASS  topic:"${result.data.topic.slice(0, 40)}"  bullets:${result.data.bullets.length}  model:${result.model}`);
+    if (result.citations?.length) {
+      console.log(`      citations:${result.citations.length}  first:${result.citations[0]?.url}`);
+    } else {
+      console.log('      citations: none (acceptable for structured call)');
+    }
+  } else {
+    console.error(`FAIL  data shape unexpected: ${JSON.stringify(result.data)}`);
+  }
+} catch (err) {
+  console.error(`FAIL  ${err?.kind ?? err?.message ?? err}`);
+  if (err?.cause) console.error('cause:', err.cause?.message ?? err.cause);
+}
+
 console.log('\n========== smoke complete ==========');
