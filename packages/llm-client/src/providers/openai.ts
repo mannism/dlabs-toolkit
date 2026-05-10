@@ -11,12 +11,16 @@
  *   APIStatusError.status → LlmError.statusCode + retryable flag
  *   APIConnectionError → retryable: true
  *
- * Structured output uses OpenAI's response_format: { type: 'json_object' }.
- * For strict schema enforcement, the schema is described in the system prompt.
+ * Structured output (v0.4.0):
+ *   Zod 4 schema detected → response_format: { type: 'json_schema', strict: true }
+ *   Non-Zod schema or providerOptions.structuredMode === 'prompt' → json_object fallback.
+ *   Note: openai SDK v6.36 does not export zodResponseFormat; the literal response_format
+ *   shape is used directly (stable since SDK v4.55).
  */
 
 import OpenAI from 'openai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
+import { isZodSchema, toProviderSchema } from '../json-schema.js';
 import { mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
@@ -207,8 +211,118 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     schema: { parse: (data: unknown) => T },
     options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>> {
-    // OpenAI JSON mode: response_format: { type: 'json_object' }
-    // The system prompt must instruct the model to output JSON — OpenAI requires this.
+    // Detect Zod 4 schema and check for prompt-mode escape hatch.
+    // isZodSchema throws if a Zod 3 schema is passed (clear upgrade message).
+    const useStrict =
+      isZodSchema(schema) && options?.providerOptions?.['structuredMode'] !== 'prompt';
+
+    if (!useStrict) {
+      return structuredPromptFallback(messages, schema, options);
+    }
+
+    // ── Strict path: response_format: { type: 'json_schema', strict: true } ──
+    const jsonSchema = toProviderSchema(schema, 'openai');
+    const model = options?.model ?? config.model;
+    const openAIMessages = buildOpenAIMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const start = Date.now();
+
+    const rawResponse = await withRetry(async () => {
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+      try {
+        // Literal json_schema response_format shape, stable since OpenAI SDK v4.55.
+        // SDK v6.36 (our pin) does not export zodResponseFormat; we pass the literal directly.
+        // Use a type intersection to satisfy exactOptionalPropertyTypes: the property is
+        // defined as optional on the SDK params type, but we require it to be present here.
+        type StrictParams = Omit<OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, 'response_format'> & {
+          response_format: OpenAI.ResponseFormatJSONSchema;
+        };
+        const params: StrictParams = {
+          model,
+          messages: openAIMessages,
+          stream: false,
+          response_format: {
+            type: 'json_schema',
+            json_schema: { name: 'response', schema: jsonSchema, strict: true },
+          },
+        };
+
+        const maxTokens = options?.maxTokens ?? config.maxTokens;
+        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+
+        const temperature = options?.temperature ?? config.temperature;
+        if (temperature !== undefined) params.temperature = temperature;
+
+        // StrictParams is structurally compatible with ChatCompletionCreateParamsNonStreaming
+        // (it is a narrowing of that type, not a widening). Cast is safe.
+        return await client.chat.completions.create(
+          params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+          { signal: ctl.signal }
+        );
+      } catch (err) {
+        throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
+      }
+    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+
+    // Check for model refusal — strict mode can return a refusal instead of content
+    const choice = rawResponse.choices[0];
+    if (choice?.message.refusal !== null && choice?.message.refusal !== undefined) {
+      throw new LlmError({
+        message: `OpenAI structured output: model refused to generate. Refusal: ${choice.message.refusal.slice(0, 200)}`,
+        provider: PROVIDER,
+        retryable: false,
+        kind: 'unknown',
+      });
+    }
+
+    const rawContent = choice?.message.content ?? '';
+
+    let parsed: unknown;
+    try {
+      // Strict mode guarantees valid JSON, but parse defensively
+      parsed = JSON.parse(rawContent);
+    } catch (err) {
+      throw new LlmError({
+        message: `OpenAI structured output: response is not valid JSON. Raw: ${rawContent.slice(0, 200)}`,
+        provider: PROVIDER,
+        retryable: false,
+        cause: err,
+      });
+    }
+
+    // Defense-in-depth: validate against the Zod schema even after strict-mode call
+    let data: T;
+    try {
+      data = schema.parse(parsed);
+    } catch (err) {
+      throw new LlmError({
+        message: `OpenAI structured output: response failed schema validation. ${String(err)}`,
+        provider: PROVIDER,
+        retryable: false,
+        cause: err,
+      });
+    }
+
+    return {
+      data,
+      model: rawResponse.model,
+      id: rawResponse.id,
+      usage: normalizeUsage(rawResponse.usage),
+      latencyMs: Date.now() - start,
+    };
+  }
+
+  /**
+   * Prompt-only fallback for structured() — used when schema is not Zod 4 or
+   * providerOptions.structuredMode === 'prompt'. Preserves v0.3.0 behavior exactly.
+   */
+  async function structuredPromptFallback<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): Promise<LlmStructuredResponse<T>> {
     const jsonSystemInstruction: LlmMessage = {
       role: 'system',
       content:
@@ -273,6 +387,8 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
     return {
       data,
+      model: rawResponse.model,
+      id: rawResponse.id,
       usage: normalizeUsage(rawResponse.usage),
       latencyMs: Date.now() - start,
     };

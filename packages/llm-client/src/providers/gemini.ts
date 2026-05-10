@@ -20,7 +20,8 @@
  *   - Role mapping: 'user' → 'user', 'assistant' → 'model'
  *   - Streaming via ai.models.generateContentStream() returns AsyncGenerator<GenerateContentResponse>
  *   - Text is accessed via response.text getter on GenerateContentResponse
- *   - Structured output: responseMimeType: 'application/json' in GenerateContentConfig
+ *   - Structured output (v0.4.0): Zod 4 schema → responseSchema (OpenAPI 3.0) + responseMimeType.
+ *     Non-Zod → prompt-only fallback with responseMimeType only.
  *
  * SDK error class note:
  *   The @google/genai public API exports only ApiError (lowercase 'a'), which has status: number.
@@ -49,6 +50,7 @@ import {
   GoogleGenAI,
 } from '@google/genai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
+import { isZodSchema, toProviderSchema } from '../json-schema.js';
 import { mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
@@ -273,6 +275,98 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     schema: { parse: (data: unknown) => T },
     options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>> {
+    // Detect Zod 4 schema and check for prompt-mode escape hatch.
+    const useStrict =
+      isZodSchema(schema) && options?.providerOptions?.['structuredMode'] !== 'prompt';
+
+    if (!useStrict) {
+      return structuredPromptFallback(messages, schema, options);
+    }
+
+    // ── Strict path: responseSchema populated from Zod 4 schema ─────────────
+    const responseSchemaObj = toProviderSchema(schema, 'gemini');
+    const model = options?.model ?? config.model;
+    const { system, contents } = buildGeminiContents(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
+    const start = Date.now();
+
+    const rawResponse = await withRetry(async () => {
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+      try {
+        const geminiConfig: GenerateContentConfig = {
+          responseMimeType: 'application/json',
+          // responseSchema SDK type is permissive; cast through never to avoid SDK type mismatch
+          responseSchema: responseSchemaObj as never,
+        };
+
+        if (system !== undefined) geminiConfig.systemInstruction = system;
+        const maxTokens = options?.maxTokens ?? config.maxTokens;
+        if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
+        const temperature = options?.temperature ?? config.temperature;
+        if (temperature !== undefined) geminiConfig.temperature = temperature;
+
+        return await Promise.race([
+          ai.models.generateContent({ model, contents, config: geminiConfig }),
+          makeAbortRacePromise(ctl.signal),
+        ]);
+      } catch (err) {
+        throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
+      }
+    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+
+    const rawContent = rawResponse.text ?? '';
+
+    let parsed: unknown;
+    try {
+      // Belt-and-braces fence-strip — Gemini occasionally wraps JSON in fences even
+      // when responseMimeType and responseSchema are set.
+      const cleaned = rawContent
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/, '')
+        .trim();
+      parsed = JSON.parse(cleaned);
+    } catch (err) {
+      throw new LlmError({
+        message: `Gemini structured output: response is not valid JSON. Raw: ${rawContent.slice(0, 200)}`,
+        provider: PROVIDER,
+        retryable: false,
+        cause: err,
+      });
+    }
+
+    // Defense-in-depth: validate against Zod schema even after strict-mode call
+    let data: T;
+    try {
+      data = schema.parse(parsed);
+    } catch (err) {
+      throw new LlmError({
+        message: `Gemini structured output: response failed schema validation. ${String(err)}`,
+        provider: PROVIDER,
+        retryable: false,
+        cause: err,
+      });
+    }
+
+    return {
+      data,
+      // Gemini does not return a request ID; model comes from response.modelVersion if available
+      model: rawResponse.modelVersion ?? model,
+      usage: normalizeUsage(rawResponse.usageMetadata),
+      latencyMs: Date.now() - start,
+    };
+  }
+
+  /**
+   * Prompt-only fallback for structured() — used when schema is not Zod 4 or
+   * providerOptions.structuredMode === 'prompt'. Preserves v0.3.0 behavior exactly.
+   */
+  async function structuredPromptFallback<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): Promise<LlmStructuredResponse<T>> {
     const augmentedMessages: LlmMessage[] = [
       {
         role: 'system',
@@ -291,7 +385,6 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
       const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
       try {
         const geminiConfig: GenerateContentConfig = {
-          // Instruct Gemini to return JSON directly
           responseMimeType: 'application/json',
         };
 
@@ -316,7 +409,6 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
 
     let parsed: unknown;
     try {
-      // Strip markdown code fences if the model included them despite the instruction
       const cleaned = rawContent
         .replace(/^```(?:json)?\s*/i, '')
         .replace(/\s*```$/, '')
@@ -345,6 +437,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
 
     return {
       data,
+      model,
       usage: normalizeUsage(rawResponse.usageMetadata),
       latencyMs: Date.now() - start,
     };

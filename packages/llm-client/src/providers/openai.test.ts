@@ -11,6 +11,7 @@
  */
 
 import OpenAI from 'openai';
+import { z } from 'zod';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
@@ -515,6 +516,97 @@ describe('OpenAI provider — structured()', () => {
     await expect(
       client.structured([{ role: 'user', content: 'Return data' }], schema)
     ).rejects.toBeInstanceOf(LlmError);
+  });
+});
+
+// ─── v0.4.0 — strict structured output tests ─────────────────────────────────
+
+describe('OpenAI provider — structured() v0.4.0 strict mode', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn();
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: { completions: { create: mockCreate } },
+      };
+    });
+  });
+
+  it('(a) Zod 4 schema → SDK params include response_format.type json_schema with strict:true', async () => {
+    const zodSchema = z.object({ name: z.string(), score: z.number() });
+    mockCreate.mockResolvedValue(
+      mockChatCompletion('{"name":"Alice","score":99}', { model: 'gpt-5.4-mini' })
+    );
+
+    const client = createOpenAIProvider({ ...TEST_CONFIG, model: 'gpt-5.4-mini' });
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], zodSchema);
+
+    // Verify SDK was called with strict json_schema response_format.
+    // Cast through unknown to avoid SDK union type overlap errors in strict TS.
+    const callArgs = mockCreate.mock
+      .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
+    const rf = callArgs.response_format as unknown as Record<string, unknown>;
+    expect(rf['type']).toBe('json_schema');
+    const jsonSchemaObj = rf['json_schema'] as Record<string, unknown>;
+    expect(jsonSchemaObj['strict']).toBe(true);
+    expect(jsonSchemaObj['name']).toBe('response');
+    expect(typeof jsonSchemaObj['schema']).toBe('object');
+
+    // Verify return shape
+    expect(result.data.name).toBe('Alice');
+    expect(result.data.score).toBe(99);
+    expect(result.model).toBe('gpt-5.4-mini');
+    expect(result.id).toBe('chatcmpl-123');
+  });
+
+  it('(b) model refusal in strict mode → throws LlmError with refusal text', async () => {
+    const zodSchema = z.object({ value: z.string() });
+    // Simulate a refusal response (message.content is null, refusal is populated)
+    const refusalResponse: OpenAI.Chat.ChatCompletion = {
+      id: 'chatcmpl-refusal',
+      object: 'chat.completion',
+      created: 1234567890,
+      model: 'gpt-5.4-mini',
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: null,
+            refusal: 'I cannot generate that content.',
+          },
+          finish_reason: 'stop',
+          logprobs: null,
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    };
+    mockCreate.mockResolvedValue(refusalResponse);
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await expect(
+      client.structured([{ role: 'user', content: 'Return data' }], zodSchema)
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('refused'),
+      retryable: false,
+    });
+  });
+
+  it('(c) narrow {parse} schema falls through to json_object path (prompt mode)', async () => {
+    // A plain narrow schema (no _zod marker) should use the json_object fallback
+    const narrowSchema = { parse: (data: unknown) => data as { ok: boolean } };
+    mockCreate.mockResolvedValue(mockChatCompletion('{"ok":true}'));
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.structured([{ role: 'user', content: 'Return data' }], narrowSchema);
+
+    const callArgs = mockCreate.mock
+      .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
+    const rf = callArgs.response_format as unknown as Record<string, unknown>;
+    // Falls through to json_object (prompt fallback), not json_schema
+    expect(rf['type']).toBe('json_object');
   });
 });
 

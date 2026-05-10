@@ -6,7 +6,7 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**Published — v0.2.0.** All five providers are implemented. v0.3.0 adds per-call timeouts, caller AbortSignal, and stream stall detection.
+**Published — v0.3.0.** All five providers implemented. v0.4.0 adds native strict structured outputs (OpenAI json_schema, Anthropic tool-use, Gemini responseSchema) triggered automatically when a Zod 4 schema is passed.
 
 ## Install
 
@@ -42,12 +42,73 @@ for await (const chunk of client.stream([{ role: 'user', content: 'Hello' }])) {
   process.stdout.write(chunk.token);
 }
 
-// Structured output (Zod schema)
+// Structured output — Zod 4 schema triggers strict native mode automatically
 import { z } from 'zod';
 const schema = z.object({ name: z.string(), score: z.number() });
 const result = await client.structured(messages, schema);
 // result.data is typed as { name: string; score: number }
+// result.model and result.id are populated (v0.4.0+)
 ```
+
+## Strict structured outputs (v0.4.0)
+
+Pass a **Zod 4** schema to `structured()` and the toolkit automatically routes to the strictest native path available for each provider. No opt-in flag required.
+
+```typescript
+import { z } from 'zod';
+const schema = z.object({
+  topic: z.string(),
+  bullets: z.array(z.string()),
+});
+
+const result = await client.structured(messages, schema);
+// result.data    — typed and Zod-validated
+// result.model   — model ID used (always present, v0.4.0+)
+// result.id      — provider request ID for tracing (OpenAI + Anthropic)
+// result.citations — Perplexity citations if any
+```
+
+### How detection works
+
+The toolkit checks for Zod 4's internal `_zod` marker at runtime. If the schema is a Zod 4 instance, it converts to JSON Schema using Zod 4's built-in `z.toJSONSchema()` and routes to the native path. If the schema is anything else (plain `{ parse }` object, Zod 3, etc.), it falls back to the v0.3.0 system-prompt path.
+
+### Schema-feature support matrix
+
+| Provider | Native mode | What's enforced | Known limits |
+|---|---|---|---|
+| OpenAI (`gpt-5.x`) | `response_format: { type: 'json_schema', strict: true }` | Schema structure guaranteed; model cannot produce off-schema output | No `format`, `pattern`, or recursive schemas (`z.lazy()`). Throws at conversion time with clear message. |
+| Anthropic | Tool-use with forced `tool_choice: { type: 'tool', name: 'extract' }` | Model must call the tool; `input` is pre-parsed JSON | Defense-in-depth `schema.parse()` still runs |
+| Gemini | `responseSchema` (OpenAPI 3.0) + `responseMimeType: 'application/json'` | Schema communicated to the model; belt-and-braces fence-strip retained | Tested via mocks only — file an issue if Gemini's API rejects the schema shape |
+| DeepSeek | None (prompt-only, API limitation) | System-prompt nudge + schema.parse() | Same as v0.3.0 |
+| Perplexity | None (prompt-only, API limitation) | System-prompt nudge + `<think>` strip + schema.parse() | Same as v0.3.0; `citations` propagated to structured response |
+
+### Prompt-mode escape hatch
+
+If your schema uses a feature unsupported in strict mode (e.g. `z.function()`, `z.lazy()`) and you need to keep using it, pass the escape hatch:
+
+```typescript
+const result = await client.structured(messages, schema, {
+  providerOptions: { structuredMode: 'prompt' },
+});
+// Forces the v0.3.0 prompt-only path regardless of schema type
+```
+
+Alternatively, catch the `LlmError` thrown during schema conversion and inform the user:
+
+```typescript
+try {
+  const result = await client.structured(messages, schema);
+} catch (err) {
+  if (err instanceof LlmError && err.kind === 'unknown') {
+    // Schema contains an unrepresentable feature — message names it
+    console.error(err.message);
+  }
+}
+```
+
+### Zod 3 schemas
+
+If a Zod 3 schema is passed, the toolkit throws `LlmError` with a clear "upgrade to Zod 4" message rather than silently falling through to prompt mode. Pass `providerOptions.structuredMode = 'prompt'` if you cannot upgrade immediately.
 
 ## Provider universe
 

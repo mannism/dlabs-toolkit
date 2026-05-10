@@ -596,3 +596,24 @@ describe('DeepSeek provider — abort / timeout / stall', () => {
     expect(chunks).toContain('hi');
   });
 });
+
+// ─── v0.4.0 — return shape additions ─────────────────────────────────────────
+
+describe('DeepSeek provider — structured() v0.4.0 return shape', () => {
+  it('structured() returns model and id fields from the API response', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(
+      mockChatCompletion('{"value":1}', { model: 'deepseek-chat', id: 'chatcmpl-ds-xyz' })
+    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const schema = { parse: (data: unknown) => data as { value: number } };
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+
+    expect(result.model).toBe('deepseek-chat');
+    expect(result.id).toBe('chatcmpl-ds-xyz');
+    expect(result.data.value).toBe(1);
+  });
+});

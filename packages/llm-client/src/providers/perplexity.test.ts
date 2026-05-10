@@ -893,3 +893,47 @@ describe('Perplexity provider — abort / timeout / stall', () => {
     expect(chunks).toContain('hi');
   });
 });
+
+// ─── v0.4.0 — return shape additions ─────────────────────────────────────────
+
+describe('Perplexity provider — structured() v0.4.0 return shape', () => {
+  it('structured() returns model, id, and citations from the API response', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(
+      mockChatCompletion(
+        '{"topic":"AI","summary":"short"}',
+        ['https://example.com/a', 'https://example.com/b'],
+        { model: 'sonar-pro', id: 'chatcmpl-pplx-xyz' }
+      )
+    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const schema = {
+      parse: (data: unknown) => data as { topic: string; summary: string },
+    };
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Summarize AI' }], schema);
+
+    expect(result.model).toBe('sonar-pro');
+    expect(result.id).toBe('chatcmpl-pplx-xyz');
+    expect(result.data.topic).toBe('AI');
+    expect(result.citations).toHaveLength(2);
+    expect(result.citations?.[0]?.url).toBe('https://example.com/a');
+  });
+
+  it('structured() has no citations when API returns none', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(
+      mockChatCompletion('{"value":1}') // no citations
+    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const schema = { parse: (data: unknown) => data as { value: number } };
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+
+    expect(result.citations).toBeUndefined();
+  });
+});

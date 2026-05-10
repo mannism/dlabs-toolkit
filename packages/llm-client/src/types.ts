@@ -13,6 +13,12 @@
  *   LlmCallOptions.streamStallTimeoutMs — per-stream stall detection (ms); default 30000.
  *   LlmClientConfig.streamStallTimeoutMs — config-level stall default.
  *   LlmError.kind                 — discriminator for error classification.
+ *
+ * v0.4.0 additions (strict structured outputs):
+ *   LlmStructuredResponse.model      — model ID actually used (always populated).
+ *   LlmStructuredResponse.id         — provider request ID where available (debugging).
+ *   LlmStructuredResponse.citations  — web citations from Perplexity structured responses.
+ *   LlmClient.structured JSDoc       — Zod 4 trigger and structuredMode escape hatch.
  */
 
 // The canonical message format shared across all providers
@@ -146,11 +152,24 @@ export class LlmError extends Error {
   }
 }
 
-// Structured output — Zod schema inference
+/**
+ * Structured output response.
+ *
+ * v0.4.0 — additive fields:
+ *   model      — model ID reported by the provider (always present).
+ *   id         — provider request / message ID for tracing and debugging.
+ *                Populated by OpenAI (response.id) and Anthropic (response.id).
+ *                Undefined for Gemini, DeepSeek, and Perplexity.
+ *   citations  — web citations propagated from Perplexity structured calls.
+ *                Undefined for all other providers.
+ */
 export type LlmStructuredResponse<T> = {
   data: T;
+  model: string;
+  id?: string;
   usage: LlmUsage;
   latencyMs: number;
+  citations?: Array<{ url: string; title?: string }>;
 };
 
 // The LlmClient interface — what consumers program against
@@ -163,11 +182,33 @@ export interface LlmClient {
   // Streaming completion — async generator of chunks
   stream(messages: LlmMessage[], options?: LlmCallOptions): AsyncGenerator<LlmStreamChunk>;
 
-  // Structured output — parses and validates the response against a Zod schema
-  // Forces JSON mode on providers that support it; falls back to parse-and-validate
+  /**
+   * Structured output — parses and validates the response against a schema.
+   *
+   * **Strict native mode (v0.4.0+):**
+   * Pass a Zod 4 schema to automatically opt into the provider's strictest native
+   * structured-output path:
+   *   - OpenAI: `response_format: { type: 'json_schema', strict: true }` (gpt-5.x family)
+   *   - Anthropic: forced tool-use with `tool_choice: { type: 'tool', name: 'extract' }`
+   *   - Gemini: `responseSchema` populated in GenerateContentConfig
+   *
+   * **Prompt-only fallback:**
+   * If the schema is not a Zod 4 instance, or if
+   * `options.providerOptions.structuredMode === 'prompt'` is set, the v0.3.0
+   * system-prompt + parse path is used instead. This is the escape hatch for:
+   *   - Zod 4 schemas that use unrepresentable features (z.function(), z.lazy(), etc.)
+   *   - Non-Zod schema objects that satisfy the narrow `{ parse }` interface
+   *   - DeepSeek and Perplexity (no native schema mode — always prompt-only)
+   *
+   * **Defense-in-depth:** schema.parse() is called on the parsed result even
+   * after a native strict-mode call, to catch truncation or partial outputs.
+   *
+   * @param schema - A Zod 4 schema (triggers strict mode) or any `{ parse }` interface.
+   *                 Using a narrower interface than ZodType avoids a hard zod dependency at
+   *                 the types level.
+   */
   structured<T>(
     messages: LlmMessage[],
-    // Using a narrower interface than the full ZodType to avoid a hard zod dependency at types level
     schema: { parse: (data: unknown) => T },
     options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>>;

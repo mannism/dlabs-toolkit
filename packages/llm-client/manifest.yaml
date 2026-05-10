@@ -9,8 +9,11 @@ purpose: >
   deduplication, and providerOptions escape hatch for search filters.
   v0.3.0 adds per-call timeout overrides, caller AbortSignal support,
   stream stall detection (withStallTimeout), and LlmError.kind discriminator.
-  All five providers fully implemented as of v0.2.0; all cancellation features
-  wired across all five as of v0.3.0.
+  v0.4.0 adds native strict structured outputs: OpenAI json_schema, Anthropic
+  tool-use, Gemini responseSchema — all triggered automatically when a Zod 4
+  schema is passed to structured(). Prompt-mode escape hatch preserved via
+  providerOptions.structuredMode = 'prompt'. LlmStructuredResponse gains
+  model, id, and citations fields.
 owner: Sable
 status: published
 
@@ -94,7 +97,16 @@ notes: |
     - abort.ts (new): createAttemptController, cancellableSleep, withStallTimeout, classifyAbort.
     - LlmError.kind discriminator: cancelled | timeout | stream_stall | http | network | unknown.
     - All 5 providers wired. Gemini uses Promise.race (no native SDK signal); 2x backstop on httpOptions.timeout.
-    - 243 unit tests (was 202). Typecheck and build clean.
+    - 244 unit tests (was 202). Typecheck and build clean.
+  Week 7 shipped: native strict structured outputs (v0.4.0).
+    - json-schema.ts (new): isZodSchema (Zod 4 detection via _zod marker), toProviderSchema (3 profiles).
+    - OpenAI: response_format json_schema strict:true path when Zod 4 schema detected.
+    - Anthropic: tool-use path with forced tool_choice; input extracted from content[].tool_use.input.
+    - Gemini: responseSchema populated (OpenAPI 3.0 target); belt-and-braces fence-strip retained.
+    - DeepSeek + Perplexity: prompt-only (API limitation); model/id/citations added to return shape.
+    - LlmStructuredResponse: model (required), id? (optional), citations? (Perplexity only).
+    - Escape hatch: providerOptions.structuredMode = 'prompt' → forces v0.3.0 prompt path.
+    - Zod 3 schemas: throws LlmError with clear "upgrade to Zod 4" message.
+    - 278 unit tests (+34). Typecheck and build clean. agent-sdk typecheck clean.
   Provider SDKs are devDependencies — bundled into dist at build time via tsup.
   Consumers do not need to install provider SDKs directly.
-  All five providers fully implemented as of v0.2.0; all cancellation features wired as of v0.3.0.

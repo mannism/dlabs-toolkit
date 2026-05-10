@@ -18,9 +18,9 @@
  *   APIError with status 429 / 5xx → retryable: true
  *   Other APIErrors → non-retryable
  *
- * Note: DeepSeek does not support the json_object response_format on all models.
- * structured() injects a system prompt and parses the raw response. If the model
- * includes markdown fences, they are stripped before parsing.
+ * Note: DeepSeek does not support native schema mode. structured() always uses the
+ * system-prompt + parse path (v0.3.0 behavior). Return shape gains model and id fields
+ * in v0.4.0 for parity with strict-mode providers.
  */
 
 import OpenAI from 'openai';
@@ -286,6 +286,8 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
 
     return {
       data,
+      model: rawResponse.model,
+      id: rawResponse.id,
       usage: normalizeUsage(rawResponse.usage),
       latencyMs: Date.now() - start,
     };
