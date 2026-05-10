@@ -13,7 +13,8 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { normalizeThrownError, withRetry } from '../retry.js';
+import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
+import { mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
   LlmClient,
@@ -108,6 +109,8 @@ export function normalizeAnthropicError(err: unknown): LlmError {
 
 /** Create the Anthropic provider implementation. */
 export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
+  // SDK client uses config-level timeout as the backstop. Per-call overrides are
+  // enforced by createAttemptController which aborts the SDK call via signal.
   const client = new Anthropic({
     apiKey: config.apiKey,
     timeout: config.timeoutMs ?? 30_000,
@@ -123,10 +126,14 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages);
+    // Per-call timeout overrides config default; falls back to config then hard default.
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
 
     const start = Date.now();
 
     return withRetry(async () => {
+      // Fresh controller per attempt so each retry gets a full deadline.
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
       try {
         const params: Anthropic.MessageCreateParamsNonStreaming = {
           model,
@@ -140,7 +147,8 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           params.temperature = temperature;
         }
 
-        const response = await client.messages.create(params);
+        // Pass ctl.signal as the RequestOptions second argument — Anthropic SDK v0.94+.
+        const response = await client.messages.create(params, { signal: ctl.signal });
 
         const content = response.content
           .filter((block): block is Anthropic.TextBlock => block.type === 'text')
@@ -154,9 +162,15 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           latencyMs: Date.now() - start,
         };
       } catch (err) {
-        throw normalizeAnthropicError(err);
+        // classifyAbort checks whether this is an AbortError; if so, applies the
+        // correct kind (timeout/cancelled/stall) based on ctl.abortReason(). If
+        // not an AbortError, returns the original err so normalizeAnthropicError
+        // can classify it as an HTTP/network/unknown error.
+        throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
       }
-    }, retryOpts);
+    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
   }
 
   async function* stream(
@@ -165,6 +179,8 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
 
     const params: Anthropic.MessageStreamParams = {
       model,
@@ -178,19 +194,31 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
       params.temperature = streamTemperature;
     }
 
+    // Stream is a single attempt — no retry of partial streams.
+    const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+
     let sdkStream: Awaited<ReturnType<typeof client.messages.stream>>;
 
     try {
-      sdkStream = client.messages.stream(params);
+      sdkStream = client.messages.stream(params, { signal: ctl.signal });
     } catch (err) {
-      throw normalizeAnthropicError(err);
+      ctl.dispose();
+      throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
     }
 
     // Accumulate usage — Anthropic sends it in the message_delta event at stream end
     let finalUsage: LlmUsage | undefined;
 
     try {
-      for await (const event of sdkStream) {
+      // Wrap the SDK stream with stall detection. Explicitly cast the iterable so
+      // TypeScript can infer the generic parameter T = Anthropic.MessageStreamEvent.
+      const stallWrapped = withStallTimeout<Anthropic.MessageStreamEvent>(
+        sdkStream as AsyncIterable<Anthropic.MessageStreamEvent>,
+        stallMs,
+        ctl,
+        PROVIDER
+      );
+      for await (const event of stallWrapped) {
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
           yield { token: event.delta.text };
         } else if (event.type === 'message_delta' && 'usage' in event) {
@@ -202,7 +230,9 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     } catch (err) {
       // Propagate as a normalized LlmError regardless of whether streaming had started.
       // Partial stream errors cannot be recovered from — the consumer must handle them.
-      throw normalizeAnthropicError(err);
+      throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    } finally {
+      ctl.dispose();
     }
 
     // Yield usage on the final empty chunk

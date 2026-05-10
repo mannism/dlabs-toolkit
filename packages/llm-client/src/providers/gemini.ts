@@ -27,6 +27,17 @@
  *   Internal APIError / APIConnectionError classes (uppercase) are NOT exported from the package
  *   root and must not be imported from internal dist paths.
  *   Network errors (ECONNRESET, ETIMEDOUT) arrive as plain Error objects caught by normalizeThrownError.
+ *
+ * ⚠ Cancellation caveat (v0.3.0 — owner-accepted, 2026-05-10):
+ *   @google/genai SDK does not accept a per-call AbortSignal. Cancellation is implemented
+ *   via Promise.race: when the internal controller aborts, a rejection promise wins the race
+ *   and we stop awaiting the SDK call. However, the SDK's underlying HTTP request is NOT
+ *   cancelled — it continues in the background until it completes or the SDK-level timeout fires.
+ *
+ *   Mitigation: GoogleGenAI is constructed with httpOptions.timeout = effectiveTimeoutMs * 2
+ *   as a backstop. This bounds the leaked request to at most 2× the per-call timeout.
+ *
+ *   Tracking issue: migrate to native signal support when @google/genai adds it.
  */
 
 import {
@@ -37,7 +48,8 @@ import {
   type GenerateContentResponseUsageMetadata,
   GoogleGenAI,
 } from '@google/genai';
-import { normalizeThrownError, withRetry } from '../retry.js';
+import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
+import { mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
   LlmClient,
@@ -115,12 +127,42 @@ export function normalizeGeminiError(err: unknown): LlmError {
   return normalizeThrownError(err, PROVIDER);
 }
 
+/**
+ * Build an "abort-rejection" promise that rejects with an AbortError-shaped error
+ * when the controller's signal fires. Used in Promise.race to simulate cancellation
+ * for SDK calls that don't accept a signal directly.
+ *
+ * NOTE: This does NOT cancel the SDK's underlying HTTP request. See the module-level
+ * caveat comment for the documented socket-leak behavior and the 2× backstop mitigation.
+ */
+function makeAbortRacePromise(signal: AbortSignal): Promise<never> {
+  return new Promise<never>((_, reject) => {
+    const onAbort = (): void => {
+      const e = new Error('AbortError');
+      e.name = 'AbortError';
+      reject(e);
+    };
+    if (signal.aborted) {
+      onAbort();
+    } else {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
 /** Create the Gemini provider implementation. */
 export function createGeminiProvider(config: LlmClientConfig): LlmClient {
+  const configTimeoutMs = config.timeoutMs ?? 30_000;
+
+  // GoogleGenAI instance — httpOptions.timeout is the per-call SDK-level backstop.
+  // For per-call overrides, we multiply by 2 as the backstop (see caveat above).
+  // Since @google/genai does not support per-call construction, we use the config-level
+  // timeout * 2 as a static backstop. Per-call overrides shorter than config timeout
+  // will be enforced by the Promise.race; longer overrides are bounded by this backstop.
   const ai = new GoogleGenAI({
     apiKey: config.apiKey,
     httpOptions: {
-      timeout: config.timeoutMs ?? 30_000,
+      timeout: configTimeoutMs * 2,
     },
   });
 
@@ -133,9 +175,11 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
     const { system, contents } = buildGeminiContents(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
     const start = Date.now();
 
     return withRetry(async () => {
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
       try {
         // Build config object — always passed (empty object is valid GenerateContentConfig)
         const geminiConfig: GenerateContentConfig = {};
@@ -146,11 +190,13 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
         const temperature = options?.temperature ?? config.temperature;
         if (temperature !== undefined) geminiConfig.temperature = temperature;
 
-        const response = await ai.models.generateContent({
-          model,
-          contents,
-          config: geminiConfig,
-        });
+        // Promise.race: whichever settles first wins. If ctl.signal aborts (timeout or
+        // caller cancel), the abortRace rejects; the SDK call continues in the background
+        // until the httpOptions.timeout backstop fires. See module-level caveat.
+        const response = await Promise.race([
+          ai.models.generateContent({ model, contents, config: geminiConfig }),
+          makeAbortRacePromise(ctl.signal),
+        ]);
 
         return {
           content: response.text ?? '',
@@ -159,9 +205,11 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           latencyMs: Date.now() - start,
         };
       } catch (err) {
-        throw normalizeGeminiError(err);
+        throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
       }
-    }, retryOpts);
+    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
   }
 
   async function* stream(
@@ -170,6 +218,8 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
     const { system, contents } = buildGeminiContents(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
+    const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
 
     // Build config — always passed (empty object is valid GenerateContentConfig)
     const geminiConfig: GenerateContentConfig = {};
@@ -179,22 +229,25 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) geminiConfig.temperature = temperature;
 
+    const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
     let sdkStream: AsyncGenerator<GenerateContentResponse>;
 
     try {
-      sdkStream = await ai.models.generateContentStream({
-        model,
-        contents,
-        config: geminiConfig,
-      });
+      // Gemini's generateContentStream() doesn't accept a signal, so we race the
+      // initialization promise against an abort promise. See module-level caveat.
+      sdkStream = await Promise.race([
+        ai.models.generateContentStream({ model, contents, config: geminiConfig }),
+        makeAbortRacePromise(ctl.signal),
+      ]);
     } catch (err) {
-      throw normalizeGeminiError(err);
+      ctl.dispose();
+      throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
     }
 
     let finalUsage: LlmUsage | undefined;
 
     try {
-      for await (const chunk of sdkStream) {
+      for await (const chunk of withStallTimeout(sdkStream, stallMs, ctl, PROVIDER)) {
         const text = chunk.text;
         if (text !== undefined && text.length > 0) {
           yield { token: text };
@@ -205,7 +258,9 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
         }
       }
     } catch (err) {
-      throw normalizeGeminiError(err);
+      throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    } finally {
+      ctl.dispose();
     }
 
     if (finalUsage !== undefined) {
@@ -229,9 +284,11 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
 
     const model = options?.model ?? config.model;
     const { system, contents } = buildGeminiContents(augmentedMessages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
     const start = Date.now();
 
     const rawResponse = await withRetry(async () => {
+      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
       try {
         const geminiConfig: GenerateContentConfig = {
           // Instruct Gemini to return JSON directly
@@ -244,15 +301,16 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
         const temperature = options?.temperature ?? config.temperature;
         if (temperature !== undefined) geminiConfig.temperature = temperature;
 
-        return await ai.models.generateContent({
-          model,
-          contents,
-          config: geminiConfig,
-        });
+        return await Promise.race([
+          ai.models.generateContent({ model, contents, config: geminiConfig }),
+          makeAbortRacePromise(ctl.signal),
+        ]);
       } catch (err) {
-        throw normalizeGeminiError(err);
+        throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+      } finally {
+        ctl.dispose();
       }
-    }, retryOpts);
+    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
 
     const rawContent = rawResponse.text ?? '';
 

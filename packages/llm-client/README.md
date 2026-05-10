@@ -6,7 +6,7 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**Published — v0.2.0.** All five providers are implemented. Perplexity adds web-grounded responses with citation extraction and search filters.
+**Published — v0.2.0.** All five providers are implemented. v0.3.0 adds per-call timeouts, caller AbortSignal, and stream stall detection.
 
 ## Install
 
@@ -159,9 +159,94 @@ interface LlmCallOptions {
   model?: string;
   maxTokens?: number;
   temperature?: number;
+  timeoutMs?: number;              // Per-call timeout (ms). Overrides config.timeoutMs.
+  signal?: AbortSignal;            // Caller-supplied cancel signal. Never retried.
+  streamStallTimeoutMs?: number;   // Per-chunk silence timeout for stream(). Default 30000.
   providerOptions?: Record<string, unknown>;  // Perplexity search filters, etc.
 }
 ```
+
+## Cancellation, timeouts, stall detection
+
+### Per-call timeout override
+
+The default timeout is set at client construction via `config.timeoutMs` (default 30 000 ms). Override it per-call:
+
+```typescript
+const client = createClient({
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  timeoutMs: 30_000, // client default
+});
+
+// This call gets 90 seconds — useful for sonar-deep-research or long reasoning
+const response = await client.complete(messages, { timeoutMs: 90_000 });
+```
+
+On timeout, `LlmError.kind === 'timeout'` and `retryable === true`. Each retry attempt gets a fresh deadline — the timeout resets per attempt, not across the full retry sequence.
+
+### Caller AbortSignal
+
+Pass any `AbortSignal` to cancel an in-flight call immediately:
+
+```typescript
+const ac = new AbortController();
+
+// Cancel on user navigation, request supersede, shutdown, etc.
+const responsePromise = client.complete(messages, { signal: ac.signal });
+
+// Cancel before the call returns
+ac.abort('user navigated away');
+
+try {
+  await responsePromise;
+} catch (err) {
+  if (err instanceof LlmError && err.kind === 'cancelled') {
+    // Gracefully handle the cancellation
+  }
+}
+```
+
+- A signal already aborted at call time throws immediately — no SDK call is made, no retry.
+- A mid-call abort propagates to the SDK (Anthropic, OpenAI, DeepSeek, Perplexity) or wins a `Promise.race` (Gemini). `kind === 'cancelled'`, `retryable === false`. Never retried.
+
+### Stream stall detection
+
+A stream that emits a first chunk and then silently hangs will stall the consumer indefinitely without this feature. `streamStallTimeoutMs` fires a timer per chunk — if no chunk arrives within the window, the stream is aborted and a `kind: 'stream_stall'` error surfaces:
+
+```typescript
+try {
+  for await (const chunk of client.stream(messages, { streamStallTimeoutMs: 10_000 })) {
+    process.stdout.write(chunk.token);
+  }
+} catch (err) {
+  if (err instanceof LlmError && err.kind === 'stream_stall') {
+    console.error('stream stalled — retry or fallback');
+  }
+}
+```
+
+- Default `streamStallTimeoutMs`: 30 000 ms (set independently of `timeoutMs` — tolerant of reasoning-model think-pauses).
+- The stall timer resets after each chunk arrives, so slow-but-not-stalled streams complete normally.
+- Stall errors are **not retried** — partial output is unsafe to re-issue. The error surfaces to the caller.
+
+### `LlmError.kind` discriminator
+
+```typescript
+type LlmErrorKind = 'cancelled' | 'timeout' | 'stream_stall' | 'http' | 'network' | 'unknown';
+
+class LlmError extends Error {
+  readonly provider: string;
+  readonly statusCode?: number;
+  readonly retryable: boolean;
+  readonly kind: LlmErrorKind | undefined; // undefined on errors from older paths
+}
+```
+
+### Gemini cancellation caveat
+
+`@google/genai` does not accept a per-call `AbortSignal`. Cancellation uses `Promise.race` — when the internal controller aborts, we stop awaiting, but the SDK's HTTP request continues in the background until the SDK-level timeout fires. The SDK client is constructed with `httpOptions.timeout = configTimeoutMs * 2` as a backstop. This bounds the leaked request to at most 2× the configured timeout. Native signal support will be added when the SDK provides it.
 
 ## Error handling
 
@@ -174,12 +259,12 @@ try {
   const response = await client.complete(messages);
 } catch (err) {
   if (err instanceof LlmError) {
-    console.error(err.provider, err.statusCode, err.retryable);
+    console.error(err.provider, err.statusCode, err.retryable, err.kind);
   }
 }
 ```
 
-Retryable errors (429, 5xx, network failures) are retried automatically with exponential backoff and full jitter before throwing.
+Retryable errors (429, 5xx, network failures, timeout) are retried automatically with exponential backoff and full jitter before throwing. Cancelled and stream-stall errors are never retried.
 
 ## Token normalization
 

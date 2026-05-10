@@ -13,7 +13,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createGeminiProvider } from './gemini.js';
@@ -471,5 +471,107 @@ describe('Gemini provider — structured()', () => {
     await expect(
       client.structured([{ role: 'user', content: 'Return data' }], schema)
     ).rejects.toBeInstanceOf(LlmError);
+  });
+});
+
+// ─── Abort / timeout / stall smoke tests ─────────────────────────────────────
+//
+// Gemini uses Promise.race rather than a direct SDK signal. The mock here lets
+// the SDK promise hang while the abort-race promise wins.
+
+describe('Gemini provider — abort / timeout / stall', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('per-call timeoutMs override fires before client default', async () => {
+    // generateContent never resolves — Promise.race wins via abort-rejection.
+    const mockGenerateContent = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: vi.fn(),
+        },
+      };
+    });
+
+    const client = createGeminiProvider({ ...TEST_CONFIG, timeoutMs: 30_000, maxRetries: 0 });
+    let caughtErr: unknown;
+    const p = client.complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 100 })
+      .catch((e: unknown) => { caughtErr = e; });
+
+    await vi.advanceTimersByTimeAsync(100);
+    await p;
+
+    expect((caughtErr as { kind?: string }).kind).toBe('timeout');
+    expect((caughtErr as { retryable?: boolean }).retryable).toBe(true);
+  });
+
+  it('caller signal aborts before SDK call → kind:"cancelled", mock called 0 times', async () => {
+    const mockGenerateContent = vi.fn().mockResolvedValue(mockGeminiResponse());
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: vi.fn(),
+        },
+      };
+    });
+
+    const ac = new AbortController();
+    ac.abort('user cancelled');
+
+    const client = createGeminiProvider(TEST_CONFIG);
+    await expect(
+      client.complete([{ role: 'user', content: 'Hi' }], { signal: ac.signal })
+    ).rejects.toMatchObject({ kind: 'cancelled', retryable: false });
+
+    // Pre-aborted signal → withRetry throws before calling fn → 0 SDK calls
+    expect(mockGenerateContent).toHaveBeenCalledTimes(0);
+  });
+
+  it('stream() stall → kind:"stream_stall" after first chunk', async () => {
+    const hangStream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield mockGeminiResponse({ text: 'hi' });
+        await new Promise<void>(() => {}); // hang
+      },
+    };
+
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: vi.fn(),
+          generateContentStream: vi.fn().mockResolvedValue(hangStream),
+        },
+      };
+    });
+
+    const client = createGeminiProvider(TEST_CONFIG);
+    const chunks: string[] = [];
+    let caughtError: unknown;
+
+    const p = (async () => {
+      try {
+        for await (const chunk of client.stream(
+          [{ role: 'user', content: 'Hi' }],
+          { streamStallTimeoutMs: 500 }
+        )) {
+          if (chunk.token) chunks.push(chunk.token);
+        }
+      } catch (e) { caughtError = e; }
+    })();
+
+    await vi.advanceTimersByTimeAsync(500);
+    await p;
+
+    expect((caughtError as { kind?: string }).kind).toBe('stream_stall');
+    expect(chunks).toContain('hi');
   });
 });

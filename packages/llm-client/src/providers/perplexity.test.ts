@@ -17,7 +17,7 @@
  */
 
 import OpenAI from 'openai';
-import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createPerplexityProvider, normalizePerplexityError } from './perplexity.js';
@@ -787,5 +787,109 @@ describe('citations regression — other providers', () => {
     return client.complete([{ role: 'user', content: 'Hi' }]).then((result) => {
       expect(result.citations).toBeUndefined();
     });
+  });
+});
+
+// ─── Abort / timeout / stall smoke tests ─────────────────────────────────────
+
+describe('Perplexity provider — abort / timeout / stall', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('per-call timeoutMs override fires before client default', async () => {
+    const mockCreate = vi.fn().mockImplementation(
+      (_params: unknown, opts: { signal?: AbortSignal }) => {
+        const sig = opts?.signal;
+        let settled = false;
+        return new Promise<OpenAI.Chat.ChatCompletion>((_resolve, reject) => {
+          if (sig?.aborted) { settled = true; const e = new Error('AbortError'); e.name = 'AbortError'; reject(e); return; }
+          const onAbort = (): void => {
+            if (settled) return; settled = true;
+            const e = new Error('AbortError'); e.name = 'AbortError'; reject(e);
+          };
+          sig?.addEventListener('abort', onAbort, { once: true });
+        });
+      }
+    );
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createPerplexityProvider({ ...TEST_CONFIG, timeoutMs: 30_000, maxRetries: 0 });
+    let caughtErr: unknown;
+    const p = client.complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 100 })
+      .catch((e: unknown) => { caughtErr = e; });
+
+    await vi.advanceTimersByTimeAsync(100);
+    await p;
+
+    expect((caughtErr as { kind?: string }).kind).toBe('timeout');
+    expect((caughtErr as { retryable?: boolean }).retryable).toBe(true);
+  });
+
+  it('caller signal aborts before SDK call → kind:"cancelled", mock called 0 times', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('hello'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const ac = new AbortController();
+    ac.abort('user cancelled');
+
+    const client = createPerplexityProvider(TEST_CONFIG);
+    await expect(
+      client.complete([{ role: 'user', content: 'Hi' }], { signal: ac.signal })
+    ).rejects.toMatchObject({ kind: 'cancelled', retryable: false });
+
+    expect(mockCreate).toHaveBeenCalledTimes(0);
+  });
+
+  it('stream() stall → kind:"stream_stall" after first chunk', async () => {
+    const mockChunks = [
+      {
+        id: 'c1', object: 'chat.completion.chunk', created: 1, model: 'sonar',
+        choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null, logprobs: null }],
+        usage: null,
+      },
+    ];
+
+    const hangStream: AsyncIterable<OpenAI.Chat.ChatCompletionChunk> = {
+      [Symbol.asyncIterator]: async function* () {
+        yield* mockChunks as OpenAI.Chat.ChatCompletionChunk[];
+        await new Promise<void>(() => {});
+      },
+    };
+
+    const mockCreate = vi.fn().mockResolvedValue(hangStream);
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const chunks: string[] = [];
+    let caughtError: unknown;
+
+    const p = (async () => {
+      try {
+        for await (const chunk of client.stream(
+          [{ role: 'user', content: 'Hi' }],
+          { streamStallTimeoutMs: 500 }
+        )) {
+          if (chunk.token) chunks.push(chunk.token);
+        }
+      } catch (e) { caughtError = e; }
+    })();
+
+    await vi.advanceTimersByTimeAsync(500);
+    await p;
+
+    expect((caughtError as { kind?: string }).kind).toBe('stream_stall');
+    expect(chunks).toContain('hi');
   });
 });

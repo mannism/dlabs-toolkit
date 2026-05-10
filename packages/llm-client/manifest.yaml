@@ -7,7 +7,10 @@ purpose: >
   into a consistent LlmUsage shape regardless of provider.
   Perplexity provider adds web-grounded responses with citation extraction,
   deduplication, and providerOptions escape hatch for search filters.
-  All five providers fully implemented as of v0.2.0.
+  v0.3.0 adds per-call timeout overrides, caller AbortSignal support,
+  stream stall detection (withStallTimeout), and LlmError.kind discriminator.
+  All five providers fully implemented as of v0.2.0; all cancellation features
+  wired across all five as of v0.3.0.
 owner: Sable
 status: published
 
@@ -45,10 +48,15 @@ contracts:
   retry:
     strategy: "exponential backoff with full jitter"
     formula: "delay = random(0, baseDelayMs * 2^attempt)"
-    retryable_conditions: ["HTTP 429", "HTTP 502", "HTTP 503", "HTTP 504", "ECONNRESET", "ETIMEDOUT"]
-    non_retryable_conditions: ["HTTP 400", "HTTP 401", "HTTP 403", "HTTP 404"]
+    retryable_conditions: ["HTTP 429", "HTTP 502", "HTTP 503", "HTTP 504", "ECONNRESET", "ETIMEDOUT", "timeout"]
+    non_retryable_conditions: ["HTTP 400", "HTTP 401", "HTTP 403", "HTTP 404", "cancelled", "stream_stall"]
     max_retries_default: 3
   timeout_default_ms: 30000
+  cancellation:
+    per_call_timeout: "LlmCallOptions.timeoutMs overrides config.timeoutMs per attempt"
+    caller_signal: "LlmCallOptions.signal — pre-abort throws immediately; mid-call abort kind:'cancelled', not retried"
+    stream_stall: "LlmCallOptions.streamStallTimeoutMs (default 30000ms) — fires per chunk, resets on each yield"
+    gemini_caveat: "Promise.race only — SDK HTTP request not cancelled. Backstop: httpOptions.timeout = configMs * 2"
 
 failure_modes:
   - trigger: "All retries exhausted"
@@ -57,6 +65,15 @@ failure_modes:
   - trigger: "Provider API key invalid (HTTP 401/403)"
     impact: "Throws LlmError immediately, no retry"
     propagation: "propagated — caller must handle"
+  - trigger: "Per-call timeout fires"
+    impact: "Throws LlmError kind:'timeout', retryable:true. Each retry gets a fresh deadline."
+    propagation: "propagated after all retries exhausted"
+  - trigger: "Caller signal aborted"
+    impact: "Throws LlmError kind:'cancelled', retryable:false. Never retried."
+    propagation: "propagated immediately"
+  - trigger: "Stream stall (no chunk within streamStallTimeoutMs)"
+    impact: "Throws LlmError kind:'stream_stall', retryable:true. Stream is never retried mid-stream."
+    propagation: "propagated — partial output is lost, caller must decide recovery"
   - trigger: "Provider SDK breaking change"
     impact: "Build failure in @diabolicallabs/llm-client; other packages unaffected"
     propagation: "contained to this package"
@@ -73,6 +90,11 @@ notes: |
     - providerOptions escape hatch: search_recency_filter, search_domain_filter, unknown fields pass-through.
     - Reasoning: sonar-reasoning-pro supported; structured() strips <think> blocks before JSON parse.
     - sonar-deep-research: treated as synchronous model; not verified live (may require async polling).
+  Week 6 shipped: per-call timeout, AbortSignal, stream stall detection (v0.3.0).
+    - abort.ts (new): createAttemptController, cancellableSleep, withStallTimeout, classifyAbort.
+    - LlmError.kind discriminator: cancelled | timeout | stream_stall | http | network | unknown.
+    - All 5 providers wired. Gemini uses Promise.race (no native SDK signal); 2x backstop on httpOptions.timeout.
+    - 243 unit tests (was 202). Typecheck and build clean.
   Provider SDKs are devDependencies — bundled into dist at build time via tsup.
   Consumers do not need to install provider SDKs directly.
-  All five providers fully implemented as of v0.2.0.
+  All five providers fully implemented as of v0.2.0; all cancellation features wired as of v0.3.0.

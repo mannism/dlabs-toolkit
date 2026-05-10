@@ -12,7 +12,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
@@ -504,5 +504,139 @@ describe('Anthropic provider — structured()', () => {
     const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
     // System should contain the JSON instruction
     expect(callArgs.system).toContain('valid JSON');
+  });
+});
+
+// ─── Abort / timeout / stall smoke tests ─────────────────────────────────────
+//
+// These tests use vi.useFakeTimers so we can advance time synthetically rather
+// than waiting for real delays. Always use vi.advanceTimersByTimeAsync (async
+// variant) — Promise.race() involves microtasks and the sync variant won't
+// flush them, leaving tests hanging.
+
+describe('Anthropic provider — abort / timeout / stall', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('per-call timeoutMs override fires before client default', async () => {
+    // create() respects the signal: rejects with AbortError when signal fires.
+    // This mirrors real Anthropic SDK behavior — the SDK rejects with an AbortError
+    // when the RequestOptions.signal is aborted.
+    const mockCreate = vi.fn().mockImplementation(
+      (_params: unknown, opts: { signal?: AbortSignal }) => {
+        const sig = opts?.signal;
+        let settled = false;
+        return new Promise<Anthropic.Message>((_resolve, reject) => {
+          if (sig?.aborted) {
+            settled = true;
+            const e = new Error('AbortError'); e.name = 'AbortError';
+            reject(e);
+            return;
+          }
+          const onAbort = (): void => {
+            if (settled) return;
+            settled = true;
+            const e = new Error('AbortError'); e.name = 'AbortError';
+            reject(e);
+          };
+          sig?.addEventListener('abort', onAbort, { once: true });
+        });
+      }
+    );
+
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return { messages: { create: mockCreate, stream: vi.fn() } };
+    });
+
+    const client = createAnthropicProvider({ ...TEST_CONFIG, timeoutMs: 30_000, maxRetries: 0 });
+    let caughtErr: unknown;
+    const resultPromise = client.complete(
+      [{ role: 'user', content: 'Hi' }],
+      { timeoutMs: 100 } // far shorter than the client default
+    ).catch((e: unknown) => { caughtErr = e; });
+
+    // Advance past the per-call timeout
+    await vi.advanceTimersByTimeAsync(100);
+    await resultPromise;
+
+    expect(caughtErr).toBeInstanceOf(Error);
+    expect((caughtErr as { kind?: string }).kind).toBe('timeout');
+    expect((caughtErr as { retryable?: boolean }).retryable).toBe(true);
+  });
+
+  it('caller signal aborts before SDK call → kind:"cancelled", mock called once', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockMessageResponse());
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return { messages: { create: mockCreate, stream: vi.fn() } };
+    });
+
+    const ac = new AbortController();
+    ac.abort('user cancelled');
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await expect(
+      client.complete([{ role: 'user', content: 'Hi' }], { signal: ac.signal })
+    ).rejects.toMatchObject({ kind: 'cancelled', retryable: false });
+
+    // Pre-aborted signal → withRetry bails before calling fn → 0 SDK calls
+    expect(mockCreate).toHaveBeenCalledTimes(0);
+  });
+
+  it('stream() stall → kind:"stream_stall" after first chunk', async () => {
+    // Emit one chunk, then hang indefinitely.
+    const mockStream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield {
+          type: 'content_block_delta' as const,
+          index: 0,
+          delta: { type: 'text_delta' as const, text: 'hi' },
+        };
+        // Hang — stall detector should fire before this resolves
+        await new Promise<void>(() => {});
+      },
+      finalMessage: vi.fn().mockResolvedValue(mockMessageResponse()),
+    };
+
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn(),
+          stream: vi.fn().mockReturnValue(mockStream),
+        },
+      };
+    });
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const chunks: string[] = [];
+    let caughtError: unknown;
+
+    // Collect error explicitly so the promise is always settled before we assert.
+    const consumePromise = (async () => {
+      try {
+        for await (const chunk of client.stream(
+          [{ role: 'user', content: 'Hi' }],
+          { streamStallTimeoutMs: 500 }
+        )) {
+          if (chunk.token) chunks.push(chunk.token);
+        }
+      } catch (e) {
+        caughtError = e;
+      }
+    })();
+
+    // Advance past stall timeout, then await the consumer
+    await vi.advanceTimersByTimeAsync(500);
+    await consumePromise;
+
+    expect(caughtError).toBeInstanceOf(Error);
+    expect((caughtError as { kind?: string }).kind).toBe('stream_stall');
+    expect((caughtError as { retryable?: boolean }).retryable).toBe(true);
+    expect(chunks).toContain('hi');
   });
 });
