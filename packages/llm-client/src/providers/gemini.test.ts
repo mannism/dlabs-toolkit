@@ -13,8 +13,8 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { z } from 'zod';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { z } from 'zod';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createGeminiProvider } from './gemini.js';
@@ -504,8 +504,11 @@ describe('Gemini provider — abort / timeout / stall', () => {
 
     const client = createGeminiProvider({ ...TEST_CONFIG, timeoutMs: 30_000, maxRetries: 0 });
     let caughtErr: unknown;
-    const p = client.complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 100 })
-      .catch((e: unknown) => { caughtErr = e; });
+    const p = client
+      .complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 100 })
+      .catch((e: unknown) => {
+        caughtErr = e;
+      });
 
     await vi.advanceTimersByTimeAsync(100);
     await p;
@@ -560,13 +563,14 @@ describe('Gemini provider — abort / timeout / stall', () => {
 
     const p = (async () => {
       try {
-        for await (const chunk of client.stream(
-          [{ role: 'user', content: 'Hi' }],
-          { streamStallTimeoutMs: 500 }
-        )) {
+        for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }], {
+          streamStallTimeoutMs: 500,
+        })) {
           if (chunk.token) chunks.push(chunk.token);
         }
-      } catch (e) { caughtError = e; }
+      } catch (e) {
+        caughtError = e;
+      }
     })();
 
     await vi.advanceTimersByTimeAsync(500);
@@ -602,17 +606,14 @@ describe('Gemini provider — structured() v0.4.0 strict mode (responseSchema)',
     );
 
     const client = createGeminiProvider(TEST_CONFIG);
-    const result = await client.structured(
-      [{ role: 'user', content: 'Summarize' }],
-      zodSchema
-    );
+    const result = await client.structured([{ role: 'user', content: 'Summarize' }], zodSchema);
 
     // Verify responseSchema was passed to the SDK
     const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
-      config?: Record<string, unknown>;
+      config?: { responseSchema?: unknown; responseMimeType?: string };
     };
-    expect(callArgs?.config?.['responseSchema']).toBeDefined();
-    expect(callArgs?.config?.['responseMimeType']).toBe('application/json');
+    expect(callArgs?.config?.responseSchema).toBeDefined();
+    expect(callArgs?.config?.responseMimeType).toBe('application/json');
 
     // Verify data
     expect(result.data.topic).toBe('AI');
@@ -639,19 +640,17 @@ describe('Gemini provider — structured() v0.4.0 strict mode (responseSchema)',
 
   it('(c) narrow {parse} schema falls through to prompt-only path (no responseSchema)', async () => {
     const narrowSchema = { parse: (data: unknown) => data as { ok: boolean } };
-    mockGenerateContent.mockResolvedValue(
-      mockGeminiResponse({ text: '{"ok":true}' })
-    );
+    mockGenerateContent.mockResolvedValue(mockGeminiResponse({ text: '{"ok":true}' }));
 
     const client = createGeminiProvider(TEST_CONFIG);
     await client.structured([{ role: 'user', content: 'Return data' }], narrowSchema);
 
     // Prompt fallback: responseSchema should not be set
     const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
-      config?: Record<string, unknown>;
+      config?: { responseSchema?: unknown; responseMimeType?: string };
     };
-    expect(callArgs?.config?.['responseSchema']).toBeUndefined();
+    expect(callArgs?.config?.responseSchema).toBeUndefined();
     // responseMimeType still set (prompt fallback also sets it)
-    expect(callArgs?.config?.['responseMimeType']).toBe('application/json');
+    expect(callArgs?.config?.responseMimeType).toBe('application/json');
   });
 });

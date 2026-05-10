@@ -506,28 +506,40 @@ describe('DeepSeek provider — abort / timeout / stall', () => {
   });
 
   it('per-call timeoutMs override fires before client default', async () => {
-    const mockCreate = vi.fn().mockImplementation(
-      (_params: unknown, opts: { signal?: AbortSignal }) => {
+    const mockCreate = vi
+      .fn()
+      .mockImplementation((_params: unknown, opts: { signal?: AbortSignal }) => {
         const sig = opts?.signal;
         let settled = false;
         return new Promise<OpenAI.Chat.ChatCompletion>((_resolve, reject) => {
-          if (sig?.aborted) { settled = true; const e = new Error('AbortError'); e.name = 'AbortError'; reject(e); return; }
+          if (sig?.aborted) {
+            settled = true;
+            const e = new Error('AbortError');
+            e.name = 'AbortError';
+            reject(e);
+            return;
+          }
           const onAbort = (): void => {
-            if (settled) return; settled = true;
-            const e = new Error('AbortError'); e.name = 'AbortError'; reject(e);
+            if (settled) return;
+            settled = true;
+            const e = new Error('AbortError');
+            e.name = 'AbortError';
+            reject(e);
           };
           sig?.addEventListener('abort', onAbort, { once: true });
         });
-      }
-    );
+      });
     vi.mocked(OpenAI).mockImplementation(function () {
       return { chat: { completions: { create: mockCreate } } };
     });
 
     const client = createDeepSeekProvider({ ...TEST_CONFIG, timeoutMs: 30_000, maxRetries: 0 });
     let caughtErr: unknown;
-    const p = client.complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 100 })
-      .catch((e: unknown) => { caughtErr = e; });
+    const p = client
+      .complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 100 })
+      .catch((e: unknown) => {
+        caughtErr = e;
+      });
 
     await vi.advanceTimersByTimeAsync(100);
     await p;
@@ -556,7 +568,10 @@ describe('DeepSeek provider — abort / timeout / stall', () => {
   it('stream() stall → kind:"stream_stall" after first chunk', async () => {
     const mockChunks = [
       {
-        id: 'c1', object: 'chat.completion.chunk', created: 1, model: 'deepseek-chat',
+        id: 'c1',
+        object: 'chat.completion.chunk',
+        created: 1,
+        model: 'deepseek-chat',
         choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null, logprobs: null }],
         usage: null,
       },
@@ -580,13 +595,14 @@ describe('DeepSeek provider — abort / timeout / stall', () => {
 
     const p = (async () => {
       try {
-        for await (const chunk of client.stream(
-          [{ role: 'user', content: 'Hi' }],
-          { streamStallTimeoutMs: 500 }
-        )) {
+        for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }], {
+          streamStallTimeoutMs: 500,
+        })) {
           if (chunk.token) chunks.push(chunk.token);
         }
-      } catch (e) { caughtError = e; }
+      } catch (e) {
+        caughtError = e;
+      }
     })();
 
     await vi.advanceTimersByTimeAsync(500);
@@ -601,9 +617,11 @@ describe('DeepSeek provider — abort / timeout / stall', () => {
 
 describe('DeepSeek provider — structured() v0.4.0 return shape', () => {
   it('structured() returns model and id fields from the API response', async () => {
-    const mockCreate = vi.fn().mockResolvedValue(
-      mockChatCompletion('{"value":1}', { model: 'deepseek-chat', id: 'chatcmpl-ds-xyz' })
-    );
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(
+        mockChatCompletion('{"value":1}', { model: 'deepseek-chat', id: 'chatcmpl-ds-xyz' })
+      );
     vi.mocked(OpenAI).mockImplementation(function () {
       return { chat: { completions: { create: mockCreate } } };
     });

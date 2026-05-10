@@ -12,8 +12,8 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { z } from 'zod';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { z } from 'zod';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
@@ -588,7 +588,10 @@ describe('Anthropic provider — structured() v0.4.0 strict mode (tool-use)', ()
     );
 
     const client = createAnthropicProvider(TEST_CONFIG);
-    const result = await client.structured([{ role: 'user', content: 'Return data' }], narrowSchema);
+    const result = await client.structured(
+      [{ role: 'user', content: 'Return data' }],
+      narrowSchema
+    );
 
     // No tools param (prompt fallback doesn't use tool-use)
     const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
@@ -618,27 +621,29 @@ describe('Anthropic provider — abort / timeout / stall', () => {
     // create() respects the signal: rejects with AbortError when signal fires.
     // This mirrors real Anthropic SDK behavior — the SDK rejects with an AbortError
     // when the RequestOptions.signal is aborted.
-    const mockCreate = vi.fn().mockImplementation(
-      (_params: unknown, opts: { signal?: AbortSignal }) => {
+    const mockCreate = vi
+      .fn()
+      .mockImplementation((_params: unknown, opts: { signal?: AbortSignal }) => {
         const sig = opts?.signal;
         let settled = false;
         return new Promise<Anthropic.Message>((_resolve, reject) => {
           if (sig?.aborted) {
             settled = true;
-            const e = new Error('AbortError'); e.name = 'AbortError';
+            const e = new Error('AbortError');
+            e.name = 'AbortError';
             reject(e);
             return;
           }
           const onAbort = (): void => {
             if (settled) return;
             settled = true;
-            const e = new Error('AbortError'); e.name = 'AbortError';
+            const e = new Error('AbortError');
+            e.name = 'AbortError';
             reject(e);
           };
           sig?.addEventListener('abort', onAbort, { once: true });
         });
-      }
-    );
+      });
 
     vi.mocked(Anthropic).mockImplementation(function () {
       return { messages: { create: mockCreate, stream: vi.fn() } };
@@ -646,10 +651,14 @@ describe('Anthropic provider — abort / timeout / stall', () => {
 
     const client = createAnthropicProvider({ ...TEST_CONFIG, timeoutMs: 30_000, maxRetries: 0 });
     let caughtErr: unknown;
-    const resultPromise = client.complete(
-      [{ role: 'user', content: 'Hi' }],
-      { timeoutMs: 100 } // far shorter than the client default
-    ).catch((e: unknown) => { caughtErr = e; });
+    const resultPromise = client
+      .complete(
+        [{ role: 'user', content: 'Hi' }],
+        { timeoutMs: 100 } // far shorter than the client default
+      )
+      .catch((e: unknown) => {
+        caughtErr = e;
+      });
 
     // Advance past the per-call timeout
     await vi.advanceTimersByTimeAsync(100);
@@ -709,10 +718,9 @@ describe('Anthropic provider — abort / timeout / stall', () => {
     // Collect error explicitly so the promise is always settled before we assert.
     const consumePromise = (async () => {
       try {
-        for await (const chunk of client.stream(
-          [{ role: 'user', content: 'Hi' }],
-          { streamStallTimeoutMs: 500 }
-        )) {
+        for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }], {
+          streamStallTimeoutMs: 500,
+        })) {
           if (chunk.token) chunks.push(chunk.token);
         }
       } catch (e) {

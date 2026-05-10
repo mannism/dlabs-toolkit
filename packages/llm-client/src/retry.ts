@@ -139,7 +139,9 @@ export function normalizeThrownError(err: unknown, provider: string): LlmError {
     // plain Error({ name: 'AbortError' }) thrown by some SDK fetch layers.
     if (
       err.name === 'AbortError' ||
-      (typeof DOMException !== 'undefined' && err instanceof DOMException && err.name === 'AbortError')
+      (typeof DOMException !== 'undefined' &&
+        err instanceof DOMException &&
+        err.name === 'AbortError')
     ) {
       return new LlmError({
         message: err.message || 'llm-client: cancelled by caller',
@@ -165,7 +167,13 @@ export function normalizeThrownError(err: unknown, provider: string): LlmError {
           cause: err,
         });
       }
-      return new LlmError({ message: err.message, provider, kind: 'network', retryable: true, cause: err });
+      return new LlmError({
+        message: err.message,
+        provider,
+        kind: 'network',
+        retryable: true,
+        cause: err,
+      });
     }
 
     // Check for retryable HTTP status codes
@@ -198,4 +206,3 @@ export function normalizeThrownError(err: unknown, provider: string): LlmError {
     cause: err,
   });
 }
-

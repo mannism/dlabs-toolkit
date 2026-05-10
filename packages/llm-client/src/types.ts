@@ -116,7 +116,13 @@ export interface LlmStreamChunk {
  * network      — Retryable network-layer error (ECONNRESET, ETIMEDOUT, etc.).
  * unknown      — Unclassified error.
  */
-export type LlmErrorKind = 'cancelled' | 'timeout' | 'stream_stall' | 'http' | 'network' | 'unknown';
+export type LlmErrorKind =
+  | 'cancelled'
+  | 'timeout'
+  | 'stream_stall'
+  | 'http'
+  | 'network'
+  | 'unknown';
 
 // Normalized error — wraps provider-specific errors
 export class LlmError extends Error {

@@ -16,8 +16,8 @@
  *     - Unrepresentable schema (z.function()) throws LlmError with escape-hatch message
  */
 
-import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { isZodSchema, toProviderSchema } from './json-schema.js';
 import { LlmError } from './types.js';
 
@@ -70,66 +70,67 @@ describe('toProviderSchema() — openai profile', () => {
     const schema = z.object({ topic: z.string(), count: z.number() });
     const result = toProviderSchema(schema, 'openai');
 
-    expect(result['$schema']).toBeUndefined();
-    expect(result['type']).toBe('object');
-    expect(result['additionalProperties']).toBe(false);
+    expect(result.$schema).toBeUndefined();
+    expect(result.type).toBe('object');
+    expect(result.additionalProperties).toBe(false);
     // All properties must be in required
-    expect(result['required']).toEqual(expect.arrayContaining(['topic', 'count']));
-    expect((result['required'] as string[]).length).toBe(2);
+    expect(result.required).toEqual(expect.arrayContaining(['topic', 'count']));
+    expect(result.required?.length).toBe(2);
   });
 
   it('forces optional fields into required[]', () => {
     // OpenAI strict does not support truly-optional fields; all must be in required
     const schema = z.object({ a: z.string(), b: z.string().optional() });
     const result = toProviderSchema(schema, 'openai');
-    const required = result['required'] as string[];
-    expect(required).toContain('a');
-    expect(required).toContain('b');
+    expect(result.required).toContain('a');
+    expect(result.required).toContain('b');
   });
 
   it('strips format and pattern keywords', () => {
     // z.string().email() emits format:'email' and pattern — both should be stripped
     const schema = z.object({ email: z.string().email() });
     const result = toProviderSchema(schema, 'openai');
-    const props = result['properties'] as Record<string, Record<string, unknown>>;
-    expect(props['email']?.['format']).toBeUndefined();
-    expect(props['email']?.['pattern']).toBeUndefined();
-    expect(props['email']?.['type']).toBe('string');
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const emailProp = result.properties?.['email'];
+    expect(emailProp?.format).toBeUndefined();
+    expect(emailProp?.pattern).toBeUndefined();
+    expect(emailProp?.type).toBe('string');
   });
 
   it('strips default keyword', () => {
     const schema = z.object({ n: z.number().default(42) });
     const result = toProviderSchema(schema, 'openai');
-    const props = result['properties'] as Record<string, Record<string, unknown>>;
-    expect(props['n']?.['default']).toBeUndefined();
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const nProp = result.properties?.['n'];
+    expect(nProp?.default).toBeUndefined();
   });
 
   it('recurses into nested objects', () => {
     const schema = z.object({ outer: z.object({ inner: z.string() }) });
     const result = toProviderSchema(schema, 'openai');
-    const props = result['properties'] as Record<string, Record<string, unknown>>;
-    const outer = props['outer'];
-    expect(outer?.['additionalProperties']).toBe(false);
-    expect(outer?.['required']).toEqual(['inner']);
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const outer = result.properties?.['outer'];
+    expect(outer?.additionalProperties).toBe(false);
+    expect(outer?.required).toEqual(['inner']);
   });
 
   it('handles nullable fields (anyOf with null type)', () => {
     const schema = z.object({ value: z.string().nullable() });
     const result = toProviderSchema(schema, 'openai');
-    const props = result['properties'] as Record<string, Record<string, unknown>>;
     // nullable produces anyOf:[{type:string},{type:null}] — both branches preserved
-    const valueProp = props['value'];
-    expect(valueProp?.['anyOf']).toBeDefined();
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const valueProp = result.properties?.['value'];
+    expect(valueProp?.anyOf).toBeDefined();
   });
 
   it('handles array of objects with recursive post-processing', () => {
     const schema = z.object({ items: z.array(z.object({ id: z.string() })) });
     const result = toProviderSchema(schema, 'openai');
-    const props = result['properties'] as Record<string, Record<string, unknown>>;
-    const items = props['items'] as Record<string, unknown>;
-    const itemSchema = items['items'] as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const itemsProp = result.properties?.['items'];
+    const itemSchema = itemsProp?.items as { additionalProperties?: unknown } | undefined;
     // Nested object in array items must also have additionalProperties:false
-    expect(itemSchema['additionalProperties']).toBe(false);
+    expect(itemSchema?.additionalProperties).toBe(false);
   });
 });
 
@@ -140,19 +141,20 @@ describe('toProviderSchema() — anthropic profile', () => {
     const schema = z.object({ topic: z.string(), bullets: z.array(z.string()) });
     const result = toProviderSchema(schema, 'anthropic');
 
-    expect(result['$schema']).toBeUndefined();
-    expect(result['type']).toBe('object');
+    expect(result.$schema).toBeUndefined();
+    expect(result.type).toBe('object');
     // Anthropic does not require all-properties-in-required — optional semantics preserved
-    expect(result['required']).toEqual(expect.arrayContaining(['topic', 'bullets']));
-    expect(result['additionalProperties']).toBe(false);
+    expect(result.required).toEqual(expect.arrayContaining(['topic', 'bullets']));
+    expect(result.additionalProperties).toBe(false);
   });
 
   it('preserves nested structure without modification', () => {
     const schema = z.object({ nested: z.object({ value: z.number() }) });
     const result = toProviderSchema(schema, 'anthropic');
-    const props = result['properties'] as Record<string, Record<string, unknown>>;
-    expect(props['nested']).toBeDefined();
-    expect(props['nested']?.['type']).toBe('object');
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const nested = result.properties?.['nested'];
+    expect(nested).toBeDefined();
+    expect(nested?.type).toBe('object');
   });
 });
 
@@ -163,27 +165,28 @@ describe('toProviderSchema() — gemini profile', () => {
     const schema = z.object({ topic: z.string(), count: z.number().default(1) });
     const result = toProviderSchema(schema, 'gemini');
 
-    expect(result['$schema']).toBeUndefined();
-    expect(result['additionalProperties']).toBeUndefined();
+    expect(result.$schema).toBeUndefined();
+    expect(result.additionalProperties).toBeUndefined();
     // default inside properties should also be stripped
-    const props = result['properties'] as Record<string, Record<string, unknown>>;
-    expect(props['count']?.['default']).toBeUndefined();
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const countProp = result.properties?.['count'];
+    expect(countProp?.default).toBeUndefined();
   });
 
   it('recurses into nested objects removing additionalProperties', () => {
     const schema = z.object({ outer: z.object({ inner: z.string() }) });
     const result = toProviderSchema(schema, 'gemini');
-    const props = result['properties'] as Record<string, Record<string, unknown>>;
-    const outer = props['outer'];
-    expect(outer?.['additionalProperties']).toBeUndefined();
-    expect(outer?.['type']).toBe('object');
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const outer = result.properties?.['outer'];
+    expect(outer?.additionalProperties).toBeUndefined();
+    expect(outer?.type).toBe('object');
   });
 
   it('uses OpenAPI 3.0 target (no top-level $schema vs draft-2020-12)', () => {
     const schema = z.object({ name: z.string() });
     const result = toProviderSchema(schema, 'gemini');
     // openapi-3.0 target does not emit $schema — confirm it is absent
-    expect(result['$schema']).toBeUndefined();
+    expect(result.$schema).toBeUndefined();
   });
 });
 

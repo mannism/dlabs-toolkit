@@ -114,37 +114,40 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
-    return withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
-          model,
-          messages: openAIMessages,
-          stream: false,
-        };
+    return withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+            model,
+            messages: openAIMessages,
+            stream: false,
+          };
 
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_tokens = maxTokens;
 
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) params.temperature = temperature;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
 
-        const response = await client.chat.completions.create(params, { signal: ctl.signal });
+          const response = await client.chat.completions.create(params, { signal: ctl.signal });
 
-        const content = response.choices.map((c) => c.message.content ?? '').join('');
+          const content = response.choices.map((c) => c.message.content ?? '').join('');
 
-        return {
-          content,
-          model: response.model,
-          usage: normalizeUsage(response.usage),
-          latencyMs: Date.now() - start,
-        };
-      } catch (err) {
-        throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return {
+            content,
+            model: response.model,
+            usage: normalizeUsage(response.usage),
+            latencyMs: Date.now() - start,
+          };
+        } catch (err) {
+          throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
   }
 
   async function* stream(
@@ -213,8 +216,9 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
   ): Promise<LlmStructuredResponse<T>> {
     // Detect Zod 4 schema and check for prompt-mode escape hatch.
     // isZodSchema throws if a Zod 3 schema is passed (clear upgrade message).
-    const useStrict =
-      isZodSchema(schema) && options?.providerOptions?.['structuredMode'] !== 'prompt';
+    // biome-ignore lint/complexity/useLiteralKeys: providerOptions is Record<string,unknown> — noPropertyAccessFromIndexSignature requires bracket notation
+    const structuredMode = options?.providerOptions?.['structuredMode'];
+    const useStrict = isZodSchema(schema) && structuredMode !== 'prompt';
 
     if (!useStrict) {
       return structuredPromptFallback(messages, schema, options);
@@ -227,44 +231,50 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
-    const rawResponse = await withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        // Literal json_schema response_format shape, stable since OpenAI SDK v4.55.
-        // SDK v6.36 (our pin) does not export zodResponseFormat; we pass the literal directly.
-        // Use a type intersection to satisfy exactOptionalPropertyTypes: the property is
-        // defined as optional on the SDK params type, but we require it to be present here.
-        type StrictParams = Omit<OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, 'response_format'> & {
-          response_format: OpenAI.ResponseFormatJSONSchema;
-        };
-        const params: StrictParams = {
-          model,
-          messages: openAIMessages,
-          stream: false,
-          response_format: {
-            type: 'json_schema',
-            json_schema: { name: 'response', schema: jsonSchema, strict: true },
-          },
-        };
+    const rawResponse = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          // Literal json_schema response_format shape, stable since OpenAI SDK v4.55.
+          // SDK v6.36 (our pin) does not export zodResponseFormat; we pass the literal directly.
+          // Use a type intersection to satisfy exactOptionalPropertyTypes: the property is
+          // defined as optional on the SDK params type, but we require it to be present here.
+          type StrictParams = Omit<
+            OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+            'response_format'
+          > & {
+            response_format: OpenAI.ResponseFormatJSONSchema;
+          };
+          const params: StrictParams = {
+            model,
+            messages: openAIMessages,
+            stream: false,
+            response_format: {
+              type: 'json_schema',
+              json_schema: { name: 'response', schema: jsonSchema, strict: true },
+            },
+          };
 
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_tokens = maxTokens;
 
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) params.temperature = temperature;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
 
-        // StrictParams is structurally compatible with ChatCompletionCreateParamsNonStreaming
-        // (it is a narrowing of that type, not a widening). Cast is safe.
-        return await client.chat.completions.create(
-          params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-          { signal: ctl.signal }
-        );
-      } catch (err) {
-        throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          // StrictParams is structurally compatible with ChatCompletionCreateParamsNonStreaming
+          // (it is a narrowing of that type, not a widening). Cast is safe.
+          return await client.chat.completions.create(
+            params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+            { signal: ctl.signal }
+          );
+        } catch (err) {
+          throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
 
     // Check for model refusal — strict mode can return a refusal instead of content
     const choice = rawResponse.choices[0];
@@ -335,29 +345,32 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
-    const rawResponse = await withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
-          model,
-          messages: openAIMessages,
-          stream: false,
-          response_format: { type: 'json_object' },
-        };
+    const rawResponse = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+            model,
+            messages: openAIMessages,
+            stream: false,
+            response_format: { type: 'json_object' },
+          };
 
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_tokens = maxTokens;
 
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) params.temperature = temperature;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
 
-        return await client.chat.completions.create(params, { signal: ctl.signal });
-      } catch (err) {
-        throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return await client.chat.completions.create(params, { signal: ctl.signal });
+        } catch (err) {
+          throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
 
     const rawContent = rawResponse.choices[0]?.message.content ?? '';
 

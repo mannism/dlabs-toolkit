@@ -137,46 +137,49 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
 
     const start = Date.now();
 
-    return withRetry(async () => {
-      // Fresh controller per attempt so each retry gets a full deadline.
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const params: Anthropic.MessageCreateParamsNonStreaming = {
-          model,
-          messages: anthropicMessages,
-          max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
-        };
+    return withRetry(
+      async () => {
+        // Fresh controller per attempt so each retry gets a full deadline.
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: Anthropic.MessageCreateParamsNonStreaming = {
+            model,
+            messages: anthropicMessages,
+            max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
+          };
 
-        if (system !== undefined) params.system = system;
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) {
-          params.temperature = temperature;
+          if (system !== undefined) params.system = system;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) {
+            params.temperature = temperature;
+          }
+
+          // Pass ctl.signal as the RequestOptions second argument — Anthropic SDK v0.94+.
+          const response = await client.messages.create(params, { signal: ctl.signal });
+
+          const content = response.content
+            .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+            .map((block) => block.text)
+            .join('');
+
+          return {
+            content,
+            model: response.model,
+            usage: normalizeUsage(response.usage),
+            latencyMs: Date.now() - start,
+          };
+        } catch (err) {
+          // classifyAbort checks whether this is an AbortError; if so, applies the
+          // correct kind (timeout/cancelled/stall) based on ctl.abortReason(). If
+          // not an AbortError, returns the original err so normalizeAnthropicError
+          // can classify it as an HTTP/network/unknown error.
+          throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
         }
-
-        // Pass ctl.signal as the RequestOptions second argument — Anthropic SDK v0.94+.
-        const response = await client.messages.create(params, { signal: ctl.signal });
-
-        const content = response.content
-          .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-          .map((block) => block.text)
-          .join('');
-
-        return {
-          content,
-          model: response.model,
-          usage: normalizeUsage(response.usage),
-          latencyMs: Date.now() - start,
-        };
-      } catch (err) {
-        // classifyAbort checks whether this is an AbortError; if so, applies the
-        // correct kind (timeout/cancelled/stall) based on ctl.abortReason(). If
-        // not an AbortError, returns the original err so normalizeAnthropicError
-        // can classify it as an HTTP/network/unknown error.
-        throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
   }
 
   async function* stream(
@@ -254,8 +257,9 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
   ): Promise<LlmStructuredResponse<T>> {
     // Detect Zod 4 schema and check for prompt-mode escape hatch.
     // isZodSchema throws if a Zod 3 schema is passed (clear upgrade message).
-    const useStrict =
-      isZodSchema(schema) && options?.providerOptions?.['structuredMode'] !== 'prompt';
+    // biome-ignore lint/complexity/useLiteralKeys: providerOptions is Record<string,unknown> — noPropertyAccessFromIndexSignature requires bracket notation
+    const structuredMode = options?.providerOptions?.['structuredMode'];
+    const useStrict = isZodSchema(schema) && structuredMode !== 'prompt';
 
     if (!useStrict) {
       return structuredPromptFallback(messages, schema, options);
@@ -269,34 +273,37 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
-    const response = await withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const params: Anthropic.MessageCreateParamsNonStreaming = {
-          model: options?.model ?? config.model,
-          messages: anthropicMessages,
-          max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
-          tools: [
-            {
-              name: 'extract',
-              description: 'Return the structured data.',
-              input_schema: inputSchema as Anthropic.Tool['input_schema'],
-            },
-          ],
-          tool_choice: { type: 'tool', name: 'extract' },
-        };
+    const response = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: Anthropic.MessageCreateParamsNonStreaming = {
+            model: options?.model ?? config.model,
+            messages: anthropicMessages,
+            max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
+            tools: [
+              {
+                name: 'extract',
+                description: 'Return the structured data.',
+                input_schema: inputSchema as Anthropic.Tool['input_schema'],
+              },
+            ],
+            tool_choice: { type: 'tool', name: 'extract' },
+          };
 
-        if (system !== undefined) params.system = system;
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) params.temperature = temperature;
+          if (system !== undefined) params.system = system;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
 
-        return await client.messages.create(params, { signal: ctl.signal });
-      } catch (err) {
-        throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return await client.messages.create(params, { signal: ctl.signal });
+        } catch (err) {
+          throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
 
     // Extract the tool_use block from the response content
     const toolBlock = response.content.find(

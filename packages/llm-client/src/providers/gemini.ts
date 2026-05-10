@@ -180,38 +180,41 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
     const start = Date.now();
 
-    return withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        // Build config object — always passed (empty object is valid GenerateContentConfig)
-        const geminiConfig: GenerateContentConfig = {};
+    return withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          // Build config object — always passed (empty object is valid GenerateContentConfig)
+          const geminiConfig: GenerateContentConfig = {};
 
-        if (system !== undefined) geminiConfig.systemInstruction = system;
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) geminiConfig.temperature = temperature;
+          if (system !== undefined) geminiConfig.systemInstruction = system;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) geminiConfig.temperature = temperature;
 
-        // Promise.race: whichever settles first wins. If ctl.signal aborts (timeout or
-        // caller cancel), the abortRace rejects; the SDK call continues in the background
-        // until the httpOptions.timeout backstop fires. See module-level caveat.
-        const response = await Promise.race([
-          ai.models.generateContent({ model, contents, config: geminiConfig }),
-          makeAbortRacePromise(ctl.signal),
-        ]);
+          // Promise.race: whichever settles first wins. If ctl.signal aborts (timeout or
+          // caller cancel), the abortRace rejects; the SDK call continues in the background
+          // until the httpOptions.timeout backstop fires. See module-level caveat.
+          const response = await Promise.race([
+            ai.models.generateContent({ model, contents, config: geminiConfig }),
+            makeAbortRacePromise(ctl.signal),
+          ]);
 
-        return {
-          content: response.text ?? '',
-          model,
-          usage: normalizeUsage(response.usageMetadata),
-          latencyMs: Date.now() - start,
-        };
-      } catch (err) {
-        throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return {
+            content: response.text ?? '',
+            model,
+            usage: normalizeUsage(response.usageMetadata),
+            latencyMs: Date.now() - start,
+          };
+        } catch (err) {
+          throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
   }
 
   async function* stream(
@@ -276,8 +279,9 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>> {
     // Detect Zod 4 schema and check for prompt-mode escape hatch.
-    const useStrict =
-      isZodSchema(schema) && options?.providerOptions?.['structuredMode'] !== 'prompt';
+    // biome-ignore lint/complexity/useLiteralKeys: providerOptions is Record<string,unknown> — noPropertyAccessFromIndexSignature requires bracket notation
+    const structuredMode = options?.providerOptions?.['structuredMode'];
+    const useStrict = isZodSchema(schema) && structuredMode !== 'prompt';
 
     if (!useStrict) {
       return structuredPromptFallback(messages, schema, options);
@@ -290,31 +294,34 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
     const start = Date.now();
 
-    const rawResponse = await withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const geminiConfig: GenerateContentConfig = {
-          responseMimeType: 'application/json',
-          // responseSchema SDK type is permissive; cast through never to avoid SDK type mismatch
-          responseSchema: responseSchemaObj as never,
-        };
+    const rawResponse = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const geminiConfig: GenerateContentConfig = {
+            responseMimeType: 'application/json',
+            // responseSchema SDK type is permissive; cast through never to avoid SDK type mismatch
+            responseSchema: responseSchemaObj as never,
+          };
 
-        if (system !== undefined) geminiConfig.systemInstruction = system;
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) geminiConfig.temperature = temperature;
+          if (system !== undefined) geminiConfig.systemInstruction = system;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) geminiConfig.temperature = temperature;
 
-        return await Promise.race([
-          ai.models.generateContent({ model, contents, config: geminiConfig }),
-          makeAbortRacePromise(ctl.signal),
-        ]);
-      } catch (err) {
-        throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return await Promise.race([
+            ai.models.generateContent({ model, contents, config: geminiConfig }),
+            makeAbortRacePromise(ctl.signal),
+          ]);
+        } catch (err) {
+          throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
 
     const rawContent = rawResponse.text ?? '';
 
@@ -381,29 +388,32 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
     const start = Date.now();
 
-    const rawResponse = await withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const geminiConfig: GenerateContentConfig = {
-          responseMimeType: 'application/json',
-        };
+    const rawResponse = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const geminiConfig: GenerateContentConfig = {
+            responseMimeType: 'application/json',
+          };
 
-        if (system !== undefined) geminiConfig.systemInstruction = system;
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) geminiConfig.temperature = temperature;
+          if (system !== undefined) geminiConfig.systemInstruction = system;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) geminiConfig.temperature = temperature;
 
-        return await Promise.race([
-          ai.models.generateContent({ model, contents, config: geminiConfig }),
-          makeAbortRacePromise(ctl.signal),
-        ]);
-      } catch (err) {
-        throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return await Promise.race([
+            ai.models.generateContent({ model, contents, config: geminiConfig }),
+            makeAbortRacePromise(ctl.signal),
+          ]);
+        } catch (err) {
+          throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
 
     const rawContent = rawResponse.text ?? '';
 

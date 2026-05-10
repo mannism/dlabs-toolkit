@@ -11,8 +11,8 @@
  */
 
 import OpenAI from 'openai';
-import { z } from 'zod';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { z } from 'zod';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createOpenAIProvider } from './openai.js';
@@ -544,15 +544,18 @@ describe('OpenAI provider — structured() v0.4.0 strict mode', () => {
     const result = await client.structured([{ role: 'user', content: 'Return data' }], zodSchema);
 
     // Verify SDK was called with strict json_schema response_format.
-    // Cast through unknown to avoid SDK union type overlap errors in strict TS.
+    // Cast through typed interface to avoid SDK union type overlap errors and Biome useLiteralKeys.
+    type JsonSchemaRF = {
+      type: string;
+      json_schema: { strict: boolean; name: string; schema: unknown };
+    };
     const callArgs = mockCreate.mock
       .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
-    const rf = callArgs.response_format as unknown as Record<string, unknown>;
-    expect(rf['type']).toBe('json_schema');
-    const jsonSchemaObj = rf['json_schema'] as Record<string, unknown>;
-    expect(jsonSchemaObj['strict']).toBe(true);
-    expect(jsonSchemaObj['name']).toBe('response');
-    expect(typeof jsonSchemaObj['schema']).toBe('object');
+    const rf = callArgs.response_format as unknown as JsonSchemaRF;
+    expect(rf.type).toBe('json_schema');
+    expect(rf.json_schema.strict).toBe(true);
+    expect(rf.json_schema.name).toBe('response');
+    expect(typeof rf.json_schema.schema).toBe('object');
 
     // Verify return shape
     expect(result.data.name).toBe('Alice');
@@ -604,9 +607,9 @@ describe('OpenAI provider — structured() v0.4.0 strict mode', () => {
 
     const callArgs = mockCreate.mock
       .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
-    const rf = callArgs.response_format as unknown as Record<string, unknown>;
+    const rf = callArgs.response_format as unknown as { type: string };
     // Falls through to json_object (prompt fallback), not json_schema
-    expect(rf['type']).toBe('json_object');
+    expect(rf.type).toBe('json_object');
   });
 });
 
@@ -623,28 +626,40 @@ describe('OpenAI provider — abort / timeout / stall', () => {
   });
 
   it('per-call timeoutMs override fires before client default', async () => {
-    const mockCreate = vi.fn().mockImplementation(
-      (_params: unknown, opts: { signal?: AbortSignal }) => {
+    const mockCreate = vi
+      .fn()
+      .mockImplementation((_params: unknown, opts: { signal?: AbortSignal }) => {
         const sig = opts?.signal;
         let settled = false;
         return new Promise<OpenAI.Chat.ChatCompletion>((_resolve, reject) => {
-          if (sig?.aborted) { settled = true; const e = new Error('AbortError'); e.name = 'AbortError'; reject(e); return; }
+          if (sig?.aborted) {
+            settled = true;
+            const e = new Error('AbortError');
+            e.name = 'AbortError';
+            reject(e);
+            return;
+          }
           const onAbort = (): void => {
-            if (settled) return; settled = true;
-            const e = new Error('AbortError'); e.name = 'AbortError'; reject(e);
+            if (settled) return;
+            settled = true;
+            const e = new Error('AbortError');
+            e.name = 'AbortError';
+            reject(e);
           };
           sig?.addEventListener('abort', onAbort, { once: true });
         });
-      }
-    );
+      });
     vi.mocked(OpenAI).mockImplementation(function () {
       return { chat: { completions: { create: mockCreate } } };
     });
 
     const client = createOpenAIProvider({ ...TEST_CONFIG, timeoutMs: 30_000, maxRetries: 0 });
     let caughtErr: unknown;
-    const p = client.complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 100 })
-      .catch((e: unknown) => { caughtErr = e; });
+    const p = client
+      .complete([{ role: 'user', content: 'Hi' }], { timeoutMs: 100 })
+      .catch((e: unknown) => {
+        caughtErr = e;
+      });
 
     await vi.advanceTimersByTimeAsync(100);
     await p;
@@ -673,7 +688,10 @@ describe('OpenAI provider — abort / timeout / stall', () => {
   it('stream() stall → kind:"stream_stall" after first chunk', async () => {
     const mockChunks = [
       {
-        id: 'c1', object: 'chat.completion.chunk', created: 1, model: 'gpt-4o-mini',
+        id: 'c1',
+        object: 'chat.completion.chunk',
+        created: 1,
+        model: 'gpt-4o-mini',
         choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null, logprobs: null }],
         usage: null,
       },
@@ -699,13 +717,14 @@ describe('OpenAI provider — abort / timeout / stall', () => {
 
     const p = (async () => {
       try {
-        for await (const chunk of client.stream(
-          [{ role: 'user', content: 'Hi' }],
-          { streamStallTimeoutMs: 500 }
-        )) {
+        for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }], {
+          streamStallTimeoutMs: 500,
+        })) {
           if (chunk.token) chunks.push(chunk.token);
         }
-      } catch (e) { caughtError = e; }
+      } catch (e) {
+        caughtError = e;
+      }
     })();
 
     await vi.advanceTimersByTimeAsync(500);

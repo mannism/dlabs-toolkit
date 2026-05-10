@@ -32,6 +32,32 @@ import { LlmError } from './types.js';
 export type SchemaProfile = 'openai' | 'anthropic' | 'gemini';
 
 /**
+ * Loose JSON Schema node type for internal post-processing and test assertions.
+ * We use an interface with known fields typed explicitly — this allows Biome's
+ * useLiteralKeys rule to pass while satisfying TypeScript's
+ * noPropertyAccessFromIndexSignature constraint (no index signature here).
+ * Exported for use in unit tests.
+ */
+export interface JsonNode {
+  $schema?: unknown;
+  type?: unknown;
+  properties?: Record<string, JsonNode>;
+  required?: string[];
+  additionalProperties?: unknown;
+  format?: unknown;
+  pattern?: unknown;
+  default?: unknown;
+  examples?: unknown;
+  items?: JsonNode | unknown;
+  anyOf?: JsonNode[];
+  oneOf?: JsonNode[];
+  allOf?: JsonNode[];
+  prefixItems?: JsonNode[];
+  // Catch-all for other JSON Schema keywords we pass through unchanged
+  [key: string]: unknown;
+}
+
+/**
  * Runtime Zod 4 schema detector.
  *
  * Zod 4 schemas have a `_zod` property (object) that is absent in Zod 3.
@@ -47,7 +73,7 @@ export type SchemaProfile = 'openai' | 'anthropic' | 'gemini';
 export function isZodSchema(s: unknown): s is z.ZodType {
   if (typeof s !== 'object' || s === null) return false;
 
-  const hasZod4Marker = '_zod' in s && typeof (s as { _zod: unknown })['_zod'] === 'object';
+  const hasZod4Marker = '_zod' in s && typeof (s as { _zod: unknown })._zod === 'object';
   const hasZod3Marker = '_def' in s;
 
   if (hasZod3Marker && !hasZod4Marker) {
@@ -64,7 +90,7 @@ export function isZodSchema(s: unknown): s is z.ZodType {
 
   // Guard: must also have a parse function (the narrow interface used by structured()).
   // Cast through unknown to avoid TS2352 overlap error on the _zod-marked type.
-  return typeof (s as unknown as { parse: unknown })['parse'] === 'function';
+  return typeof (s as unknown as { parse: unknown }).parse === 'function';
 }
 
 /**
@@ -77,20 +103,18 @@ export function isZodSchema(s: unknown): s is z.ZodType {
  * Callers that need to avoid the throw can opt out by passing
  * providerOptions.structuredMode = 'prompt' before calling structured().
  */
-export function toProviderSchema(
-  schema: z.ZodType,
-  profile: SchemaProfile
-): Record<string, unknown> {
+export function toProviderSchema(schema: z.ZodType, profile: SchemaProfile): JsonNode {
   // Gemini uses OpenAPI 3.0 dialect; OpenAI and Anthropic use JSON Schema draft-2020-12.
-  const target: 'openapi-3.0' | 'draft-2020-12' = profile === 'gemini' ? 'openapi-3.0' : 'draft-2020-12';
+  const target: 'openapi-3.0' | 'draft-2020-12' =
+    profile === 'gemini' ? 'openapi-3.0' : 'draft-2020-12';
 
-  let json: Record<string, unknown>;
+  let json: JsonNode;
   try {
     json = z.toJSONSchema(schema, {
       target,
       unrepresentable: 'throw',
       cycles: 'throw',
-    }) as Record<string, unknown>;
+    }) as JsonNode;
   } catch (e) {
     throw new LlmError({
       message: `llm-client: schema is not representable for ${profile} strict mode — ${(e as Error).message}. Pass providerOptions.structuredMode = 'prompt' to fall back to prompt-only mode.`,
@@ -121,60 +145,61 @@ export function toProviderSchema(
  *
  * Reference: https://platform.openai.com/docs/guides/structured-outputs/supported-schemas
  */
-function openAIStrictPostprocess(node: unknown): Record<string, unknown> {
+function openAIStrictPostprocess(node: unknown): JsonNode {
   if (typeof node !== 'object' || node === null) {
-    return node as Record<string, unknown>;
+    return node as JsonNode;
   }
 
   if (Array.isArray(node)) {
-    return node.map(openAIStrictPostprocess) as unknown as Record<string, unknown>;
+    return node.map(openAIStrictPostprocess) as unknown as JsonNode;
   }
 
-  const obj = { ...(node as Record<string, unknown>) };
+  const src = node as JsonNode;
+  const obj: JsonNode = { ...src };
 
   // Strip top-level $schema and unsupported keywords
-  delete obj['$schema'];
-  delete obj['format'];
-  delete obj['pattern'];
-  delete obj['default'];
-  delete obj['examples'];
+  delete obj.$schema;
+  delete obj.format;
+  delete obj.pattern;
+  delete obj.default;
+  delete obj.examples;
 
   // Object nodes: enforce required contains all properties, additionalProperties:false
-  if (obj['type'] === 'object' && obj['properties'] !== undefined) {
-    const props = obj['properties'] as Record<string, unknown>;
+  if (obj.type === 'object' && obj.properties !== undefined) {
+    const props = obj.properties;
     const allKeys = Object.keys(props);
 
     // All properties must be listed in required (OpenAI strict requirement)
-    obj['required'] = allKeys;
-    obj['additionalProperties'] = false;
+    obj.required = allKeys;
+    obj.additionalProperties = false;
 
     // Recurse into property schemas
-    const processedProps: Record<string, unknown> = {};
+    const processedProps: Record<string, JsonNode> = {};
     for (const key of allKeys) {
       processedProps[key] = openAIStrictPostprocess(props[key]);
     }
-    obj['properties'] = processedProps;
+    obj.properties = processedProps;
   }
 
   // Recurse into array items
-  if (obj['items'] !== undefined) {
-    obj['items'] = openAIStrictPostprocess(obj['items']);
+  if (obj.items !== undefined) {
+    obj.items = openAIStrictPostprocess(obj.items);
   }
 
   // Recurse into anyOf / oneOf / allOf
-  if (Array.isArray(obj['anyOf'])) {
-    obj['anyOf'] = (obj['anyOf'] as unknown[]).map(openAIStrictPostprocess);
+  if (Array.isArray(obj.anyOf)) {
+    obj.anyOf = obj.anyOf.map(openAIStrictPostprocess);
   }
-  if (Array.isArray(obj['oneOf'])) {
-    obj['oneOf'] = (obj['oneOf'] as unknown[]).map(openAIStrictPostprocess);
+  if (Array.isArray(obj.oneOf)) {
+    obj.oneOf = obj.oneOf.map(openAIStrictPostprocess);
   }
-  if (Array.isArray(obj['allOf'])) {
-    obj['allOf'] = (obj['allOf'] as unknown[]).map(openAIStrictPostprocess);
+  if (Array.isArray(obj.allOf)) {
+    obj.allOf = obj.allOf.map(openAIStrictPostprocess);
   }
 
   // Recurse into prefixItems (tuple types)
-  if (Array.isArray(obj['prefixItems'])) {
-    obj['prefixItems'] = (obj['prefixItems'] as unknown[]).map(openAIStrictPostprocess);
+  if (Array.isArray(obj.prefixItems)) {
+    obj.prefixItems = obj.prefixItems.map(openAIStrictPostprocess);
   }
 
   return obj;
@@ -187,9 +212,9 @@ function openAIStrictPostprocess(node: unknown): Record<string, unknown> {
  * Anthropic accepts standard JSON Schema; only the $schema keyword is removed
  * since it is not part of the tool input_schema contract.
  */
-function anthropicPostprocess(node: Record<string, unknown>): Record<string, unknown> {
-  const obj = { ...node };
-  delete obj['$schema'];
+function anthropicPostprocess(node: JsonNode): JsonNode {
+  const obj: JsonNode = { ...node };
+  delete obj.$schema;
   return obj;
 }
 
@@ -207,47 +232,48 @@ function anthropicPostprocess(node: Record<string, unknown>): Record<string, unk
  *
  * Reference: https://ai.google.dev/api/generate-content#v1beta.GenerationConfig.response_schema
  */
-function geminiPostprocess(node: unknown): Record<string, unknown> {
+function geminiPostprocess(node: unknown): JsonNode {
   if (typeof node !== 'object' || node === null) {
-    return node as Record<string, unknown>;
+    return node as JsonNode;
   }
 
   if (Array.isArray(node)) {
-    return node.map(geminiPostprocess) as unknown as Record<string, unknown>;
+    return node.map(geminiPostprocess) as unknown as JsonNode;
   }
 
-  const obj = { ...(node as Record<string, unknown>) };
+  const src = node as JsonNode;
+  const obj: JsonNode = { ...src };
 
   // Remove unsupported keywords
-  delete obj['$schema'];
-  delete obj['additionalProperties'];
-  delete obj['default'];
-  delete obj['examples'];
+  delete obj.$schema;
+  delete obj.additionalProperties;
+  delete obj.default;
+  delete obj.examples;
 
   // Recurse into object properties
-  if (obj['properties'] !== undefined) {
-    const props = obj['properties'] as Record<string, unknown>;
-    const processedProps: Record<string, unknown> = {};
+  if (obj.properties !== undefined) {
+    const props = obj.properties;
+    const processedProps: Record<string, JsonNode> = {};
     for (const key of Object.keys(props)) {
       processedProps[key] = geminiPostprocess(props[key]);
     }
-    obj['properties'] = processedProps;
+    obj.properties = processedProps;
   }
 
   // Recurse into array items
-  if (obj['items'] !== undefined) {
-    obj['items'] = geminiPostprocess(obj['items']);
+  if (obj.items !== undefined) {
+    obj.items = geminiPostprocess(obj.items);
   }
 
   // Recurse into anyOf / oneOf / allOf
-  if (Array.isArray(obj['anyOf'])) {
-    obj['anyOf'] = (obj['anyOf'] as unknown[]).map(geminiPostprocess);
+  if (Array.isArray(obj.anyOf)) {
+    obj.anyOf = obj.anyOf.map(geminiPostprocess);
   }
-  if (Array.isArray(obj['oneOf'])) {
-    obj['oneOf'] = (obj['oneOf'] as unknown[]).map(geminiPostprocess);
+  if (Array.isArray(obj.oneOf)) {
+    obj.oneOf = obj.oneOf.map(geminiPostprocess);
   }
-  if (Array.isArray(obj['allOf'])) {
-    obj['allOf'] = (obj['allOf'] as unknown[]).map(geminiPostprocess);
+  if (Array.isArray(obj.allOf)) {
+    obj.allOf = obj.allOf.map(geminiPostprocess);
   }
 
   return obj;

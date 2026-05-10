@@ -203,50 +203,53 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     const start = Date.now();
     const extraParams = extractProviderOptions(options?.providerOptions);
 
-    return withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown> =
-          {
+    return withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming &
+            Record<string, unknown> = {
             model,
             messages: chatMessages,
             stream: false,
             ...extraParams,
           };
 
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_tokens = maxTokens;
 
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) params.temperature = temperature;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
 
-        const rawResponse = await client.chat.completions.create(
-          params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-          { signal: ctl.signal }
-        );
+          const rawResponse = await client.chat.completions.create(
+            params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+            { signal: ctl.signal }
+          );
 
-        // Cast to access Perplexity-specific extensions not present in OpenAI SDK types
-        const response = rawResponse as OpenAI.Chat.ChatCompletion & PerplexityResponseExtensions;
+          // Cast to access Perplexity-specific extensions not present in OpenAI SDK types
+          const response = rawResponse as OpenAI.Chat.ChatCompletion & PerplexityResponseExtensions;
 
-        const content = response.choices.map((c) => c.message.content ?? '').join('');
+          const content = response.choices.map((c) => c.message.content ?? '').join('');
 
-        const result: LlmResponse = {
-          content,
-          model: response.model,
-          usage: normalizeUsage(response.usage),
-          latencyMs: Date.now() - start,
-        };
+          const result: LlmResponse = {
+            content,
+            model: response.model,
+            usage: normalizeUsage(response.usage),
+            latencyMs: Date.now() - start,
+          };
 
-        const citations = extractCitations(response);
-        if (citations !== undefined) result.citations = citations;
+          const citations = extractCitations(response);
+          if (citations !== undefined) result.citations = citations;
 
-        return result;
-      } catch (err) {
-        throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return result;
+        } catch (err) {
+          throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
   }
 
   async function* stream(
@@ -335,33 +338,36 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     const start = Date.now();
     const extraParams = extractProviderOptions(options?.providerOptions);
 
-    const rawResponse = await withRetry(async () => {
-      const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-      try {
-        const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown> =
-          {
+    const rawResponse = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming &
+            Record<string, unknown> = {
             model,
             messages: chatMessages,
             stream: false,
             ...extraParams,
           };
 
-        const maxTokens = options?.maxTokens ?? config.maxTokens;
-        if (maxTokens !== undefined) params.max_tokens = maxTokens;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_tokens = maxTokens;
 
-        const temperature = options?.temperature ?? config.temperature;
-        if (temperature !== undefined) params.temperature = temperature;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
 
-        return await client.chat.completions.create(
-          params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-          { signal: ctl.signal }
-        );
-      } catch (err) {
-        throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
-      } finally {
-        ctl.dispose();
-      }
-    }, mergeRetryOptsWithSignal(retryOpts, options?.signal));
+          return await client.chat.completions.create(
+            params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+            { signal: ctl.signal }
+          );
+        } catch (err) {
+          throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
 
     // Cast to access Perplexity-specific extensions (citations field)
     const response = rawResponse as OpenAI.Chat.ChatCompletion & PerplexityResponseExtensions;
