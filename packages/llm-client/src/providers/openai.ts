@@ -63,6 +63,22 @@ export function normalizeOpenAIError(err: unknown): LlmError {
   if (err instanceof LlmError) return err;
 
   // OpenAI SDK v6+: uses OpenAI.APIError as the base class with a `.status` field.
+  // APIConnectionTimeoutError is a subclass of APIConnectionError — check it first so the
+  // timeout subtype maps to kind:'timeout' rather than falling through to the generic
+  // connection-error branch (which emits no kind discriminator).
+  if (
+    typeof OpenAI.APIConnectionTimeoutError === 'function' &&
+    err instanceof OpenAI.APIConnectionTimeoutError
+  ) {
+    return new LlmError({
+      message: err.message,
+      provider: PROVIDER,
+      kind: 'timeout',
+      retryable: true,
+      cause: err,
+    });
+  }
+
   // APIConnectionError is a subclass of APIError with status: undefined — check it first
   // so network failures are always retryable regardless of the missing status code.
   if (typeof OpenAI.APIConnectionError === 'function' && err instanceof OpenAI.APIConnectionError) {
@@ -130,7 +146,12 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
-          const response = await client.chat.completions.create(params, { signal: ctl.signal });
+          // timeout: effectiveTimeoutMs overrides the SDK socket deadline for this call,
+          // ensuring the per-call budget matches the AbortController budget (Fix A, v0.4.2).
+          const response = await client.chat.completions.create(params, {
+            signal: ctl.signal,
+            timeout: effectiveTimeoutMs,
+          });
 
           const content = response.choices.map((c) => c.message.content ?? '').join('');
 
@@ -176,7 +197,11 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     let sdkStream: Awaited<ReturnType<typeof client.chat.completions.create>>;
 
     try {
-      sdkStream = await client.chat.completions.create(params, { signal: ctl.signal });
+      // timeout: effectiveTimeoutMs overrides the SDK socket deadline for this call (Fix A, v0.4.2).
+      sdkStream = await client.chat.completions.create(params, {
+        signal: ctl.signal,
+        timeout: effectiveTimeoutMs,
+      });
     } catch (err) {
       ctl.dispose();
       throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
@@ -263,9 +288,10 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
           // StrictParams is structurally compatible with ChatCompletionCreateParamsNonStreaming
           // (it is a narrowing of that type, not a widening). Cast is safe.
+          // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
           return await client.chat.completions.create(
             params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-            { signal: ctl.signal }
+            { signal: ctl.signal, timeout: effectiveTimeoutMs }
           );
         } catch (err) {
           throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
@@ -362,7 +388,11 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
-          return await client.chat.completions.create(params, { signal: ctl.signal });
+          // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
+          return await client.chat.completions.create(params, {
+            signal: ctl.signal,
+            timeout: effectiveTimeoutMs,
+          });
         } catch (err) {
           throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
         } finally {

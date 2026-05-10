@@ -150,6 +150,22 @@ function extractProviderOptions(
 export function normalizePerplexityError(err: unknown): LlmError {
   if (err instanceof LlmError) return err;
 
+  // APIConnectionTimeoutError is a subclass of APIConnectionError — check it first so the
+  // timeout subtype maps to kind:'timeout' rather than falling through to the generic
+  // connection-error branch (which emits no kind discriminator).
+  if (
+    typeof OpenAI.APIConnectionTimeoutError === 'function' &&
+    err instanceof OpenAI.APIConnectionTimeoutError
+  ) {
+    return new LlmError({
+      message: err.message,
+      provider: PROVIDER,
+      kind: 'timeout',
+      retryable: true,
+      cause: err,
+    });
+  }
+
   // APIConnectionError is a subclass of APIError with status: undefined —
   // check it first so network failures are always retryable.
   if (typeof OpenAI.APIConnectionError === 'function' && err instanceof OpenAI.APIConnectionError) {
@@ -221,9 +237,11 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
+          // timeout: effectiveTimeoutMs overrides the SDK socket deadline for this call,
+          // ensuring the per-call budget matches the AbortController budget (Fix A, v0.4.2).
           const rawResponse = await client.chat.completions.create(
             params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-            { signal: ctl.signal }
+            { signal: ctl.signal, timeout: effectiveTimeoutMs }
           );
 
           // Cast to access Perplexity-specific extensions not present in OpenAI SDK types
@@ -280,9 +298,10 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     let sdkStream: Awaited<ReturnType<typeof client.chat.completions.create>>;
 
     try {
+      // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
       sdkStream = await client.chat.completions.create(
         params as OpenAI.Chat.ChatCompletionCreateParamsStreaming,
-        { signal: ctl.signal }
+        { signal: ctl.signal, timeout: effectiveTimeoutMs }
       );
     } catch (err) {
       ctl.dispose();
@@ -356,9 +375,10 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
+          // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
           return await client.chat.completions.create(
             params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-            { signal: ctl.signal }
+            { signal: ctl.signal, timeout: effectiveTimeoutMs }
           );
         } catch (err) {
           throw normalizePerplexityError(classifyAbort(err, ctl.abortReason(), PROVIDER));

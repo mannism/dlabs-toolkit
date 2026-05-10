@@ -78,6 +78,22 @@ function buildAnthropicMessages(messages: LlmMessage[]): {
 export function normalizeAnthropicError(err: unknown): LlmError {
   if (err instanceof LlmError) return err;
 
+  // APIConnectionTimeoutError is a subclass of APIConnectionError — check it first so the
+  // timeout subtype maps to kind:'timeout' rather than falling through to the generic
+  // connection-error branch (which emits no kind discriminator).
+  if (
+    typeof Anthropic.APIConnectionTimeoutError === 'function' &&
+    err instanceof Anthropic.APIConnectionTimeoutError
+  ) {
+    return new LlmError({
+      message: err.message,
+      provider: PROVIDER,
+      kind: 'timeout',
+      retryable: true,
+      cause: err,
+    });
+  }
+
   // Anthropic SDK v0.94+: uses Anthropic.APIError as the base class with a `.status` field.
   // APIConnectionError is a subclass of APIError with status: undefined — check it first
   // so network failures are always retryable regardless of the missing status code.
@@ -154,8 +170,12 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
             params.temperature = temperature;
           }
 
-          // Pass ctl.signal as the RequestOptions second argument — Anthropic SDK v0.94+.
-          const response = await client.messages.create(params, { signal: ctl.signal });
+          // timeout: effectiveTimeoutMs overrides the SDK socket deadline for this call,
+          // ensuring the per-call budget matches the AbortController budget (Fix A, v0.4.2).
+          const response = await client.messages.create(params, {
+            signal: ctl.signal,
+            timeout: effectiveTimeoutMs,
+          });
 
           const content = response.content
             .filter((block): block is Anthropic.TextBlock => block.type === 'text')
@@ -209,7 +229,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     let sdkStream: Awaited<ReturnType<typeof client.messages.stream>>;
 
     try {
-      sdkStream = client.messages.stream(params, { signal: ctl.signal });
+      // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
+      sdkStream = client.messages.stream(params, {
+        signal: ctl.signal,
+        timeout: effectiveTimeoutMs,
+      });
     } catch (err) {
       ctl.dispose();
       throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
@@ -295,7 +319,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
-          return await client.messages.create(params, { signal: ctl.signal });
+          // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
+          return await client.messages.create(params, {
+            signal: ctl.signal,
+            timeout: effectiveTimeoutMs,
+          });
         } catch (err) {
           throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
         } finally {
