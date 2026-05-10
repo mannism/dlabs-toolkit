@@ -309,10 +309,23 @@ describe('classifyAbort', () => {
     expect((result as LlmError).retryable).toBe(false);
   });
 
-  it('passes non-abort errors through unchanged', () => {
+  it('passes non-abort errors through unchanged when controller did not fire', () => {
+    // abortReason === undefined means our controller did NOT fire — the error came
+    // from somewhere else (e.g. a 429 HTTP error). Should fall through unchanged.
     const nonAbortErr = new Error('something else');
-    const result = classifyAbort(nonAbortErr, 'timeout', 'test');
+    const result = classifyAbort(nonAbortErr, undefined, 'test');
     expect(result).toBe(nonAbortErr);
+  });
+
+  it('classifies any error as timeout when controller fired with reason "timeout"', () => {
+    // Provider SDKs (e.g. Anthropic's APIUserAbortError) may throw their own error types
+    // when a signal fires. We use abortReason from the controller as the authoritative source.
+    const providerAbortErr = new Error('Request was aborted.');
+    providerAbortErr.name = 'APIUserAbortError'; // Anthropic-style
+    const result = classifyAbort(providerAbortErr, 'timeout', 'test');
+    expect(result).toBeInstanceOf(LlmError);
+    expect((result as LlmError).kind).toBe('timeout');
+    expect((result as LlmError).retryable).toBe(true);
   });
 
   it('recognizes DOMException AbortError', () => {

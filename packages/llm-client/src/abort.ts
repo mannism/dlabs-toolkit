@@ -177,20 +177,29 @@ export async function* withStallTimeout<T>(
  * Map a thrown error to an LlmError with the right kind discriminator.
  *
  * If the error is an AbortError (name === 'AbortError' or DOMException with
- * AbortError name), we look up the abort reason from the AttemptController:
+ * AbortError name OR any error thrown when the controller's signal is already
+ * aborted), we look up the abort reason from the AttemptController:
  *   'timeout' → kind:'timeout', retryable:true
  *   'caller'  → kind:'cancelled', retryable:false
  *   'stall'   → kind:'stream_stall', retryable:true
  *   undefined → kind:'cancelled', retryable:false (unknown abort)
  *
- * Non-abort errors fall through unchanged so existing normalization paths handle them.
+ * Note: provider SDKs may throw their own error types (e.g. Anthropic's
+ * APIUserAbortError) when a signal fires. We use the controller's abortReason
+ * as the authoritative source rather than relying solely on error.name.
+ *
+ * Non-abort errors where the signal has NOT fired fall through unchanged so
+ * existing normalization paths handle them.
  */
 export function classifyAbort(
   err: unknown,
   abortReason: ReturnType<AttemptController['abortReason']>,
   provider: string
 ): unknown {
-  if (!isAbortError(err)) return err;
+  // Primary check: our controller fired — use the reason regardless of error type.
+  // This handles provider-specific abort errors (e.g. Anthropic APIUserAbortError).
+  const controllerFired = abortReason !== undefined;
+  if (!controllerFired && !isAbortError(err)) return err;
 
   switch (abortReason) {
     case 'timeout':
