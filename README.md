@@ -10,8 +10,8 @@ Shared platform infrastructure for the Diabolical Labs and Diana Ismail project 
 
 | Package | Status | Description |
 |---|---|---|
-| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v0.4.0) | Unified LLM API — Anthropic, OpenAI, Gemini, DeepSeek, Perplexity. Streaming, retry, native strict structured outputs (Zod 4), per-call timeouts/AbortSignal/stream stall, token normalization, web-grounded citations, `providerOptions` escape hatch. |
-| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v0.1.4) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. |
+| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v0.4.4) | Unified LLM API — Anthropic, OpenAI, Gemini, DeepSeek, Perplexity. Streaming, retry, native strict structured outputs (Zod 4), per-call timeouts/AbortSignal/stream stall, token normalization, web-grounded citations, `providerOptions` escape hatch. **OpenAI `max_completion_tokens` (gpt-5.x compat).** Per-call `timeoutMs` extends SDK socket. Anthropic prompt cache opt-in via `providerOptions.promptCache: 'ephemeral'`. Robust balanced-brace JSON extractor in `structured()` prompt-fallback. |
+| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v0.1.8) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. |
 | [`@diabolicallabs/notion`](packages/notion/) | scaffolded (v0.0.2) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
 | [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | scaffolded (v0.0.2) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
 
