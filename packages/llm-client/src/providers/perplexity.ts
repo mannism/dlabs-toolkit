@@ -54,6 +54,7 @@
 
 import OpenAI from 'openai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
+import { parseJsonOrThrow } from '../extract-json.js';
 import { mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
@@ -393,24 +394,12 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     const response = rawResponse as OpenAI.Chat.ChatCompletion & PerplexityResponseExtensions;
     const rawContent = response.choices[0]?.message.content ?? '';
 
-    let parsed: unknown;
-    try {
-      // sonar-reasoning-pro emits reasoning tokens inside <think>...</think> before the JSON.
-      // Strip them first, then strip any markdown fences.
-      const cleaned = rawContent
-        .replace(/<think>[\s\S]*?<\/think>/i, '') // strip reasoning block (sonar-reasoning-pro)
-        .replace(/^```(?:json)?\s*/i, '') // strip opening fence
-        .replace(/\s*```$/, '') // strip closing fence
-        .trim();
-      parsed = JSON.parse(cleaned);
-    } catch (err) {
-      throw new LlmError({
-        message: `Perplexity structured output: response is not valid JSON. Raw: ${rawContent.slice(0, 200)}`,
-        provider: PROVIDER,
-        retryable: false,
-        cause: err,
-      });
-    }
+    // parseJsonOrThrow: tries extractJsonBlock first (handles fences, prose, no closing fence,
+    // and <think>...</think> reasoning blocks from sonar-reasoning-pro), falls back to legacy
+    // strip+parse, then throws a non-retryable LlmError with a ≥500-char raw content slice
+    // when no valid JSON can be extracted. This is the fix for the GEOAudit failure (2026-05-11)
+    // where Perplexity appended citation prose after the closing fence.
+    const parsed = parseJsonOrThrow(rawContent, PROVIDER);
 
     let data: T;
     try {

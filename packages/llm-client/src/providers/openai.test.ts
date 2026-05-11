@@ -885,3 +885,65 @@ describe('OpenAI provider — abort / timeout / stall', () => {
     expect(settled).toBe(false); // generator not fully consumed
   });
 });
+
+// ─── v0.4.4 — robust JSON extraction in prompt-fallback ──────────────────────
+
+describe('OpenAI provider — structured() prompt-fallback: robust JSON extraction (v0.4.4)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn();
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+  });
+
+  // Use a narrow (non-Zod) schema to force the prompt fallback path.
+  const schema = { parse: (data: unknown) => data as { value: number } };
+
+  it('parses JSON wrapped in fences with trailing prose', async () => {
+    const raw = '```json\n{"value":42}\n```\n\nAdditional context from the model.';
+    mockCreate.mockResolvedValue(mockChatCompletion(raw));
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.value).toBe(42);
+  });
+
+  it('parses JSON when prose precedes the fence', async () => {
+    const raw = 'Here is your response:\n```json\n{"value":13}\n```';
+    mockCreate.mockResolvedValue(mockChatCompletion(raw));
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.value).toBe(13);
+  });
+
+  it('parses JSON when there is no closing fence', async () => {
+    const raw = '```json\n{"value":77}';
+    mockCreate.mockResolvedValue(mockChatCompletion(raw));
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.value).toBe(77);
+  });
+
+  it('error message contains ≥500 chars of raw content on parse failure', async () => {
+    const longProse = 'Not JSON content here. '.repeat(35); // ~805 chars
+    mockCreate.mockResolvedValue(mockChatCompletion(longProse));
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    try {
+      await client.structured([{ role: 'user', content: 'Return data' }], schema);
+      expect.fail('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(LlmError);
+      if (e instanceof LlmError) {
+        const prefix = 'OpenAI structured output: response is not valid JSON. Raw: ';
+        const rawPortion = e.message.slice(prefix.length);
+        expect(rawPortion.length).toBeGreaterThanOrEqual(500);
+      }
+    }
+  });
+});

@@ -1078,3 +1078,86 @@ describe('Perplexity provider — structured() v0.4.0 return shape', () => {
     expect(result.citations).toBeUndefined();
   });
 });
+
+// ─── v0.4.4 — robust JSON extraction in structured() ─────────────────────────
+//
+// Perplexity has no native strict mode — its entire structured() IS the prompt
+// path. These tests cover the cases that previously failed with the naïve
+// fence-strip + JSON.parse approach.
+
+describe('Perplexity provider — structured() robust JSON extraction (v0.4.4)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn();
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+  });
+
+  const schema = { parse: (data: unknown) => data as { score: number } };
+
+  it('parses JSON wrapped in fences with trailing prose (GEOAudit failure pattern)', async () => {
+    // This is the exact failure mode observed in GEOAudit Advanced audit 2026-05-11:
+    // Perplexity returns valid JSON in fences but appends citation notes after the fence.
+    const raw =
+      '```json\n{"score":7.5}\n```\n\nNote: This audit was performed using publicly available metadata...';
+    mockCreate.mockResolvedValue(mockChatCompletion(raw));
+
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.score).toBe(7.5);
+  });
+
+  it('parses JSON when prose appears before the fence (preamble)', async () => {
+    const raw = 'Here is the audit:\n```json\n{"score":8}\n```';
+    mockCreate.mockResolvedValue(mockChatCompletion(raw));
+
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.score).toBe(8);
+  });
+
+  it('parses JSON when there is no closing fence (model truncation)', async () => {
+    const raw = '```json\n{"score":6}';
+    mockCreate.mockResolvedValue(mockChatCompletion(raw));
+
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.score).toBe(6);
+  });
+
+  it('parses JSON with brace inside a string value (string-escape robustness)', async () => {
+    const schemaWithString = {
+      parse: (data: unknown) => data as { key: string },
+    };
+    const raw = '{ "key": "value with } brace inside" }';
+    mockCreate.mockResolvedValue(mockChatCompletion(raw));
+
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const result = await client.structured(
+      [{ role: 'user', content: 'Return data' }],
+      schemaWithString
+    );
+    expect(result.data.key).toBe('value with } brace inside');
+  });
+
+  it('error message contains ≥500 chars of raw content on parse failure', async () => {
+    const longProse = 'This is not JSON at all. '.repeat(30); // ~750 chars
+    mockCreate.mockResolvedValue(mockChatCompletion(longProse));
+
+    const client = createPerplexityProvider(TEST_CONFIG);
+    try {
+      await client.structured([{ role: 'user', content: 'Return data' }], schema);
+      expect.fail('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(LlmError);
+      if (e instanceof LlmError) {
+        const prefix = 'Perplexity structured output: response is not valid JSON. Raw: ';
+        const rawPortion = e.message.slice(prefix.length);
+        expect(rawPortion.length).toBeGreaterThanOrEqual(500);
+      }
+    }
+  });
+});

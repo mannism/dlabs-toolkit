@@ -27,6 +27,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
+import { parseJsonOrThrow } from '../extract-json.js';
 import { isZodSchema, toProviderSchema } from '../json-schema.js';
 import { mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
 import type {
@@ -456,21 +457,10 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
 
     const response = await complete(augmentedMessages, options);
 
-    let parsed: unknown;
-    try {
-      const cleaned = response.content
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```$/, '')
-        .trim();
-      parsed = JSON.parse(cleaned);
-    } catch (err) {
-      throw new LlmError({
-        message: `Anthropic structured output: response is not valid JSON. Raw: ${response.content.slice(0, 200)}`,
-        provider: PROVIDER,
-        retryable: false,
-        cause: err,
-      });
-    }
+    // parseJsonOrThrow: tries extractJsonBlock first (handles fences, prose, no closing fence),
+    // falls back to legacy strip+parse, then throws a non-retryable LlmError with a
+    // ≥500-char raw content slice when no valid JSON can be extracted.
+    const parsed = parseJsonOrThrow(response.content, PROVIDER);
 
     let data: T;
     try {
