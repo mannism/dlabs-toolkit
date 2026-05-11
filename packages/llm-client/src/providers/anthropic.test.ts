@@ -9,6 +9,8 @@
  * - structured(): JSON parse success, JSON parse failure, schema validation failure
  * - System message extraction
  * - Retry behavior on retryable status codes
+ * - Prompt cache (v0.4.3): cache_control injection on system block + tool definition,
+ *   negative case (opt-in off), usage surfacing (cacheCreationTokens / cacheReadTokens)
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -872,5 +874,335 @@ describe('Anthropic provider — abort / timeout / stall', () => {
     expect((caughtError as { kind?: string }).kind).toBe('stream_stall');
     expect((caughtError as { retryable?: boolean }).retryable).toBe(true);
     expect(chunks).toContain('hi');
+  });
+});
+
+// ─── v0.4.3 — Anthropic prompt cache ─────────────────────────────────────────
+//
+// These tests verify that:
+// (1) cache_control: { type: 'ephemeral' } is injected on the system block when
+//     providerOptions.promptCache === 'ephemeral'.
+// (2) The marker is absent when the opt-in is not set (negative case).
+// (3) In structured() strict mode, cache_control is also on the tool definition.
+// (4) structuredPromptFallback() propagates the option to complete() so the system
+//     block gets the marker through the delegation chain.
+// (5) normalizeUsage() surfaces cacheCreationTokens and cacheReadTokens from the
+//     SDK response when the API returns those extended fields.
+
+describe('Anthropic provider — prompt cache (v0.4.3): complete()', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockMessageResponse());
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+      };
+    });
+  });
+
+  it('injects cache_control on system block when promptCache is ephemeral', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.complete(
+      [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Hi' },
+      ],
+      { providerOptions: { promptCache: 'ephemeral' } }
+    );
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    // system should be an array of text blocks, not a plain string
+    expect(Array.isArray(callArgs.system)).toBe(true);
+    const systemBlocks = callArgs.system as Anthropic.TextBlockParam[];
+    expect(systemBlocks).toHaveLength(1);
+    expect(systemBlocks[0]?.text).toBe('You are a helpful assistant.');
+    expect(systemBlocks[0]?.cache_control).toEqual({ type: 'ephemeral' });
+  });
+
+  it('does NOT inject cache_control when promptCache is not set (negative case)', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.complete([
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Hi' },
+    ]);
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    // system should be a plain string — no block array wrapping
+    expect(typeof callArgs.system).toBe('string');
+    expect(callArgs.system).toBe('You are a helpful assistant.');
+  });
+
+  it('does NOT inject cache_control when there is no system message', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.complete([{ role: 'user', content: 'Hi' }], {
+      providerOptions: { promptCache: 'ephemeral' },
+    });
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    // No system message → system param should not be present at all
+    expect(callArgs.system).toBeUndefined();
+  });
+
+  it('surfaces cacheCreationTokens and cacheReadTokens from SDK response', async () => {
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({
+        usage: {
+          input_tokens: 6302,
+          output_tokens: 100,
+          cache_creation_input_tokens: 6000,
+          cache_read_input_tokens: 0,
+        } as Anthropic.Usage,
+      })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.complete(
+      [
+        { role: 'system', content: 'System prompt.' },
+        { role: 'user', content: 'Hi' },
+      ],
+      { providerOptions: { promptCache: 'ephemeral' } }
+    );
+
+    expect(result.usage.cacheCreationTokens).toBe(6000);
+    expect(result.usage.cacheReadTokens).toBe(0);
+  });
+
+  it('surfaces cacheReadTokens > 0 on a cache hit response', async () => {
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({
+        usage: {
+          input_tokens: 302,
+          output_tokens: 100,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 6000,
+        } as Anthropic.Usage,
+      })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.complete(
+      [
+        { role: 'system', content: 'System prompt.' },
+        { role: 'user', content: 'Hi' },
+      ],
+      { providerOptions: { promptCache: 'ephemeral' } }
+    );
+
+    expect(result.usage.cacheReadTokens).toBe(6000);
+    expect(result.usage.cacheCreationTokens).toBe(0);
+  });
+});
+
+describe('Anthropic provider — prompt cache (v0.4.3): stream()', () => {
+  it('injects cache_control on system block when promptCache is ephemeral', async () => {
+    const mockStream = {
+      [Symbol.asyncIterator]: async function* (): AsyncGenerator<never> {},
+      finalMessage: vi.fn().mockResolvedValue(mockMessageResponse()),
+    };
+
+    const mockStreamFn = vi.fn().mockReturnValue(mockStream);
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: vi.fn(), stream: mockStreamFn },
+      };
+    });
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    for await (const _ of client.stream(
+      [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Hi' },
+      ],
+      { providerOptions: { promptCache: 'ephemeral' } }
+    )) {
+      /* consume */
+    }
+
+    const callArgs = mockStreamFn.mock.calls[0]?.[0] as Anthropic.MessageStreamParams;
+    expect(Array.isArray(callArgs.system)).toBe(true);
+    const systemBlocks = callArgs.system as Anthropic.TextBlockParam[];
+    expect(systemBlocks[0]?.cache_control).toEqual({ type: 'ephemeral' });
+  });
+
+  it('does NOT inject cache_control when promptCache is not set (negative case)', async () => {
+    const mockStream = {
+      [Symbol.asyncIterator]: async function* (): AsyncGenerator<never> {},
+      finalMessage: vi.fn().mockResolvedValue(mockMessageResponse()),
+    };
+
+    const mockStreamFn = vi.fn().mockReturnValue(mockStream);
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: vi.fn(), stream: mockStreamFn },
+      };
+    });
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    for await (const _ of client.stream([
+      { role: 'system', content: 'You are a helpful assistant.' },
+      { role: 'user', content: 'Hi' },
+    ])) {
+      /* consume */
+    }
+
+    const callArgs = mockStreamFn.mock.calls[0]?.[0] as Anthropic.MessageStreamParams;
+    expect(typeof callArgs.system).toBe('string');
+  });
+});
+
+describe('Anthropic provider — prompt cache (v0.4.3): structured() strict mode (tool-use)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn();
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+      };
+    });
+  });
+
+  it('injects cache_control on system block AND tool definition when promptCache is ephemeral', async () => {
+    const { z } = await import('zod');
+    const zodSchema = z.object({ topic: z.string() });
+
+    const toolUseResponse = mockMessageResponse({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'tool_abc',
+          name: 'extract',
+          input: { topic: 'AI' },
+        } as unknown as Anthropic.ContentBlock,
+      ],
+      stop_reason: 'tool_use',
+    });
+    mockCreate.mockResolvedValue(toolUseResponse);
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.structured(
+      [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Summarize' },
+      ],
+      zodSchema,
+      { providerOptions: { promptCache: 'ephemeral' } }
+    );
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+
+    // System block should carry cache_control
+    expect(Array.isArray(callArgs.system)).toBe(true);
+    const systemBlocks = callArgs.system as Anthropic.TextBlockParam[];
+    expect(systemBlocks[0]?.cache_control).toEqual({ type: 'ephemeral' });
+
+    // Tool definition should also carry cache_control
+    expect(callArgs.tools).toHaveLength(1);
+    const tool = callArgs.tools?.[0] as Anthropic.Tool & { cache_control?: unknown };
+    expect(tool.cache_control).toEqual({ type: 'ephemeral' });
+  });
+
+  it('does NOT inject cache_control on system or tool when promptCache is not set (negative case)', async () => {
+    const { z } = await import('zod');
+    const zodSchema = z.object({ topic: z.string() });
+
+    const toolUseResponse = mockMessageResponse({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'tool_abc',
+          name: 'extract',
+          input: { topic: 'AI' },
+        } as unknown as Anthropic.ContentBlock,
+      ],
+      stop_reason: 'tool_use',
+    });
+    mockCreate.mockResolvedValue(toolUseResponse);
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.structured(
+      [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Summarize' },
+      ],
+      zodSchema
+    );
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+
+    // System should be plain string
+    expect(typeof callArgs.system).toBe('string');
+
+    // Tool definition should have no cache_control
+    const tool = callArgs.tools?.[0] as Anthropic.Tool & { cache_control?: unknown };
+    expect(tool.cache_control).toBeUndefined();
+  });
+});
+
+describe('Anthropic provider — prompt cache (v0.4.3): structuredPromptFallback() delegation', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn();
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+      };
+    });
+  });
+
+  it('cache_control reaches SDK call when promptCache is set via structuredMode:prompt fallback', async () => {
+    // Use a narrow (non-Zod) schema to force the prompt fallback path
+    const narrowSchema = { parse: (data: unknown) => data as { ok: boolean } };
+
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({
+        content: [{ type: 'text', text: '{"ok":true}', citations: null }],
+      })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.structured(
+      [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Return data' },
+      ],
+      narrowSchema,
+      { providerOptions: { promptCache: 'ephemeral' } }
+    );
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    // The fallback prepends a JSON instruction as a system message, which gets concatenated
+    // with the caller's system message. The combined block should carry cache_control.
+    expect(Array.isArray(callArgs.system)).toBe(true);
+    const systemBlocks = callArgs.system as Anthropic.TextBlockParam[];
+    expect(systemBlocks[0]?.cache_control).toEqual({ type: 'ephemeral' });
+  });
+
+  it('does NOT inject cache_control via prompt fallback when opt-in is not set (negative case)', async () => {
+    const narrowSchema = { parse: (data: unknown) => data as { ok: boolean } };
+
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({
+        content: [{ type: 'text', text: '{"ok":true}', citations: null }],
+      })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.structured(
+      [
+        { role: 'system', content: 'You are a helpful assistant.' },
+        { role: 'user', content: 'Return data' },
+      ],
+      narrowSchema
+    );
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    expect(typeof callArgs.system).toBe('string');
   });
 });

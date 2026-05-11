@@ -6,7 +6,7 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**Published — v0.3.0.** All five providers implemented. v0.4.0 adds native strict structured outputs (OpenAI json_schema, Anthropic tool-use, Gemini responseSchema) triggered automatically when a Zod 4 schema is passed.
+**Published — v0.4.2.** All five providers implemented. v0.4.0 adds native strict structured outputs (OpenAI json_schema, Anthropic tool-use, Gemini responseSchema) triggered automatically when a Zod 4 schema is passed. v0.4.3 adds opt-in Anthropic prompt caching via `providerOptions.promptCache`.
 
 ## Install
 
@@ -109,6 +109,77 @@ try {
 ### Zod 3 schemas
 
 If a Zod 3 schema is passed, the toolkit throws `LlmError` with a clear "upgrade to Zod 4" message rather than silently falling through to prompt mode. Pass `providerOptions.structuredMode = 'prompt'` if you cannot upgrade immediately.
+
+## Anthropic prompt caching (v0.4.3)
+
+Anthropic charges full input tokens on every call by default. Enable prompt caching to have Anthropic cache the system message block between calls, paying a 1.25× surcharge on the first (write) call and a 0.10× discount on every subsequent (read) call within the 5-minute TTL window.
+
+```typescript
+const result = await client.complete(messages, {
+  providerOptions: { promptCache: 'ephemeral' },
+});
+
+// result.usage.cacheCreationTokens — tokens written to cache (first call)
+// result.usage.cacheReadTokens     — tokens read from cache (subsequent calls)
+```
+
+Works identically on `complete()`, `stream()`, and `structured()` (both strict tool-use and prompt-fallback paths):
+
+```typescript
+// complete()
+const r = await client.complete(messages, { providerOptions: { promptCache: 'ephemeral' } });
+
+// stream()
+for await (const chunk of client.stream(messages, { providerOptions: { promptCache: 'ephemeral' } })) {
+  process.stdout.write(chunk.token);
+}
+
+// structured() — Zod 4 schema (strict tool-use path)
+// Also caches the tool definition as a second cache layer.
+const r = await client.structured(messages, zodSchema, {
+  providerOptions: { promptCache: 'ephemeral' },
+});
+
+// structured() — prompt-fallback path (non-Zod schema or structuredMode: 'prompt')
+const r = await client.structured(messages, narrowSchema, {
+  providerOptions: { structuredMode: 'prompt', promptCache: 'ephemeral' },
+});
+```
+
+### Cache semantics
+
+| Field | Description |
+|---|---|
+| **TTL** | 5 minutes (default). Anthropic also offers a 1-hour beta TTL — not yet exposed in the toolkit. |
+| **Minimum block size** | 1024 tokens for Claude Sonnet and Opus models; 2048 tokens for Haiku. Below minimum, the API silently ignores the marker — callers pay no write surcharge. |
+| **Write cost** | 1.25× normal input token price. |
+| **Read cost** | 0.10× normal input token price. |
+| **Break-even** | ~3 cache reads within the TTL window. |
+
+The toolkit always sends the `cache_control` marker and lets Anthropic's API enforce minimum block size. No client-side token estimation is performed — simpler, and the API's behavior is authoritative.
+
+### Usage fields
+
+Cache token counts surface in `LlmUsage`:
+
+```typescript
+interface LlmUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cacheCreationTokens?: number; // tokens written to cache (Anthropic only)
+  cacheReadTokens?: number;     // tokens read from cache (Anthropic only)
+}
+```
+
+On a cold call (cache miss): `cacheCreationTokens > 0`, `cacheReadTokens === 0`.
+On a warm call (cache hit within TTL): `cacheReadTokens > 0`, `cacheCreationTokens === 0`.
+
+### Provider isolation
+
+`providerOptions.promptCache` is Anthropic-only. Passing it to an OpenAI, Gemini, DeepSeek, or Perplexity client has no effect — those providers ignore unrecognized `providerOptions` fields.
+
+OpenAI has implicit automatic prompt caching on some models (no opt-in needed). Perplexity and Gemini caching models are different — if needed, those warrant separate briefs.
 
 ## Provider universe
 
