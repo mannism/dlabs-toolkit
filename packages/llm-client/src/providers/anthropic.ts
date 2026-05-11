@@ -15,6 +15,14 @@
  *   Zod 4 schema detected → tool-use with forced tool_choice: { type: 'tool', name: 'extract' }.
  *   Model is forced to call the 'extract' tool; response is in content[].tool_use.input (parsed JSON).
  *   Non-Zod schema or providerOptions.structuredMode === 'prompt' → prompt-only fallback.
+ *
+ * Prompt caching (v0.4.3):
+ *   Pass providerOptions.promptCache: 'ephemeral' to inject cache_control: { type: 'ephemeral' }
+ *   on the system message block. Anthropic's API enforces its own minimum block size (1024 tokens
+ *   for Sonnet/Opus, 2048 for Haiku) — the toolkit always sends the marker and lets the API decide
+ *   eligibility. Callers pay no surcharge when the API ignores the marker on too-small blocks.
+ *   Cost model: cache write = 1.25× normal input; cache read = 0.10× normal input.
+ *   Break-even: 3 cache reads within the 5-minute TTL window.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -69,6 +77,35 @@ function buildAnthropicMessages(messages: LlmMessage[]): {
   }));
 
   return { system, messages: anthropicMessages };
+}
+
+/**
+ * Build the `system` parameter for an Anthropic API call.
+ *
+ * When promptCache is 'ephemeral', the system content is wrapped in a block
+ * array with cache_control: { type: 'ephemeral' } so Anthropic caches the
+ * system prompt between calls. The toolkit always sends the marker and lets
+ * Anthropic's API enforce minimum block size (1024 tokens for Sonnet/Opus,
+ * 2048 for Haiku). If the block is too small, the API silently ignores the
+ * marker — callers pay no surcharge.
+ *
+ * Without promptCache, returns the plain string form (no behavioral change
+ * for existing callers).
+ */
+function buildSystemParam(
+  system: string,
+  promptCache: string | undefined
+): string | Anthropic.TextBlockParam[] {
+  if (promptCache !== 'ephemeral') {
+    return system;
+  }
+  return [
+    {
+      type: 'text',
+      text: system,
+      cache_control: { type: 'ephemeral' },
+    },
+  ];
 }
 
 /**
@@ -151,6 +188,10 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     // Per-call timeout overrides config default; falls back to config then hard default.
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
 
+    // Extract promptCache from providerOptions — Anthropic-only opt-in for prompt caching.
+    // biome-ignore lint/complexity/useLiteralKeys: providerOptions is Record<string,unknown> — noPropertyAccessFromIndexSignature requires bracket notation
+    const promptCache = options?.providerOptions?.['promptCache'] as string | undefined;
+
     const start = Date.now();
 
     return withRetry(
@@ -164,7 +205,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
             max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
           };
 
-          if (system !== undefined) params.system = system;
+          if (system !== undefined) params.system = buildSystemParam(system, promptCache);
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) {
             params.temperature = temperature;
@@ -211,13 +252,17 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
 
+    // Extract promptCache from providerOptions — Anthropic-only opt-in for prompt caching.
+    // biome-ignore lint/complexity/useLiteralKeys: providerOptions is Record<string,unknown> — noPropertyAccessFromIndexSignature requires bracket notation
+    const promptCache = options?.providerOptions?.['promptCache'] as string | undefined;
+
     const params: Anthropic.MessageStreamParams = {
       model,
       messages: anthropicMessages,
       max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
     };
 
-    if (system !== undefined) params.system = system;
+    if (system !== undefined) params.system = buildSystemParam(system, promptCache);
     const streamTemperature = options?.temperature ?? config.temperature;
     if (streamTemperature !== undefined) {
       params.temperature = streamTemperature;
@@ -295,27 +340,43 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     const inputSchema = toProviderSchema(schema, 'anthropic');
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+
+    // Extract promptCache from providerOptions — Anthropic-only opt-in for prompt caching.
+    // biome-ignore lint/complexity/useLiteralKeys: providerOptions is Record<string,unknown> — noPropertyAccessFromIndexSignature requires bracket notation
+    const promptCache = options?.providerOptions?.['promptCache'] as string | undefined;
+
     const start = Date.now();
 
     const response = await withRetry(
       async () => {
         const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
         try {
+          // Build the tool definition. When promptCache is set, attach cache_control
+          // to the last (and only) tool definition — Anthropic caches tool definitions
+          // as a second cache layer independent of the system block.
+          const extractTool: Anthropic.Tool =
+            promptCache === 'ephemeral'
+              ? {
+                  name: 'extract',
+                  description: 'Return the structured data.',
+                  input_schema: inputSchema as Anthropic.Tool['input_schema'],
+                  cache_control: { type: 'ephemeral' },
+                }
+              : {
+                  name: 'extract',
+                  description: 'Return the structured data.',
+                  input_schema: inputSchema as Anthropic.Tool['input_schema'],
+                };
+
           const params: Anthropic.MessageCreateParamsNonStreaming = {
             model: options?.model ?? config.model,
             messages: anthropicMessages,
             max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
-            tools: [
-              {
-                name: 'extract',
-                description: 'Return the structured data.',
-                input_schema: inputSchema as Anthropic.Tool['input_schema'],
-              },
-            ],
+            tools: [extractTool],
             tool_choice: { type: 'tool', name: 'extract' },
           };
 
-          if (system !== undefined) params.system = system;
+          if (system !== undefined) params.system = buildSystemParam(system, promptCache);
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
@@ -377,6 +438,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
   /**
    * Prompt-only fallback for structured() — used when schema is not Zod 4 or
    * providerOptions.structuredMode === 'prompt'. Preserves v0.3.0 behavior exactly.
+   * promptCache flows through via options → complete(), which reads providerOptions.promptCache.
    */
   async function structuredPromptFallback<T>(
     messages: LlmMessage[],

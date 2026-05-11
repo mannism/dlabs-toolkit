@@ -8,7 +8,7 @@ Schema: [`/Users/mann/Documents/Claude/manifest-schema.md`](https://github.com/m
 
 | Package | Status | Version | Path | Description |
 |---|---|---|---|---|
-| `@diabolicallabs/llm-client` | published | 0.4.0 | [`packages/llm-client/manifest.yaml`](packages/llm-client/manifest.yaml) | Unified LLM API — all 5 providers. Native strict structured outputs (Zod 4), per-call timeouts/AbortSignal/stream stall, web-grounded citations (Perplexity), `providerOptions` escape hatch, streaming, retry, token normalization. |
+| `@diabolicallabs/llm-client` | published | 0.4.3 | [`packages/llm-client/manifest.yaml`](packages/llm-client/manifest.yaml) | Unified LLM API — all 5 providers. Native strict structured outputs (Zod 4), per-call timeouts/AbortSignal/stream stall, web-grounded citations (Perplexity), `providerOptions` escape hatch, opt-in Anthropic prompt caching, streaming, retry, token normalization. |
 | `@diabolicallabs/agent-sdk` | published | 0.1.4 | [`packages/agent-sdk/manifest.yaml`](packages/agent-sdk/manifest.yaml) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. |
 | `@diabolicallabs/notion` | scaffolded | 0.0.2 | [`packages/notion/manifest.yaml`](packages/notion/manifest.yaml) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
 | `@diabolicallabs/rate-limiter` | scaffolded | 0.0.2 | [`packages/rate-limiter/manifest.yaml`](packages/rate-limiter/manifest.yaml) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
@@ -38,5 +38,6 @@ All packages live on **npmjs.com** under the public `@diabolicallabs` scope. Lic
 | Week 5 (Perplexity) | `@diabolicallabs/llm-client` Perplexity provider — citations, providerOptions | ✅ shipped 2026-05-08 (PR #30) |
 | Abort/timeout/stall | `@diabolicallabs/llm-client@0.3.0` — per-call `timeoutMs`, `AbortSignal`, stream stall detection, `LlmError.kind` discriminator | ✅ shipped 2026-05-10 (PR #34) |
 | Structured-strict | `@diabolicallabs/llm-client@0.4.0` — native strict structured outputs (OpenAI `json_schema`, Anthropic tool-use, Gemini `responseSchema`); Zod 4 conversion; `LlmStructuredResponse` gains `model`/`id`/`citations` | ✅ shipped 2026-05-10 (PR #35) |
+| Prompt cache | `@diabolicallabs/llm-client@0.4.3` — opt-in Anthropic prompt caching via `providerOptions.promptCache: 'ephemeral'`; system block + tool definition; `cacheCreationTokens`/`cacheReadTokens` coverage | ✅ shipped 2026-05-11 (PR #43) |
 | Week 5 (packages) | `@diabolicallabs/notion` + `@diabolicallabs/rate-limiter` (parallel) | not yet briefed |
 | Week 6+ | GEOAudit pilot migration; Trusted Publishing migration on npm | scoped, not briefed |

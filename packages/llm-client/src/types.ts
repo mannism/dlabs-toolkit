@@ -19,6 +19,12 @@
  *   LlmStructuredResponse.id         — provider request ID where available (debugging).
  *   LlmStructuredResponse.citations  — web citations from Perplexity structured responses.
  *   LlmClient.structured JSDoc       — Zod 4 trigger and structuredMode escape hatch.
+ *
+ * v0.4.3 additions (Anthropic prompt cache opt-in):
+ *   LlmCallOptions.providerOptions.promptCache — Anthropic-only. Pass 'ephemeral' to inject
+ *   cache_control: { type: 'ephemeral' } on the system message block. Anthropic caches the
+ *   system prompt for 5 minutes; reads cost 0.10× and writes cost 1.25× normal input price.
+ *   Ignored on all non-Anthropic providers.
  */
 
 // The canonical message format shared across all providers
@@ -95,6 +101,24 @@ export interface LlmCallOptions
    * Fires when no chunk arrives within this window. Default: config.streamStallTimeoutMs ?? 30000.
    */
   streamStallTimeoutMs?: number;
+  /**
+   * Provider-specific options escape hatch. Known fields:
+   *
+   * **Anthropic:**
+   * - `promptCache?: 'ephemeral'` — inject `cache_control: { type: 'ephemeral' }` on the
+   *   system message block (and tool definition in strict mode). Anthropic caches the block
+   *   for 5 minutes. Minimum cacheable block: 1024 tokens (Sonnet/Opus), 2048 (Haiku).
+   *   Below minimum, the API silently ignores the marker. Cost: 1.25× write surcharge,
+   *   0.10× read discount. Break-even at ~3 cache reads within the TTL window. Ignored on
+   *   all non-Anthropic providers. (v0.4.3+)
+   * - `structuredMode?: 'prompt'` — force prompt-only path in structured() even when a
+   *   Zod 4 schema is passed. (v0.4.0+)
+   *
+   * **Perplexity:**
+   * - `search_recency_filter?: 'month' | 'week' | 'day' | 'hour'` — limit search results by age.
+   * - `search_domain_filter?: string[]` — allowlist of domains to include in search.
+   *   Unknown fields are forwarded unchanged.
+   */
   providerOptions?: Record<string, unknown>;
 }
 
