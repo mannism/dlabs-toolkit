@@ -165,16 +165,11 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const model = client.config.model;
     const start = Date.now();
 
-    try {
-      for await (const chunk of client.stream(...args)) {
-        if (chunk.usage !== undefined) {
-          finalUsage = chunk.usage;
-        }
-        yield chunk; // pass through immediately — never buffer
+    for await (const chunk of client.stream(...args)) {
+      if (chunk.usage !== undefined) {
+        finalUsage = chunk.usage;
       }
-    } catch (err) {
-      // Stream error: no usage data, no record. Propagate to caller.
-      throw err;
+      yield chunk; // pass through immediately — never buffer
     }
 
     // Stream completed — dispatch if usage was captured
