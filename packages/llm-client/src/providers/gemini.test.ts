@@ -654,3 +654,67 @@ describe('Gemini provider — structured() v0.4.0 strict mode (responseSchema)',
     expect(callArgs?.config?.responseMimeType).toBe('application/json');
   });
 });
+
+// ─── v0.4.4 — robust JSON extraction in prompt-fallback ──────────────────────
+
+describe('Gemini provider — structured() prompt-fallback: robust JSON extraction (v0.4.4)', () => {
+  let mockGenerateContent: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateContent = vi.fn();
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: { generateContent: mockGenerateContent, generateContentStream: vi.fn() },
+      };
+    });
+  });
+
+  // Use a narrow (non-Zod) schema to force the prompt fallback path.
+  const schema = { parse: (data: unknown) => data as { value: number } };
+
+  it('parses JSON wrapped in fences with trailing prose', async () => {
+    const raw = '```json\n{"value":21}\n```\n\nHere is some follow-up text from Gemini.';
+    mockGenerateContent.mockResolvedValue({ text: raw, usageMetadata: undefined });
+
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.value).toBe(21);
+  });
+
+  it('parses JSON when prose precedes the fence', async () => {
+    const raw = 'Here is the requested JSON:\n```json\n{"value":99}\n```';
+    mockGenerateContent.mockResolvedValue({ text: raw, usageMetadata: undefined });
+
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.value).toBe(99);
+  });
+
+  it('parses JSON when there is no closing fence', async () => {
+    const raw = '```json\n{"value":33}';
+    mockGenerateContent.mockResolvedValue({ text: raw, usageMetadata: undefined });
+
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.value).toBe(33);
+  });
+
+  it('error message contains ≥500 chars of raw content on parse failure', async () => {
+    const longProse = 'Completely unstructured text here. '.repeat(25); // ~875 chars
+    mockGenerateContent.mockResolvedValue({ text: longProse, usageMetadata: undefined });
+
+    const client = createGeminiProvider(TEST_CONFIG);
+    try {
+      await client.structured([{ role: 'user', content: 'Return data' }], schema);
+      expect.fail('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(LlmError);
+      if (e instanceof LlmError) {
+        const prefix = 'Gemini structured output: response is not valid JSON. Raw: ';
+        const rawPortion = e.message.slice(prefix.length);
+        expect(rawPortion.length).toBeGreaterThanOrEqual(500);
+      }
+    }
+  });
+});

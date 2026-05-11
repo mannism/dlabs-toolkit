@@ -1143,6 +1143,83 @@ describe('Anthropic provider — prompt cache (v0.4.3): structured() strict mode
   });
 });
 
+// ─── v0.4.4 — robust JSON extraction in prompt-fallback ──────────────────────
+//
+// Covers the cases where the naïve fence-strip + JSON.parse previously failed.
+// These tests exercise the narrow (non-Zod) schema path, which routes through
+// structuredPromptFallback() and therefore through parseJsonOrThrow().
+
+describe('Anthropic provider — structured() prompt-fallback: robust JSON extraction (v0.4.4)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn();
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+      };
+    });
+  });
+
+  const schema = { parse: (data: unknown) => data as { value: number } };
+
+  it('parses JSON wrapped in fences with trailing prose (GEOAudit failure pattern)', async () => {
+    const raw =
+      '```json\n{"value":99}\n```\n\nNote: This response includes publicly available data.';
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({ content: [{ type: 'text', text: raw, citations: null }] })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.value).toBe(99);
+  });
+
+  it('parses JSON when prose appears before the fence (preamble)', async () => {
+    const raw = 'Here is the result:\n```json\n{"value":7}\n```';
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({ content: [{ type: 'text', text: raw, citations: null }] })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.value).toBe(7);
+  });
+
+  it('parses JSON when there is no closing fence (model truncation)', async () => {
+    const raw = '```json\n{"value":55}';
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({ content: [{ type: 'text', text: raw, citations: null }] })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
+    expect(result.data.value).toBe(55);
+  });
+
+  it('error message contains ≥500 chars of raw content on parse failure', async () => {
+    // Build a response longer than 500 chars that has no valid JSON
+    const longProse = 'This is not JSON. '.repeat(40); // ~720 chars
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({ content: [{ type: 'text', text: longProse, citations: null }] })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    try {
+      await client.structured([{ role: 'user', content: 'Return data' }], schema);
+      expect.fail('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(LlmError);
+      if (e instanceof LlmError) {
+        const prefix = 'Anthropic structured output: response is not valid JSON. Raw: ';
+        const rawPortion = e.message.slice(prefix.length);
+        expect(rawPortion.length).toBeGreaterThanOrEqual(500);
+      }
+    }
+  });
+});
+
 describe('Anthropic provider — prompt cache (v0.4.3): structuredPromptFallback() delegation', () => {
   let mockCreate: MockInstance;
 
