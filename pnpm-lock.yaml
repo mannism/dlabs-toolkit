@@ -61,8 +61,8 @@ importers:
         specifier: ^1.52.0
         version: 1.52.0
       openai:
-        specifier: ^6.36.0
-        version: 6.36.0(ws@8.20.0)(zod@4.4.3)
+        specifier: ^6.37.0
+        version: 6.37.0(ws@8.20.0)(zod@4.4.3)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -1515,8 +1515,8 @@ packages:
   obug@2.1.1:
     resolution: {integrity: sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ==}
 
-  openai@6.36.0:
-    resolution: {integrity: sha512-Has2YbIusMq9wQEierFsgf9c783dy1y9arX459LmphNacEkkM5yxi2RIyXP0LmkOroQyW19iTwALHL8Yf26UKA==}
+  openai@6.37.0:
+    resolution: {integrity: sha512-0H5dEGFmmLv6KSd0W1w2nyL8WsLkX6yoLeQpU+dZAOuGcany5qkYQMmj35ZrKgb6yiyYqpUzFOpR8mZQkgqeEQ==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -3308,7 +3308,7 @@ snapshots:
 
   obug@2.1.1: {}
 
-  openai@6.36.0(ws@8.20.0)(zod@4.4.3):
+  openai@6.37.0(ws@8.20.0)(zod@4.4.3):
     optionalDependencies:
       ws: 8.20.0
       zod: 4.4.3
