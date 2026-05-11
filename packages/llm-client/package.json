@@ -1,6 +1,6 @@
 {
   "name": "@diabolicallabs/llm-client",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Unified LLM API for Anthropic, OpenAI, Google, and DeepSeek. Streaming, retry/backoff, structured output, token normalization. © Diabolical Labs",
   "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
   "publisher": "Diabolical Labs",
