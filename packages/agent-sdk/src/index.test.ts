@@ -76,6 +76,16 @@ async function drainStream<T>(gen: AsyncGenerator<T>): Promise<T[]> {
   return results;
 }
 
+/**
+ * Returns the first call args from a mocked fetch as a typed tuple.
+ * Asserts the call exists before returning — fails the test if fetch was never called.
+ */
+function getFirstFetchCall(mockFetch: ReturnType<typeof vi.fn>): [string, RequestInit] {
+  const call = mockFetch.mock.calls[0];
+  expect(call).toBeDefined();
+  return call as [string, RequestInit];
+}
+
 // ---------------------------------------------------------------------------
 // Setup: mock fetch globally
 // ---------------------------------------------------------------------------
@@ -146,13 +156,10 @@ describe('complete()', () => {
     await instrumented.complete(mockMessages);
     await new Promise<void>((r) => setTimeout(r, 0));
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const [url, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [
-      string,
-      RequestInit,
-    ];
+    const [url, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
     expect(url).toBe(sdkConfig.ingestionUrl);
     expect(init.method).toBe('POST');
+    // biome-ignore lint/complexity/useLiteralKeys: init.headers is Record<string, string>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect((init.headers as Record<string, string>)['Authorization']).toBe(
       `Bearer ${sdkConfig.ingestionKey}`
     );
@@ -166,23 +173,30 @@ describe('complete()', () => {
     await instrumented.complete(mockMessages);
     await new Promise<void>((r) => setTimeout(r, 0));
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const body = JSON.parse(
-      ((fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [string, RequestInit])[1]
-        .body as string
-    ) as Record<string, unknown>;
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
 
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['agent_id']).toBe(sdkConfig.identity.agentId);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['model']).toBe('claude-sonnet-4-6');
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['prompt_tokens']).toBe(mockUsage.inputTokens);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['completion_tokens']).toBe(mockUsage.outputTokens);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['task_label']).toBe(sdkConfig.identity.taskLabel);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['project_id']).toBe(sdkConfig.identity.projectId);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(typeof body['latency_ms']).toBe('number');
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(typeof body['timestamp']).toBe('string');
     // ISO 8601 UTC — ends with Z or +00:00
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['timestamp']).toMatch(/Z$/);
     // UUID v4 format
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['call_id']).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
@@ -207,13 +221,12 @@ describe('complete()', () => {
     await instrumented.complete(mockMessages);
     await new Promise<void>((r) => setTimeout(r, 0));
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const body = JSON.parse(
-      ((fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [string, RequestInit])[1]
-        .body as string
-    ) as Record<string, unknown>;
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
 
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['cache_creation_tokens']).toBe(20);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['cache_read_tokens']).toBe(10);
   });
 
@@ -229,15 +242,16 @@ describe('complete()', () => {
     await instrumented.complete(mockMessages);
     await new Promise<void>((r) => setTimeout(r, 0));
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const body = JSON.parse(
-      ((fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [string, RequestInit])[1]
-        .body as string
-    ) as Record<string, unknown>;
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
 
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['task_label']).toBeUndefined();
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['project_id']).toBeUndefined();
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['cache_creation_tokens']).toBeUndefined();
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['cache_read_tokens']).toBeUndefined();
   });
 
@@ -292,12 +306,11 @@ describe('stream()', () => {
     await new Promise<void>((r) => setTimeout(r, 0));
 
     expect(fetch).toHaveBeenCalledOnce();
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const body = JSON.parse(
-      ((fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [string, RequestInit])[1]
-        .body as string
-    ) as Record<string, unknown>;
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['prompt_tokens']).toBe(mockUsage.inputTokens);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['completion_tokens']).toBe(mockUsage.outputTokens);
   });
 
@@ -421,7 +434,9 @@ describe('ingestion retry', () => {
 
     const warned = warnSpy.mock.calls[0]?.[0] as string;
     const parsed = JSON.parse(warned) as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: parsed is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(parsed['event']).toBe('ingestion_exhausted');
+    // biome-ignore lint/complexity/useLiteralKeys: parsed is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(parsed['call_id']).toBeDefined();
     // ingestionKey must never appear in logs
     expect(warned).not.toContain(sdkConfig.ingestionKey);
@@ -458,10 +473,8 @@ describe('security', () => {
     await instrumented.complete(mockMessages);
     await new Promise<void>((r) => setTimeout(r, 0));
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const init = (
-      (fetch as ReturnType<typeof vi.fn>).mock.calls.at(0)! as [string, RequestInit]
-    )[1];
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    // biome-ignore lint/complexity/useLiteralKeys: init.headers is Record<string, string>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect((init.headers as Record<string, string>)['Authorization']).toBe(
       `Bearer ${sdkConfig.ingestionKey}`
     );
