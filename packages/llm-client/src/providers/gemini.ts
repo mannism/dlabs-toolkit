@@ -1,7 +1,7 @@
 /**
  * Google Gemini provider for @diabolicallabs/llm-client.
  *
- * Uses the @google/genai SDK (v1.x — not the deprecated @google/generative-ai).
+ * Uses the @google/genai SDK (v2.x — not the deprecated @google/generative-ai).
  *
  * Implements: complete(), stream(), structured()
  *
