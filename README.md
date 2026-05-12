@@ -52,7 +52,7 @@ for await (const chunk of client.stream([{ role: 'user', content: 'Hello' }])) {
 |---|---|---|
 | `anthropic` | Implemented | `ANTHROPIC_API_KEY` |
 | `openai` | Implemented | `OPENAI_API_KEY` |
-| `google` | Implemented | `GOOGLE_AI_API_KEY` |
+| `gemini` | Implemented | `GOOGLE_AI_API_KEY` |
 | `deepseek` | Implemented | `DEEPSEEK_API_KEY` |
 | `perplexity` | Implemented | `PERPLEXITY_API_KEY` |
 
@@ -70,7 +70,12 @@ dlabs-toolkit/
     notion/         @diabolicallabs/notion
     rate-limiter/   @diabolicallabs/rate-limiter
   scripts/
-    integration-test.ts   manual API integration tests (not in CI)
+    integration-test.ts            manual API integration tests (not in CI)
+    smoke-{anthropic,openai,gemini,perplexity}.ts
+                                   per-provider live smoke tests — pre-publish gate
+    geoaudit-use-case-validation.mjs
+                                   GEOAudit consumer call-shape validation (live)
+    tsconfig.json                  strict TS config for the scripts/ directory
   .changeset/       Changesets version files
   .github/
     workflows/
