@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Scripts run via tsx (esbuild-based) — not Node.js native ESM loader.
+    // Bundler resolution mode lets paths[] aliases work for bare specifiers
+    // like 'zod', which pnpm places only in packages/llm-client/node_modules/
+    // rather than hoisting to the workspace root.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "zod": ["../packages/llm-client/node_modules/zod"],
+      "zod/*": ["../packages/llm-client/node_modules/zod/*"]
+    }
+  },
+  "include": ["*.ts"]
+}

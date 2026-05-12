@@ -237,7 +237,7 @@ async function main(): Promise<void> {
   // ───────────────────────────────────────────────────────────────────────────
   section('Gemini — gemini-2.0-flash');
 
-  if (!process.env.GOOGLE_AI_API_KEY) {
+  if (!process.env['GOOGLE_AI_API_KEY']) {
     skipSection('gemini', 'GOOGLE_AI_API_KEY not set');
   } else {
     const gemini = createClientFromEnv('gemini', 'gemini-2.0-flash', {
@@ -317,7 +317,7 @@ async function main(): Promise<void> {
   // ───────────────────────────────────────────────────────────────────────────
   section('DeepSeek — deepseek-chat');
 
-  if (!process.env.DEEPSEEK_API_KEY) {
+  if (!process.env['DEEPSEEK_API_KEY']) {
     skipSection('deepseek', 'DEEPSEEK_API_KEY not set');
   } else {
     const deepseek = createClientFromEnv('deepseek', 'deepseek-chat', {
