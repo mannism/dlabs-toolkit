@@ -1,5 +1,16 @@
 # @diabolicallabs/agent-sdk
 
+## 1.4.0
+
+### Minor Changes
+
+- 2826012: Internal refactor (v1.4.0): non-streaming paths now use a shared `buildAfterCallHandler()` instead of bespoke per-method closures. `stream()` and `streamStructured()` wrappers retained for usage capture. Public API unchanged.
+
+### Patch Changes
+
+- Updated dependencies [00c470b]
+  - @diabolicallabs/llm-client@1.5.0
+
 ## 1.3.1
 
 ### Patch Changes
