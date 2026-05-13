@@ -1,5 +1,27 @@
 # @diabolicallabs/agent-sdk
 
+## 1.1.0
+
+### Minor Changes
+
+- 7731d8f: feat(agent-sdk): include cost in CallRecord when provided by llm-client
+
+  CallRecord gains an optional `cost?: LlmCost` field (v1.1.0). When the wrapped LlmClient
+  has `pricing` configured (via `@diabolicallabs/llm-client@^1.1.0`), cost is propagated
+  from the response into the ingestion payload for `complete()`, `structured()`, and
+  `withTools()`. Stream calls do not carry cost — there is no single response object to
+  attach it to.
+
+  `@diabolicallabs/llm-pricing` is declared as an optional peer dependency.
+
+### Patch Changes
+
+- Updated dependencies [0e4e895]
+- Updated dependencies [6c477c9]
+- Updated dependencies [968a9ec]
+  - @diabolicallabs/llm-client@1.1.0
+  - @diabolicallabs/llm-pricing@0.1.0
+
 ## 1.0.0
 
 ### Major Changes
