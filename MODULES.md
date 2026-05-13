@@ -8,8 +8,9 @@ Schema: [`/Users/mann/Documents/Claude/manifest-schema.md`](https://github.com/m
 
 | Package | Status | Version | Path | Description |
 |---|---|---|---|---|
-| `@diabolicallabs/llm-client` | published | 0.4.3 | [`packages/llm-client/manifest.yaml`](packages/llm-client/manifest.yaml) | Unified LLM API — all 5 providers. Native strict structured outputs (Zod 4), per-call timeouts/AbortSignal/stream stall, web-grounded citations (Perplexity), `providerOptions` escape hatch, opt-in Anthropic prompt caching, streaming, retry, token normalization. |
-| `@diabolicallabs/agent-sdk` | published | 0.1.4 | [`packages/agent-sdk/manifest.yaml`](packages/agent-sdk/manifest.yaml) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. |
+| `@diabolicallabs/llm-client` | published | 1.0.0 | [`packages/llm-client/manifest.yaml`](packages/llm-client/manifest.yaml) | Unified LLM API — all 5 providers. Native tool calling (`withTools`), full `LlmErrorKind` taxonomy, OpenAI Responses API, Gemini structured-output fix, native strict structured outputs (Zod 4), per-call timeouts/AbortSignal/stream stall, web-grounded citations (Perplexity), `providerOptions` escape hatch, opt-in Anthropic prompt caching. |
+| `@diabolicallabs/llm-pricing` | published | 0.1.0 | [`packages/llm-pricing/manifest.yaml`](packages/llm-pricing/manifest.yaml) | Default pricing table + `computeCost()` for all 5 providers. Long-context tiering (Gemini), cache math (Anthropic), deprecated-alias resolution (DeepSeek), partial-coverage flags (o-series, sonar-deep-research). `versionedAt` field + `pnpm pricing:verify` script. |
+| `@diabolicallabs/agent-sdk` | published | 1.0.0 | [`packages/agent-sdk/manifest.yaml`](packages/agent-sdk/manifest.yaml) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. Wraps `withTools()` + `toolCalls` on `CallRecord`. |
 | `@diabolicallabs/notion` | scaffolded | 0.0.2 | [`packages/notion/manifest.yaml`](packages/notion/manifest.yaml) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
 | `@diabolicallabs/rate-limiter` | scaffolded | 0.0.2 | [`packages/rate-limiter/manifest.yaml`](packages/rate-limiter/manifest.yaml) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
 
