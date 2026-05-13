@@ -491,6 +491,32 @@ try {
 
 Retryable errors (429, 5xx, network failures, timeout) are retried automatically with exponential backoff and full jitter before throwing. Cancelled and stream-stall errors are never retried.
 
+## DeepSeek model IDs (v1.0.1+)
+
+DeepSeek retired the `deepseek-chat` and `deepseek-reasoner` identifiers as of 2026. The canonical IDs are:
+
+| Model | API ID | Notes |
+|---|---|---|
+| V4 Flash | `deepseek-v4-flash` | General use and reasoning (thinking mode). **Canonical default.** |
+| V4 Pro | `deepseek-v4-pro` | High-capability tier. Promotional pricing active through 2026-05-31. |
+
+**Deprecated aliases** — DeepSeek's API still accepts these server-side (they route to V4 variants) but new code should use the canonical IDs:
+
+| Deprecated ID | Now routes to | Change |
+|---|---|---|
+| `deepseek-chat` | `deepseek-v4-flash` non-thinking | Was DeepSeek-V3; now resolves to V4 |
+| `deepseek-reasoner` | `deepseek-v4-flash` thinking mode | Was DeepSeek-R1; now resolves to V4 thinking |
+
+Usage:
+
+```typescript
+// Canonical V4 Flash (default — replaces deepseek-chat)
+const client = createClientFromEnv('deepseek', 'deepseek-v4-flash');
+
+// Canonical V4 Pro
+const client = createClientFromEnv('deepseek', 'deepseek-v4-pro');
+```
+
 ## Token normalization
 
 All providers return `LlmUsage` in a consistent shape regardless of the underlying API's field names:

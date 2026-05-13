@@ -1,8 +1,16 @@
 /**
  * DeepSeek provider smoke test.
  *
- * Validates: single-turn complete() call against deepseek-chat (DeepSeek-V3).
+ * Validates: single-turn complete() call against deepseek-v4-flash (canonical V4 default).
  * Expected: successful response with normalized LlmUsage, model string, content.
+ *
+ * Canonical model IDs (as of 2026-05-13):
+ *   deepseek-v4-flash  — general + reasoning (thinking mode via providerOptions)
+ *   deepseek-v4-pro    — high-capability tier
+ *
+ * Deprecated aliases (still accepted server-side but resolve to deepseek-v4-flash):
+ *   deepseek-chat      — was DeepSeek-V3; now routes to deepseek-v4-flash non-thinking
+ *   deepseek-reasoner  — was DeepSeek-R1; now routes to deepseek-v4-flash thinking mode
  *
  * Requires: DEEPSEEK_API_KEY in environment.
  * Run: set -a; source .env; set +a && npx tsx scripts/smoke-deepseek.ts
@@ -16,7 +24,7 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const client = createClientFromEnv('deepseek', 'deepseek-chat', { maxTokens: 5 });
+const client = createClientFromEnv('deepseek', 'deepseek-v4-flash', { maxTokens: 5 });
 
 console.log('[smoke-deepseek] Starting complete() call...');
 const start = Date.now();
