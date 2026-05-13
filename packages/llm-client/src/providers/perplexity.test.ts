@@ -1161,3 +1161,59 @@ describe('Perplexity provider — structured() robust JSON extraction (v0.4.4)',
     }
   });
 });
+
+// ─── withTools() ──────────────────────────────────────────────────────────────
+
+describe('Perplexity provider — withTools()', () => {
+  /**
+   * Perplexity does not support tool calling. withTools() rejects immediately
+   * with kind:'bad_request', retryable:false — no API round-trip is made.
+   */
+
+  const weatherTool = {
+    name: 'get_weather',
+    description: 'Get the current weather for a city.',
+    inputSchema: {
+      parse: (d: unknown) => d as { city: string },
+    },
+  };
+
+  it('rejects with kind:bad_request without making any API call', async () => {
+    // mockCreate should never be called — withTools() rejects pre-call
+    const mockCreate = vi.fn();
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const thrown = await client
+      .withTools([{ role: 'user', content: 'What is the weather?' }], [weatherTool])
+      .catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('bad_request');
+      expect(thrown.retryable).toBe(false);
+      expect(thrown.message).toContain('Perplexity');
+      expect(thrown.message).toContain('tool calling');
+    }
+
+    // No API call must have been made
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects even when no tools are provided', async () => {
+    const mockCreate = vi.fn();
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const thrown = await client
+      .withTools([{ role: 'user', content: 'Hi' }], [])
+      .catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+});

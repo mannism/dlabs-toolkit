@@ -635,3 +635,204 @@ describe('DeepSeek provider — structured() v0.4.0 return shape', () => {
     expect(result.data.value).toBe(1);
   });
 });
+
+// ─── withTools() ──────────────────────────────────────────────────────────────
+
+/**
+ * Build a Chat Completions response with tool_calls in the message.
+ * DeepSeek uses Chat Completions, so the shape is the nested OpenAI format.
+ */
+function mockCompletionWithToolCall(
+  toolName: string,
+  args: Record<string, unknown>,
+  callId = 'call_ds_abc'
+): OpenAI.Chat.ChatCompletion {
+  return {
+    id: 'chatcmpl-ds-tool-1',
+    object: 'chat.completion',
+    created: 1234567890,
+    model: 'deepseek-chat',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: null,
+          refusal: null,
+          tool_calls: [
+            {
+              id: callId,
+              type: 'function',
+              function: {
+                name: toolName,
+                arguments: JSON.stringify(args),
+              },
+            },
+          ],
+        },
+        finish_reason: 'tool_calls',
+        logprobs: null,
+      },
+    ],
+    usage: {
+      prompt_tokens: 20,
+      completion_tokens: 15,
+      total_tokens: 35,
+    },
+  };
+}
+
+describe('DeepSeek provider — withTools()', () => {
+  const weatherTool = {
+    name: 'get_weather',
+    description: 'Get the current weather for a city.',
+    inputSchema: {
+      parse: (d: unknown) => d as { city: string },
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns toolCalls with Chat Completions tool call IDs', async () => {
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(mockCompletionWithToolCall('get_weather', { city: 'Berlin' }));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const result = await client.withTools(
+      [{ role: 'user', content: 'What is the weather in Berlin?' }],
+      [weatherTool]
+    );
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0]?.toolName).toBe('get_weather');
+    expect(result.toolCalls[0]?.arguments).toEqual({ city: 'Berlin' });
+    expect(result.toolCalls[0]?.rawArguments).toBe(JSON.stringify({ city: 'Berlin' }));
+    expect(result.toolCalls[0]?.id).toBe('call_ds_abc');
+    expect(result.stopReason).toBe('tool_use');
+    expect(result.model).toBe('deepseek-chat');
+    expect(result.usage.inputTokens).toBe(20);
+    expect(result.usage.outputTokens).toBe(15);
+  });
+
+  it('returns empty toolCalls and stopReason end_turn when model responds with text', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('The weather is cloudy.'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const result = await client.withTools([{ role: 'user', content: 'Hello' }], [weatherTool]);
+
+    expect(result.toolCalls).toHaveLength(0);
+    expect(result.content).toBe('The weather is cloudy.');
+    expect(result.stopReason).toBe('end_turn');
+  });
+
+  it('sends nested Chat Completions tool shape (function key inside type:function)', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
+
+    const callParams = mockCreate.mock.calls[0]?.[0] as { tools?: unknown[] };
+    const toolParam = callParams.tools?.[0] as Record<string, unknown>;
+    // Chat Completions nested shape — must have 'function' key
+    expect(toolParam['type']).toBe('function');
+    expect(typeof toolParam['function']).toBe('object');
+    const fn = toolParam['function'] as Record<string, unknown>;
+    expect(fn['name']).toBe('get_weather');
+    expect(fn['description']).toBe('Get the current weather for a city.');
+    // Must NOT have top-level 'name' (that is the Responses API flat shape)
+    expect(toolParam['name']).toBeUndefined();
+  });
+
+  it("maps toolChoice:'any' to 'required'", async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      toolChoice: 'any',
+    });
+
+    const callParams = mockCreate.mock.calls[0]?.[0] as { tool_choice?: unknown };
+    expect(callParams.tool_choice).toBe('required');
+  });
+
+  it('maps named toolChoice to { type:function, function: { name } }', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      toolChoice: { name: 'get_weather' },
+    });
+
+    const callParams = mockCreate.mock.calls[0]?.[0] as { tool_choice?: unknown };
+    expect(callParams.tool_choice).toEqual({
+      type: 'function',
+      function: { name: 'get_weather' },
+    });
+  });
+
+  it('sets parallel_tool_calls: false when parallelToolCalls is false', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      parallelToolCalls: false,
+    });
+
+    const callParams = mockCreate.mock.calls[0]?.[0] as { parallel_tool_calls?: unknown };
+    expect(callParams.parallel_tool_calls).toBe(false);
+  });
+
+  it('throws kind:tool_arguments_invalid when schema validation fails', async () => {
+    const strictTool = {
+      name: 'strict_tool',
+      description: 'Strict.',
+      inputSchema: {
+        parse: (d: unknown) => {
+          if (typeof (d as { n?: unknown }).n !== 'number') {
+            throw new Error('Expected number');
+          }
+          return d as { n: number };
+        },
+      },
+    };
+
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(mockCompletionWithToolCall('strict_tool', { n: 'bad' }));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await client
+      .withTools([{ role: 'user', content: 'Hi' }], [strictTool])
+      .catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('tool_arguments_invalid');
+      expect(thrown.retryable).toBe(false);
+    }
+  });
+});

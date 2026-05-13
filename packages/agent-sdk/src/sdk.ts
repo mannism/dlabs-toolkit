@@ -16,6 +16,7 @@ import type {
   LlmResponse,
   LlmStreamChunk,
   LlmStructuredResponse,
+  LlmToolResponse,
   LlmUsage,
 } from '@diabolicallabs/llm-client';
 import type { AgentSdkConfig, CallRecord, InstrumentedLlmClient } from './types.js';
@@ -27,12 +28,15 @@ import type { AgentSdkConfig, CallRecord, InstrumentedLlmClient } from './types.
 /**
  * Builds a CallRecord from normalized LlmUsage data.
  * call_id uses crypto.randomUUID() — Node 20 built-in, no external package.
+ * toolResponse is optional — populated only for withTools() calls to enable
+ * per-tool cost attribution in the Spend Dashboard.
  */
 function buildCallRecord(
   usage: LlmUsage,
   model: string,
   latencyMs: number,
-  config: AgentSdkConfig
+  config: AgentSdkConfig,
+  toolResponse?: LlmToolResponse
 ): CallRecord {
   return {
     agent_id: config.identity.agentId,
@@ -54,6 +58,10 @@ function buildCallRecord(
     }),
     timestamp: new Date().toISOString(),
     call_id: crypto.randomUUID(),
+    ...(toolResponse !== undefined &&
+      toolResponse.toolCalls.length > 0 && {
+        tool_calls: toolResponse.toolCalls,
+      }),
   };
 }
 
@@ -197,11 +205,26 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     return response;
   }
 
+  // withTools() — intercepts native tool-calling calls.
+  // Captures tool_calls in the CallRecord to enable per-tool cost attribution.
+  // Errors are propagated to the caller — ingestion is fire-and-forget.
+  async function withTools(...args: Parameters<LlmClient['withTools']>): Promise<LlmToolResponse> {
+    const start = Date.now();
+    const response = await client.withTools(...args);
+    const latencyMs = Date.now() - start;
+
+    const record = buildCallRecord(response.usage, response.model, latencyMs, config, response);
+    void dispatchWithRetry(record, config);
+
+    return response;
+  }
+
   return {
     config: client.config,
     sdkConfig: config,
     complete,
     stream,
     structured,
+    withTools,
   };
 }

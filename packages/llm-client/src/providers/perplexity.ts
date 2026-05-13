@@ -63,12 +63,15 @@ import {
 } from '../retry.js';
 import type {
   LlmCallOptions,
+  LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
   LlmStructuredResponse,
+  LlmTool,
+  LlmToolResponse,
   LlmUsage,
 } from '../types.js';
 import { LlmError } from '../types.js';
@@ -443,10 +446,34 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     return result;
   }
 
+  /**
+   * withTools() — NOT supported by Perplexity.
+   *
+   * Perplexity Sonar models are search/retrieval models — they do not support
+   * function calling. Throws immediately before making any API call (Tom §5.2).
+   * Use complete() or structured() instead.
+   */
+  function withTools(
+    _messages: LlmMessage[],
+    _tools: LlmTool[],
+    _options?: LlmCallWithToolsOptions
+  ): Promise<LlmToolResponse> {
+    return Promise.reject(
+      new LlmError({
+        message:
+          'Perplexity provider does not support tool calling — use complete() or structured() instead.',
+        provider: PROVIDER,
+        kind: 'bad_request',
+        retryable: false,
+      })
+    );
+  }
+
   return {
     config,
     complete,
     stream,
     structured,
+    withTools,
   };
 }

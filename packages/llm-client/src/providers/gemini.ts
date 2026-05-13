@@ -44,14 +44,21 @@
 import {
   ApiError,
   type Content,
+  type FunctionDeclaration,
   type GenerateContentConfig,
   type GenerateContentResponse,
   type GenerateContentResponseUsageMetadata,
   GoogleGenAI,
+  type ToolConfig,
 } from '@google/genai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { parseJsonOrThrow } from '../extract-json.js';
-import { isZodSchema, toProviderSchema } from '../json-schema.js';
+import {
+  isZodSchema,
+  type JsonNode,
+  stripGeminiSentinel,
+  toProviderSchema,
+} from '../json-schema.js';
 import {
   classifyHttpStatus,
   mergeRetryOptsWithSignal,
@@ -60,12 +67,16 @@ import {
 } from '../retry.js';
 import type {
   LlmCallOptions,
+  LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
   LlmStructuredResponse,
+  LlmTool,
+  LlmToolCall,
+  LlmToolResponse,
   LlmUsage,
 } from '../types.js';
 import { LlmError } from '../types.js';
@@ -346,10 +357,15 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
       throw new LlmError({
         message: `Gemini structured output: response is not valid JSON. Raw: ${rawContent.slice(0, 200)}`,
         provider: PROVIDER,
+        kind: 'structured_parse_failed',
         retryable: false,
         cause: err,
       });
     }
+
+    // Strip _placeholder sentinel properties injected by geminiPostprocess to satisfy
+    // Gemini's empty-object constraint (Item 1.3 — auto-rewrite in toolkit, not consumer code).
+    parsed = stripGeminiSentinel(parsed);
 
     // Defense-in-depth: validate against Zod schema even after strict-mode call
     let data: T;
@@ -452,10 +468,165 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     };
   }
 
+  /**
+   * withTools() — native tool calling via @google/genai SDK v2.x.
+   *
+   * Tool shape: config.tools[].functionDeclarations[].parametersJsonSchema (Tom §3.2).
+   * Uses `parametersJsonSchema` (plain JSON Schema) — NOT `parameters` (Gemini's Schema type).
+   * This avoids the conversion layer between JSON Schema and Gemini's proprietary Schema type.
+   *
+   * Gemini does not issue tool call IDs — UUIDs are synthesized (v7-style: time-based + random).
+   * parallelToolCalls: ignored — Gemini has no equivalent flag.
+   * toolChoice: 'none' sets tool_config.function_calling_config.mode = 'NONE'.
+   *   'any' → mode = 'ANY'. 'auto' → mode = 'AUTO'. Named tool not directly supported
+   *   (Gemini doesn't have a single-function forced-call mode); falls back to 'AUTO'.
+   *
+   * Stop reason mapping: STOP + functionCall parts → 'tool_use'.
+   *   SAFETY → 'content_filter'. MAX_TOKENS → 'max_tokens'. Otherwise 'end_turn'.
+   */
+  async function withTools(
+    messages: LlmMessage[],
+    tools: LlmTool[],
+    options?: LlmCallWithToolsOptions
+  ): Promise<LlmToolResponse> {
+    const model = options?.model ?? config.model;
+    const { system, contents } = buildGeminiContents(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
+    const start = Date.now();
+
+    // Build Gemini FunctionDeclaration array using parametersJsonSchema (plain JSON Schema)
+    const functionDeclarations: FunctionDeclaration[] = tools.map((t) => {
+      const parametersSchema = isZodSchema(t.inputSchema)
+        ? toProviderSchema(t.inputSchema as import('zod').ZodType, 'gemini')
+        : (t.inputSchema as unknown as JsonNode);
+      return {
+        name: t.name,
+        description: t.description,
+        parametersJsonSchema: parametersSchema as unknown,
+      };
+    });
+
+    // Map toolChoice to Gemini's function_calling_config.mode.
+    // Return type is ToolConfig (non-optional) so exactOptionalPropertyTypes accepts the
+    // assignment to geminiConfig.toolConfig.
+    function buildFunctionCallingConfig(): ToolConfig {
+      const tc = options?.toolChoice;
+      if (tc === 'none') return { function_calling_config: { mode: 'NONE' } } as ToolConfig;
+      if (tc === 'any') return { function_calling_config: { mode: 'ANY' } } as ToolConfig;
+      // 'auto', undefined, or named tool → AUTO
+      return { function_calling_config: { mode: 'AUTO' } } as ToolConfig;
+    }
+
+    const rawResponse = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const geminiConfig: GenerateContentConfig = {
+            tools: [{ functionDeclarations }],
+            toolConfig: buildFunctionCallingConfig(),
+          };
+
+          if (system !== undefined) geminiConfig.systemInstruction = system;
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) geminiConfig.temperature = temperature;
+
+          return await Promise.race([
+            ai.models.generateContent({ model, contents, config: geminiConfig }),
+            makeAbortRacePromise(ctl.signal),
+          ]);
+        } catch (err) {
+          throw normalizeGeminiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
+
+    // Extract text content and function call parts from the response
+    const textParts: string[] = [];
+    const toolCalls: LlmToolCall[] = [];
+
+    const candidates = rawResponse.candidates ?? [];
+    for (const candidate of candidates) {
+      for (const part of candidate.content?.parts ?? []) {
+        if (part.text !== undefined && part.text.length > 0) {
+          textParts.push(part.text);
+        } else if (part.functionCall !== undefined) {
+          const fc = part.functionCall;
+          const rawArgs = JSON.stringify(fc.args ?? {});
+          let parsedArgs: unknown = fc.args ?? {};
+
+          // Validate against the tool's inputSchema
+          const tool = tools.find((t) => t.name === fc.name);
+          if (tool !== undefined) {
+            try {
+              parsedArgs = tool.inputSchema.parse(fc.args ?? {});
+            } catch (err) {
+              throw new LlmError({
+                message: `Gemini withTools: arguments for tool '${fc.name ?? ''}' failed schema validation. ${String(err)}`,
+                provider: PROVIDER,
+                kind: 'tool_arguments_invalid',
+                retryable: false,
+                cause: err,
+              });
+            }
+          }
+
+          // Gemini does not issue call IDs — synthesize a UUID v7-style ID
+          toolCalls.push({
+            id: synthesizeId(),
+            toolName: fc.name ?? '',
+            arguments: parsedArgs,
+            rawArguments: rawArgs,
+          });
+        }
+      }
+    }
+
+    // Map Gemini finishReason to LlmToolResponse.stopReason.
+    // Cast to string before string comparisons — the SDK's FinishReason union may not
+    // include all values (e.g. STOP_SEQUENCE) depending on SDK version.
+    const firstCandidate = candidates[0];
+    const finishReason = String(firstCandidate?.finishReason ?? 'STOP');
+    let stopReason: LlmToolResponse['stopReason'] = toolCalls.length > 0 ? 'tool_use' : 'end_turn';
+    if (finishReason === 'SAFETY') stopReason = 'content_filter';
+    if (finishReason === 'MAX_TOKENS') stopReason = 'max_tokens';
+    if (finishReason === 'STOP_SEQUENCE') stopReason = 'stop_sequence';
+
+    return {
+      content: textParts.join(''),
+      toolCalls,
+      model: rawResponse.modelVersion ?? model,
+      usage: normalizeUsage(rawResponse.usageMetadata),
+      latencyMs: Date.now() - start,
+      stopReason,
+    };
+  }
+
   return {
     config,
     complete,
     stream,
     structured,
+    withTools,
   };
+}
+
+/**
+ * Synthesize a UUID v7-style ID for providers that do not issue tool call IDs.
+ * Format: 8-4-4-4-12 hex, first 12 hex chars are time-derived (ms precision).
+ * Not cryptographically secure — for tracing/correlation only.
+ */
+function synthesizeId(): string {
+  const now = Date.now();
+  const timeHex = now.toString(16).padStart(12, '0');
+  const rand = () =>
+    Math.floor(Math.random() * 0x10000)
+      .toString(16)
+      .padStart(4, '0');
+  // UUID v7-style: time-high-and-version | time-mid | time-low | clock-seq | node
+  return `${timeHex.slice(0, 8)}-${timeHex.slice(8, 12)}-7${rand().slice(1)}-${rand()}-${rand()}${rand()}${rand()}`;
 }

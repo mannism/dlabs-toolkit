@@ -25,6 +25,7 @@
 
 import OpenAI from 'openai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
+import { isZodSchema, type JsonNode, toProviderSchema } from '../json-schema.js';
 import {
   classifyHttpStatus,
   mergeRetryOptsWithSignal,
@@ -33,12 +34,16 @@ import {
 } from '../retry.js';
 import type {
   LlmCallOptions,
+  LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
   LlmStructuredResponse,
+  LlmTool,
+  LlmToolCall,
+  LlmToolResponse,
   LlmUsage,
 } from '../types.js';
 import { LlmError } from '../types.js';
@@ -315,10 +320,160 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     };
   }
 
+  /**
+   * withTools() — tool calling via Chat Completions (DeepSeek Chat Completions API).
+   *
+   * Tool shape: Chat Completions nested shape (Tom §4.3):
+   *   { type: 'function', function: { name, description, parameters } }
+   * NOT the Responses API flat shape — DeepSeek does not support the Responses API.
+   *
+   * deepseek-chat (V3) supports tool calling.
+   * deepseek-reasoner (R1) has limited tool calling support — behavior may differ.
+   * Document this limitation in README but do not block the call.
+   */
+  async function withTools(
+    messages: LlmMessage[],
+    tools: LlmTool[],
+    options?: LlmCallWithToolsOptions
+  ): Promise<LlmToolResponse> {
+    const model = options?.model ?? config.model;
+    const chatMessages = buildMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const start = Date.now();
+
+    // Build Chat Completions tool array — nested function key (NOT Responses API flat shape)
+    const chatTools: OpenAI.Chat.ChatCompletionTool[] = tools.map((t) => {
+      const parameters = isZodSchema(t.inputSchema)
+        ? (toProviderSchema(t.inputSchema as import('zod').ZodType, 'openai') as JsonNode)
+        : (t.inputSchema as unknown as JsonNode);
+      return {
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: parameters as Record<string, unknown>,
+        },
+      };
+    });
+
+    // Map toolChoice to Chat Completions format
+    function buildToolChoice():
+      | 'auto'
+      | 'none'
+      | 'required'
+      | OpenAI.Chat.ChatCompletionNamedToolChoice {
+      const tc = options?.toolChoice;
+      if (tc === undefined || tc === 'auto') return 'auto';
+      if (tc === 'none') return 'none';
+      if (tc === 'any') return 'required';
+      return { type: 'function', function: { name: tc.name } };
+    }
+
+    const rawResponse = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+            model,
+            messages: chatMessages,
+            stream: false,
+            tools: chatTools,
+            tool_choice: buildToolChoice(),
+          };
+
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_tokens = maxTokens;
+
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
+
+          if (options?.parallelToolCalls === false) {
+            params.parallel_tool_calls = false;
+          }
+
+          return await client.chat.completions.create(params, { signal: ctl.signal });
+        } catch (err) {
+          throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
+
+    // Extract text content and tool calls from Chat Completions response
+    const choice = rawResponse.choices[0];
+    const content = choice?.message.content ?? '';
+    const toolCalls: LlmToolCall[] = [];
+
+    for (const tc of choice?.message.tool_calls ?? []) {
+      // ChatCompletionMessageToolCall union includes ChatCompletionMessageCustomToolCall
+      // which has no .function property. Narrow to the standard function call type.
+      if (tc.type !== 'function') continue;
+      const fn = tc.function;
+      const rawArgs = fn.arguments;
+      let parsedArgs: unknown;
+      try {
+        parsedArgs = JSON.parse(rawArgs);
+      } catch {
+        parsedArgs = rawArgs;
+      }
+
+      const tool = tools.find((t) => t.name === fn.name);
+      if (tool !== undefined) {
+        try {
+          parsedArgs = tool.inputSchema.parse(parsedArgs);
+        } catch (err) {
+          throw new LlmError({
+            message: `DeepSeek withTools: arguments for tool '${fn.name}' failed schema validation. ${String(err)}`,
+            provider: PROVIDER,
+            kind: 'tool_arguments_invalid',
+            retryable: false,
+            cause: err,
+          });
+        }
+      }
+
+      toolCalls.push({
+        id: tc.id,
+        toolName: fn.name,
+        arguments: parsedArgs,
+        rawArguments: rawArgs,
+      });
+    }
+
+    // Map Chat Completions finish_reason to LlmToolResponse.stopReason
+    function mapFinishReason(reason: string | null | undefined): LlmToolResponse['stopReason'] {
+      switch (reason) {
+        case 'tool_calls':
+          return 'tool_use';
+        case 'stop':
+          return 'end_turn';
+        case 'length':
+          return 'max_tokens';
+        case 'content_filter':
+          return 'content_filter';
+        default:
+          return toolCalls.length > 0 ? 'tool_use' : 'end_turn';
+      }
+    }
+
+    return {
+      content,
+      toolCalls,
+      model: rawResponse.model,
+      id: rawResponse.id,
+      usage: normalizeUsage(rawResponse.usage),
+      latencyMs: Date.now() - start,
+      stopReason: mapFinishReason(choice?.finish_reason),
+    };
+  }
+
   return {
     config,
     complete,
     stream,
     structured,
+    withTools,
   };
 }

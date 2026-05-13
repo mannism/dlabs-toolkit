@@ -19,6 +19,7 @@ export { classifyHttpStatus } from './retry.js';
 // Error kind type — consumers use this to branch without parsing message strings
 export type {
   LlmCallOptions,
+  LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
   LlmErrorKind,
@@ -26,6 +27,9 @@ export type {
   LlmResponse,
   LlmStreamChunk,
   LlmStructuredResponse,
+  LlmTool,
+  LlmToolCall,
+  LlmToolResponse,
   LlmUsage,
 } from './types.js';
 // Error class and kind discriminator — exported as value, not just type

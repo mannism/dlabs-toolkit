@@ -13,7 +13,7 @@
  *   - ingestionKey used as Bearer token
  */
 
-import type { LlmClient, LlmClientConfig, LlmUsage } from '@diabolicallabs/llm-client';
+import type { LlmClient, LlmClientConfig, LlmToolCall, LlmUsage } from '@diabolicallabs/llm-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { instrumentClient } from './index.js';
 import type { AgentSdkConfig } from './types.js';
@@ -48,6 +48,13 @@ const sdkConfig: AgentSdkConfig = {
 
 const mockMessages = [{ role: 'user' as const, content: 'Hello' }];
 
+const mockToolCall: LlmToolCall = {
+  id: 'call_test_123',
+  toolName: 'get_weather',
+  arguments: { city: 'London' },
+  rawArguments: '{"city":"London"}',
+};
+
 function makeMockClient(overrides?: Partial<LlmClient>): LlmClient {
   return {
     config: mockConfig,
@@ -59,6 +66,14 @@ function makeMockClient(overrides?: Partial<LlmClient>): LlmClient {
     }),
     stream: vi.fn(),
     structured: vi.fn(),
+    withTools: vi.fn().mockResolvedValue({
+      content: '',
+      toolCalls: [mockToolCall],
+      model: 'claude-sonnet-4-6',
+      usage: mockUsage,
+      latencyMs: 120,
+      stopReason: 'tool_use',
+    }),
     ...overrides,
   };
 }
@@ -497,5 +512,116 @@ describe('security', () => {
     for (const call of warnSpy.mock.calls) {
       expect(String(call[0])).not.toContain(sdkConfig.ingestionKey);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// withTools()
+// ---------------------------------------------------------------------------
+
+describe('withTools()', () => {
+  const mockTool = {
+    name: 'get_weather',
+    description: 'Get weather.',
+    inputSchema: { parse: (d: unknown) => d as { city: string } },
+  };
+
+  it('returns the LlmToolResponse from the underlying client', async () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    const result = await instrumented.withTools(
+      [{ role: 'user', content: 'What is the weather in London?' }],
+      [mockTool]
+    );
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0]?.toolName).toBe('get_weather');
+    expect(result.stopReason).toBe('tool_use');
+    expect(result.model).toBe('claude-sonnet-4-6');
+    expect(result.usage).toEqual(mockUsage);
+  });
+
+  it('dispatches a CallRecord with tool_calls populated', async () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.withTools([{ role: 'user', content: 'Weather?' }], [mockTool]);
+
+    // Allow the fire-and-forget dispatch to run
+    await new Promise<void>((r) => setTimeout(r, 20));
+
+    const mockFetch = vi.mocked(fetch);
+    expect(mockFetch).toHaveBeenCalledOnce();
+
+    const [, init] = getFirstFetchCall(mockFetch);
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+
+    expect(Array.isArray(body['tool_calls'])).toBe(true);
+    const toolCalls = body['tool_calls'] as LlmToolCall[];
+    expect(toolCalls[0]?.toolName).toBe('get_weather');
+    expect(toolCalls[0]?.id).toBe('call_test_123');
+  });
+
+  it('does NOT include tool_calls in CallRecord when toolCalls array is empty', async () => {
+    const clientWithNoTools = makeMockClient({
+      withTools: vi.fn().mockResolvedValue({
+        content: 'No tools needed.',
+        toolCalls: [],
+        model: 'claude-sonnet-4-6',
+        usage: mockUsage,
+        latencyMs: 80,
+        stopReason: 'end_turn',
+      }),
+    });
+    const instrumented = instrumentClient(clientWithNoTools, sdkConfig);
+
+    await instrumented.withTools([{ role: 'user', content: 'Hi' }], [mockTool]);
+
+    await new Promise<void>((r) => setTimeout(r, 20));
+
+    const [, init] = getFirstFetchCall(vi.mocked(fetch));
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+
+    // tool_calls should be absent (not present at all) when no tools were called
+    expect(body['tool_calls']).toBeUndefined();
+  });
+
+  it('propagates LlmError from the underlying client (no swallow)', async () => {
+    const err = new Error('Model refused tool call');
+    const clientThatFails = makeMockClient({
+      withTools: vi.fn().mockRejectedValue(err),
+    });
+    const instrumented = instrumentClient(clientThatFails, sdkConfig);
+
+    await expect(
+      instrumented.withTools([{ role: 'user', content: 'Use a tool' }], [mockTool])
+    ).rejects.toThrow('Model refused tool call');
+  });
+
+  it('includes model and usage in the CallRecord', async () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.withTools([{ role: 'user', content: 'Hi' }], [mockTool]);
+    await new Promise<void>((r) => setTimeout(r, 20));
+
+    const [, init] = getFirstFetchCall(vi.mocked(fetch));
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+
+    expect(body['model']).toBe('claude-sonnet-4-6');
+    expect(body['prompt_tokens']).toBe(mockUsage.inputTokens);
+    expect(body['completion_tokens']).toBe(mockUsage.outputTokens);
+    expect(body['agent_id']).toBe(sdkConfig.identity.agentId);
+  });
+
+  it('skips dispatch in disabled mode', async () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, { ...sdkConfig, disabled: true });
+
+    await instrumented.withTools([{ role: 'user', content: 'Hi' }], [mockTool]);
+    await new Promise<void>((r) => setTimeout(r, 20));
+
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
