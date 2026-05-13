@@ -582,7 +582,9 @@ describe('hooks on streaming paths', () => {
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async () => ({ skip: cachedGen() }),
-        afterCall: async (ctx) => captured.push(ctx),
+        afterCall: async (ctx) => {
+          captured.push(ctx);
+        },
       },
     });
 
