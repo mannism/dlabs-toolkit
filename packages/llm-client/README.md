@@ -4,9 +4,10 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**v1.3.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
+**v1.4.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
 
 Highlights:
+- **v1.4.0** — Provider capability matrix (`getModelCapabilities()`), linked AbortController helper (`linkedAbortController()`), response IDs on all response types (`id` + `idSource`).
 - **v1.3.0** — Streaming structured output (`streamStructured()`) — token streaming + Zod-validated final object. OpenAI, Anthropic, DeepSeek supported; Gemini and Perplexity throw pre-call.
 - **v1.2.0** — Configurable retry strategy (exponential/linear/fixed/decorrelated), provider failover via `model: string[]`, `Retry-After` header support.
 - **v1.1.0** — Per-response cost computation via `@diabolicallabs/llm-pricing`; concurrency pool at `@diabolicallabs/llm-client/pool`.
@@ -373,7 +374,7 @@ Each `LlmTool.inputSchema` must expose a `.parse(data: unknown)` method. If the 
 
 ### Gemini ID synthesis
 
-Gemini does not issue tool call IDs. The toolkit synthesizes UUID v7-style IDs (time-based + random) for every `LlmToolCall.id` on the Gemini path. These IDs are unique within a request but not cryptographically random.
+Gemini does not issue native response IDs or tool call IDs. The toolkit synthesizes UUID v7-style IDs (time-based + random) for `LlmToolCall.id` and for the response-level `id` field on all Gemini responses (`complete()`, `structured()`, `withTools()`). These IDs are time-sortable (the first 12 hex characters encode the millisecond timestamp) but not cryptographically random. Use `idSource` to distinguish synthesized IDs from provider-issued ones.
 
 ## Streaming structured output (v1.3.0)
 
@@ -426,6 +427,129 @@ type LlmStreamStructuredEvent<T> =
 `streamStructured()` **does not attach cost** — cost computation requires final token counts from a complete response object. Use `complete()` or `structured()` if you need cost tracking via `config.pricing`.
 
 AbortSignal, stall detection (`streamStallTimeoutMs`), and timeout (`timeoutMs`) all work identically to `stream()`.
+
+## Provider capability matrix (v1.4.0)
+
+Query provider capabilities statically — no client instance needed.
+
+```typescript
+import { getModelCapabilities } from '@diabolicallabs/llm-client';
+
+const caps = getModelCapabilities('anthropic', 'claude-opus-4-7');
+if (caps === null) {
+  throw new Error('Unknown model');
+}
+
+console.log(caps.contextWindow);    // 1_000_000
+console.log(caps.tools);            // true
+console.log(caps.parallelTools);    // true
+console.log(caps.promptCache);      // 'ephemeral'
+console.log(caps.structuredOutput); // 'tool-use'
+console.log(caps.responseIds);      // 'provider'
+console.log(caps.streamStructured); // true
+```
+
+Returns `null` for unknown models — never throws.
+
+### `ModelCapabilities` shape
+
+```typescript
+interface ModelCapabilities {
+  contextWindow: number;          // max input tokens
+  maxOutputTokens: number;        // max single-response tokens
+  streaming: boolean;             // stream() supported
+  tools: boolean;                 // withTools() supported
+  parallelTools: boolean;         // model can invoke multiple tools per turn
+  promptCache: 'ephemeral' | '1h' | null; // Anthropic only; null for all others
+  structuredOutput: 'tool-use' | 'json-schema' | 'response-schema' | null;
+  responseIds: 'provider' | 'synthesized'; // Gemini = 'synthesized'
+  streamStructured: boolean;      // streamStructured() supported
+}
+```
+
+### Provider capability summary
+
+| Provider | tools | parallelTools | promptCache | structuredOutput | responseIds | streamStructured |
+|---|---|---|---|---|---|---|
+| Anthropic | true | true | `'ephemeral'` | `'tool-use'` | `'provider'` | true |
+| OpenAI | true | true | null | `'json-schema'` | `'provider'` | true |
+| Gemini | true | false | null | `'response-schema'` | `'synthesized'` | false |
+| DeepSeek | true | true | null | `'json-schema'` | `'provider'` | true |
+| Perplexity | false | false | null | null | `'provider'` | false |
+
+`getModelCapabilities` covers all models in `@diabolicallabs/llm-pricing`'s `DEFAULT_PRICING_TABLE`. The table is versioned at `CAPABILITIES_VERSIONED_AT: '2026-05-13'` — import it to detect staleness.
+
+## Linked AbortController helper (v1.4.0)
+
+`linkedAbortController` is a utility for fan-out patterns where a root signal cancels all in-flight calls and individual calls have their own per-call timeouts.
+
+```typescript
+import { linkedAbortController } from '@diabolicallabs/llm-client';
+
+const root = new AbortController();
+
+const calls = tasks.map(t => {
+  const child = linkedAbortController(root.signal, { timeoutMs: 30_000 });
+  return client
+    .complete(t.messages, { signal: child.signal })
+    .finally(() => child.dispose()); // clean up on completion — prevents listener leak
+});
+
+// Cancel all in-flight calls at once
+root.abort('shutdown');
+
+// Or wait for all results (some may have individual timeouts)
+const results = await Promise.allSettled(calls);
+```
+
+### Behaviour
+
+| Scenario | Result |
+|---|---|
+| Parent aborts | Child aborts immediately, forwarding the parent's abort reason |
+| Parent already aborted at call time | Child aborts synchronously, no API call made |
+| `timeoutMs` fires | Child aborts with timeout reason string; independent of the parent signal |
+| `dispose()` called | Parent listener + timer cleared; child NOT aborted |
+| `abort()` called on handle | Child aborts immediately; `dispose()` called implicitly |
+
+Always call `dispose()` in a `finally` block — it removes the parent listener and clears the timer, preventing leaks if the parent fires after the call completes.
+
+### API
+
+```typescript
+function linkedAbortController(
+  parentSignal: AbortSignal,
+  options?: { timeoutMs?: number }
+): {
+  signal: AbortSignal;     // pass to client.complete(), stream(), etc.
+  abort: (reason?) => void; // abort child immediately
+  dispose: () => void;      // clean up without aborting
+};
+```
+
+## Response IDs everywhere (v1.4.0)
+
+All three response types (`LlmResponse`, `LlmStructuredResponse<T>`, `LlmToolResponse`) now carry `id: string` and `idSource: 'provider' | 'synthesized'` on every call.
+
+```typescript
+const response = await client.complete(messages);
+console.log(response.id);       // 'msg_abc123' (Anthropic) or synthesized UUID (Gemini)
+console.log(response.idSource); // 'provider' | 'synthesized'
+```
+
+### ID sources by provider
+
+| Provider | id source | idSource |
+|---|---|---|
+| Anthropic | `response.id` (Anthropic message ID) | `'provider'` |
+| OpenAI | `response.id` (Responses API) | `'provider'` |
+| DeepSeek | `response.id` (Chat Completions) | `'provider'` |
+| Perplexity | `response.id` (Chat Completions) | `'provider'` |
+| Gemini | UUID v7-style synthesized by toolkit | `'synthesized'` |
+
+Synthesized IDs are time-sortable (first 12 hex chars encode the millisecond timestamp) — useful for trace correlation without a separate timestamp. Check `idSource === 'synthesized'` before treating the ID as a durable provider reference.
+
+**Migration from v1.3.x:** `id` was previously `id?` (optional) on `LlmStructuredResponse` and `LlmToolResponse`, and absent from `LlmResponse`. It is now `id: string` (always present) on all three types. Remove any `response.id !== undefined` null checks.
 
 ## Cancellation, timeouts, stall detection
 

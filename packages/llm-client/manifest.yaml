@@ -1,55 +1,70 @@
 name: "@diabolicallabs/llm-client"
 purpose: >
-  Unified LLM API across Anthropic, OpenAI, Gemini, DeepSeek, and Perplexity.
-  Provides a single LlmClient interface with streaming, non-streaming, and
-  structured output (Zod-validated). Handles retry with exponential backoff +
-  full jitter, error normalization into LlmError, and token usage normalization
-  into a consistent LlmUsage shape regardless of provider.
-  Perplexity provider adds web-grounded responses with citation extraction,
-  deduplication, and providerOptions escape hatch for search filters.
-  v0.3.0 adds per-call timeout overrides, caller AbortSignal support,
-  stream stall detection (withStallTimeout), and LlmError.kind discriminator.
-  v0.4.0 adds native strict structured outputs: OpenAI json_schema, Anthropic
-  tool-use, Gemini responseSchema — all triggered automatically when a Zod 4
-  schema is passed to structured(). Prompt-mode escape hatch preserved via
-  providerOptions.structuredMode = 'prompt'. LlmStructuredResponse gains
-  model, id, and citations fields.
+  Unified LLM client across 5 providers: OpenAI (Responses API), Anthropic, Gemini
+  (@google/genai v2.x), DeepSeek, and Perplexity. Provides a single LlmClient interface
+  with complete(), stream(), structured(), withTools(), and streamStructured() (v1.3.0+).
+  Error normalization into 14-kind LlmError taxonomy with retryability and status-code
+  classification. Token usage normalization into consistent LlmUsage shape regardless of
+  provider. Configurable retry with 4 strategies (exponential, linear, fixed, none).
+  Provider failover via model: string[] — tries each model in order on configured error kinds.
+  Optional cost tracking via @diabolicallabs/llm-pricing peer dep (LlmClientConfig.pricing).
+  Strict structured outputs: OpenAI json_schema, Anthropic tool-use, Gemini responseSchema,
+  DeepSeek/Perplexity prompt-fallback. Per-call timeout, AbortSignal, stream stall detection.
+  Optional semaphore + rate-limiter via @diabolicallabs/llm-client/pool sub-path (v1.2.0+).
+  v1.4.0 additions: capability matrix (getModelCapabilities), linkedAbortController fan-out
+  helper, and response IDs (id + idSource) on all three response types.
 owner: Sable
 status: published
 
 depends_on:
   - name: "@anthropic-ai/sdk"
-    why: "Anthropic Claude provider — Week 2 implementation"
+    version: "^0.95.2"
+    why: "Anthropic Claude provider — messages API with streaming and prompt cache support"
   - name: "openai"
-    why: "OpenAI provider — Week 2 implementation"
+    version: "^6.37.0"
+    why: "OpenAI Responses API provider; also used by DeepSeek and Perplexity with baseURL override"
   - name: "zod"
-    why: "Structured output schema validation. Used in structured() to parse and validate JSON responses."
+    why: "Structured output schema validation. Used in structured() and streamStructured() to parse and validate JSON responses."
   - name: "@google/genai"
-    why: "Google Gemini provider — Week 3 implementation"
-  - name: "deepseek (fetch-based)"
-    why: "DeepSeek provider — Week 3 implementation. DeepSeek's API is OpenAI-compatible; uses the openai SDK with a base URL override."
-  - name: "perplexity (fetch-based)"
-    why: "Perplexity provider — fully implemented in Week 5. OpenAI SDK with baseURL override pointing at https://api.perplexity.ai. Returns web-grounded responses with citation URLs."
+    version: "^2.2.0"
+    why: "Google Gemini provider — generateContent + streaming via v2.x SDK"
+  - name: "deepseek (openai SDK with baseURL override)"
+    why: "DeepSeek's API is OpenAI Chat Completions-compatible; uses the openai SDK pointed at api.deepseek.com"
+  - name: "perplexity (openai SDK with baseURL override)"
+    why: "Perplexity's API is OpenAI-compatible; uses the openai SDK pointed at api.perplexity.ai. Returns web-grounded responses with citation URLs."
+  - name: "@diabolicallabs/llm-pricing"
+    version: "^0.1.0"
+    why: "Optional peer dep — enables per-call cost tracking when LlmClientConfig.pricing is set"
 
 depended_on_by:
   - name: "@diabolicallabs/agent-sdk"
     how: "agent-sdk wraps LlmClient via instrumentClient() to intercept all calls for cost tracking. LlmClient is a peer dep of agent-sdk, not bundled."
   - name: "GEOAudit"
-    how: "Pilot migration in Week 6 — replaces callLLM() in server.js"
+    how: "Live consumer — dynamic ESM import in api/server.js. All four providers (anthropic, openai, perplexity, gemini) active in production on caret range ^0.4.4 (auto-propagates on minor publishes)"
   - name: "FitChecker"
-    how: "Migration in post-Week 6 backlog — replaces lib/llm/providers/openai-provider.ts"
+    how: "Migration in backlog — replaces lib/llm/providers/openai-provider.ts"
   - name: "Agent Spend Dashboard"
-    how: "Born-in-toolkit consumer — installs @diabolicallabs/agent-sdk@next which wraps llm-client"
+    how: "Born-in-toolkit consumer — installs @diabolicallabs/agent-sdk which wraps llm-client"
 
 exports:
   - "createClient(config: LlmClientConfig): LlmClient"
   - "createClientFromEnv(provider, model, overrides?): LlmClient"
   - "LlmError (class)"
-  - "Types: LlmMessage, LlmClientConfig, LlmCallOptions, LlmUsage, LlmResponse, LlmStreamChunk, LlmStructuredResponse, LlmClient"
+  - "LlmErrorKind (type) — 14-kind discriminated union"
+  - "Types: LlmMessage, LlmClientConfig, LlmCallOptions, LlmUsage, LlmResponse, LlmStreamChunk, LlmStructuredResponse, LlmToolResponse, LlmClient, LlmCost"
+  - "RetryConfig, RetryStrategy (types)"
+  - "getModelCapabilities(provider, model): ModelCapabilities | null — provider capability lookup (v1.4.0+)"
+  - "ModelCapabilities (type) — capability descriptor returned by getModelCapabilities"
+  - "CAPABILITIES_VERSIONED_AT (constant) — ISO date of last capability table update"
+  - "linkedAbortController(parentSignal, opts?): LinkedAbortHandle — fan-out AbortController with optional per-child timeout (v1.4.0+)"
+  - "LinkedAbortHandle, LinkedAbortControllerOptions (types)"
+  - "withTools() — native tool calling on LlmClient (all providers except Perplexity)"
+  - "streamStructured() — async generator: streaming tokens + Zod-validated final output (v1.3.0+)"
+  - "@diabolicallabs/llm-client/pool sub-path: createSemaphore, createRateLimiter (v1.2.0+)"
 
 contracts:
   retry:
-    strategy: "exponential backoff with full jitter"
+    strategy: "exponential backoff with full jitter (default); also linear, fixed, none"
     formula: "delay = random(0, baseDelayMs * 2^attempt)"
     retryable_conditions: ["HTTP 429", "HTTP 502", "HTTP 503", "HTTP 504", "ECONNRESET", "ETIMEDOUT", "timeout"]
     non_retryable_conditions: ["HTTP 400", "HTTP 401", "HTTP 403", "HTTP 404", "cancelled", "stream_stall"]
@@ -60,6 +75,12 @@ contracts:
     caller_signal: "LlmCallOptions.signal — pre-abort throws immediately; mid-call abort kind:'cancelled', not retried"
     stream_stall: "LlmCallOptions.streamStallTimeoutMs (default 30000ms) — fires per chunk, resets on each yield"
     gemini_caveat: "Promise.race only — SDK HTTP request not cancelled. Backstop: httpOptions.timeout = configMs * 2"
+  response_ids:
+    anthropic: "provider-issued message ID (response.id)"
+    openai: "provider-issued response ID (rawResponse.id — Responses API)"
+    deepseek: "provider-issued response ID (rawResponse.id — Chat Completions)"
+    perplexity: "provider-issued response ID (response.id)"
+    gemini: "toolkit-synthesized UUID v7-style (time-derived prefix + random) — Gemini does not issue native IDs"
 
 failure_modes:
   - trigger: "All retries exhausted"
@@ -80,33 +101,23 @@ failure_modes:
   - trigger: "Provider SDK breaking change"
     impact: "Build failure in @diabolicallabs/llm-client; other packages unaffected"
     propagation: "contained to this package"
+  - trigger: "Model failover — all models in array exhausted"
+    impact: "Throws LlmError from the last attempted model"
+    propagation: "propagated after all models tried"
 
 performance:
   expected_latency: "Passthrough to provider — no overhead beyond retry logic"
   notes: "Token counting is done from the provider response, not via tiktoken. No sync-heavy computation."
 
 notes: |
-  Week 2 shipped: Anthropic + OpenAI providers, retry, structured output, 80%+ test coverage.
-  Week 3 shipped: Gemini (via @google/genai SDK) + DeepSeek (OpenAI SDK with baseURL override).
-  Week 5 shipped: Perplexity (OpenAI SDK with baseURL override at api.perplexity.ai).
-    - Citations: extracted from Perplexity citations[] string array, mapped to {url}, deduped by URL.
-    - providerOptions escape hatch: search_recency_filter, search_domain_filter, unknown fields pass-through.
-    - Reasoning: sonar-reasoning-pro supported; structured() strips <think> blocks before JSON parse.
-    - sonar-deep-research: treated as synchronous model; not verified live (may require async polling).
-  Week 6 shipped: per-call timeout, AbortSignal, stream stall detection (v0.3.0).
-    - abort.ts (new): createAttemptController, cancellableSleep, withStallTimeout, classifyAbort.
-    - LlmError.kind discriminator: cancelled | timeout | stream_stall | http | network | unknown.
-    - All 5 providers wired. Gemini uses Promise.race (no native SDK signal); 2x backstop on httpOptions.timeout.
-    - 244 unit tests (was 202). Typecheck and build clean.
-  Week 7 shipped: native strict structured outputs (v0.4.0).
-    - json-schema.ts (new): isZodSchema (Zod 4 detection via _zod marker), toProviderSchema (3 profiles).
-    - OpenAI: response_format json_schema strict:true path when Zod 4 schema detected.
-    - Anthropic: tool-use path with forced tool_choice; input extracted from content[].tool_use.input.
-    - Gemini: responseSchema populated (OpenAPI 3.0 target); belt-and-braces fence-strip retained.
-    - DeepSeek + Perplexity: prompt-only (API limitation); model/id/citations added to return shape.
-    - LlmStructuredResponse: model (required), id? (optional), citations? (Perplexity only).
-    - Escape hatch: providerOptions.structuredMode = 'prompt' → forces v0.3.0 prompt path.
-    - Zod 3 schemas: throws LlmError with clear "upgrade to Zod 4" message.
-    - 278 unit tests (+34). Typecheck and build clean. agent-sdk typecheck clean.
+  v1.0.0: OpenAI Responses API migration; 14-kind LlmError taxonomy; withTools() for all providers.
+  v1.1.0: Optional cost tracking via @diabolicallabs/llm-pricing peer dep.
+  v1.2.0: Configurable retry strategies (4 modes); provider failover via model: string[];
+          pool sub-path with semaphore + rate-limiter.
+  v1.3.0: streamStructured() — async generator: streaming tokens + Zod-validated output.
+          Supported providers: OpenAI, Anthropic, DeepSeek (JSON-mode accumulation).
+  v1.4.0 (pending): getModelCapabilities() capability matrix; linkedAbortController fan-out helper;
+          response IDs (id + idSource) on LlmResponse, LlmStructuredResponse, LlmToolResponse.
   Provider SDKs are devDependencies — bundled into dist at build time via tsup.
   Consumers do not need to install provider SDKs directly.
+  Published to npmjs.com under @diabolicallabs scope. GEOAudit is the live pilot consumer.
