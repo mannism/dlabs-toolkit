@@ -101,9 +101,48 @@ To type-safely target `gpt-5.5`, upgrade `openai` to the first SDK version that 
 
 ---
 
-### Breaking change 3 — OpenAI Responses API (Phase 2, pending)
+### Breaking change 3 — OpenAI provider migrated to Responses API
 
-The OpenAI provider will migrate from `chat.completions.create` to `responses.create` in v1.0.0 Phase 2. See Phase 2 PR for the full migration note covering:
-- Structured output param: `response_format` → `text: { format: ... }`
-- Streaming events: `choices[0].delta.content` → `ResponseTextDeltaEvent`
-- Tool shape: nested `function` key → flat `FunctionTool`
+The OpenAI provider now uses `client.responses.create` for all method paths (`complete`, `stream`, `structured`, `withTools`). The previous Chat Completions surface (`chat.completions.create`) is no longer used.
+
+#### What changed
+
+**Structured output parameter** — the `response_format` Chat Completions param does not exist on the Responses API. Structured output is now configured via `text.format`:
+
+| Chat Completions (v0.x) | Responses API (v1.0.0) |
+|---|---|
+| `response_format: { type: 'json_schema', json_schema: { name, schema, strict: true } }` | `text: { format: { type: 'json_schema', name, schema, strict: true } }` |
+| `response_format: { type: 'json_object' }` | `text: { format: { type: 'json_object' } }` |
+
+This is an internal implementation detail — if you are using `client.structured()`, no call-site changes are required. The migration is transparent to consumers of the `LlmClient` interface. Only consumers who were directly constructing raw `ResponseCreateParams` objects outside the toolkit need to update their params shape.
+
+**Streaming events** — the stream event shape changes at the SDK level:
+
+| Chat Completions (v0.x) | Responses API (v1.0.0) |
+|---|---|
+| `choices[0].delta.content` per chunk | `event.type === 'response.output_text.delta'` → `event.delta` |
+| `chunk.usage` (requires `stream_options.include_usage: true`) | `event.type === 'response.completed'` → `event.response.usage` |
+
+Consumers using `client.stream()` as `AsyncGenerator<LlmStreamChunk>` are unaffected — the `LlmStreamChunk` shape is unchanged.
+
+**Tool shape for `withTools()`** — new in v1.0.0. The Responses API uses a flat `FunctionTool` shape. **Do not use the Chat Completions nested `function` key with the OpenAI provider:**
+
+```ts
+// Chat Completions shape — NOT used by the OpenAI provider in v1.0.0
+{ type: 'function', function: { name, description, parameters } }
+
+// Responses API shape — used internally by withTools() on the OpenAI provider
+{ type: 'function', name, description, parameters, strict: null }
+```
+
+DeepSeek continues to use the Chat Completions shape because DeepSeek does not support the Responses API surface.
+
+**Token usage field names** — the Responses API reports `input_tokens` / `output_tokens` (not `prompt_tokens` / `completion_tokens`). Normalized inside the toolkit — `LlmUsage.inputTokens` / `outputTokens` are unchanged.
+
+**`max_completion_tokens` → `max_output_tokens`** — the Responses API uses `max_output_tokens`. Normalized inside the toolkit — `LlmCallOptions.maxTokens` is unchanged.
+
+#### Impact on consumers
+
+- **No call-site changes required** for consumers using `complete()`, `stream()`, or `structured()` via the `LlmClient` interface.
+- **GEOAudit** (`api/server.js`) — the migration is transparent; `createClient({ provider: 'openai', ... })` routes to the Responses API internally.
+- **Labs EXP_009** — already uses `client.responses.create` directly. When EXP_009 adopts this toolkit, the per-provider files (`providers/openai.ts`, etc.) are deleted and replaced by `createClient()` calls.
