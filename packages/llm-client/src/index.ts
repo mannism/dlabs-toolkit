@@ -10,6 +10,9 @@
  * Week 5: Perplexity — search-grounded, citations, providerOptions escape hatch.
  */
 
+// Provider capability matrix — getModelCapabilities(provider, model) → ModelCapabilities | null (v1.4.0+)
+export type { LlmProvider, ModelCapabilities } from './capabilities.js';
+export { CAPABILITIES_VERSIONED_AT, getModelCapabilities } from './capabilities.js';
 // Factory functions — all five providers fully implemented
 export { createClient, createClientFromEnv } from './client.js';
 // HTTP status classifier — useful for consumers building custom error handlers
