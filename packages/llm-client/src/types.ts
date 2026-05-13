@@ -42,6 +42,7 @@
  *   LlmClientConfig.fallbackOn — optional LlmErrorKind[] controlling when failover triggers.
  *   LlmResponse.requestedModel — the originally-requested primary model when failover occurred.
  *   LlmToolResponse.requestedModel — same.
+ *   LlmStructuredResponse.requestedModel — same.
  *
  * v1.1.0 additions (cost computation):
  *   LlmClientConfig.pricing — optional pricing config. When set, each response carries cost?.
@@ -385,6 +386,14 @@ export type LlmStructuredResponse<T> = {
    * Populated when LlmClientConfig.pricing is set.
    */
   cost?: LlmCost;
+  /**
+   * The originally-requested primary model (v1.2.0+).
+   * Populated only when provider failover occurred — i.e. the configured model array
+   * had its primary rejected and a fallback was used. When present, model holds the
+   * actually-serving fallback model and requestedModel holds the primary.
+   * Undefined when no failover happened or when model is a single string.
+   */
+  requestedModel?: string;
 };
 
 /**
