@@ -153,8 +153,10 @@ describe('OpenAI provider (Responses API) — complete()', () => {
     const client = createOpenAIProvider(configWithoutMax);
     await client.complete([{ role: 'user', content: 'Hi' }]);
 
-    const callArgs = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callArgs['max_output_tokens']).toBeUndefined();
+    // Concrete shape avoids TS4111 (noPropertyAccessFromIndexSignature fires on Record types)
+    type CallShape = { max_output_tokens?: unknown };
+    const callArgs = mockCreate.mock.calls[0]?.[0] as CallShape;
+    expect(callArgs.max_output_tokens).toBeUndefined();
   });
 
   it('uses responses.create — not chat.completions.create', async () => {
@@ -1083,12 +1085,14 @@ describe('OpenAI provider (Responses API) — withTools()', () => {
     await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
 
     const callParams = mockCreate.mock.calls[0]?.[0] as { tools?: unknown[] };
-    const toolParam = callParams.tools?.[0] as Record<string, unknown>;
+    // Concrete shape avoids TS4111 (noPropertyAccessFromIndexSignature fires on Record types)
+    type ToolParamShape = { name: string; description: string; type: string; function?: unknown };
+    const toolParam = callParams.tools?.[0] as ToolParamShape;
     // Flat shape: top-level name, description, parameters — no nested 'function' key
-    expect(toolParam['name']).toBe('get_weather');
-    expect(toolParam['description']).toBe('Get the current weather for a city.');
-    expect(toolParam['type']).toBe('function');
-    expect(toolParam['function']).toBeUndefined();
+    expect(toolParam.name).toBe('get_weather');
+    expect(toolParam.description).toBe('Get the current weather for a city.');
+    expect(toolParam.type).toBe('function');
+    expect(toolParam.function).toBeUndefined();
   });
 
   it("maps toolChoice:'any' to 'required' on the Responses API", async () => {
@@ -1382,5 +1386,42 @@ describe('OpenAI provider (Responses API) — streamStructured()', () => {
 
     const callArgs = mockCreate.mock.calls[0]?.[0] as { stream?: boolean };
     expect(callArgs.stream).toBe(true);
+  });
+});
+
+// ─── Response IDs (Wave 3a §3.4) ─────────────────────────────────────────────
+
+describe('OpenAI provider — response IDs (v1.4.0)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('complete(): id is provider-issued and idSource is "provider"', async () => {
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: vi.fn().mockResolvedValue(mockResponse('Hello!')) } };
+    });
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }]);
+    // mockResponse uses 'resp-123' as default id
+    expect(result.id).toBe('resp-123');
+    expect(result.idSource).toBe('provider');
+  });
+
+  it('structured(): id is provider-issued and idSource is "provider"', async () => {
+    const schema = z.object({ name: z.string() });
+    const structuredMockResponse = mockResponse(JSON.stringify({ name: 'Sable' }), {
+      id: 'resp-struct-1',
+    });
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        responses: {
+          create: vi.fn().mockResolvedValue(structuredMockResponse),
+        },
+      };
+    });
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'name?' }], schema);
+    expect(result.id).toBe('resp-struct-1');
+    expect(result.idSource).toBe('provider');
   });
 });
