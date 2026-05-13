@@ -7,6 +7,10 @@
  *                     when @diabolicallabs/llm-client is configured with pricing.
  *                     Only present when the calling LlmClient has pricing configured
  *                     and @diabolicallabs/llm-pricing is installed.
+ *
+ * v1.2.0 additions:
+ *   CallRecord.requestedModel — optional string; present when llm-client provider failover
+ *                               fired. model = actually-serving model; requestedModel = primary.
  */
 
 import type { LlmClient, LlmToolCall } from '@diabolicallabs/llm-client';
@@ -39,6 +43,14 @@ export interface InstrumentedLlmClient extends LlmClient {
 export interface CallRecord {
   agent_id: string;
   model: string;
+  /**
+   * The originally-requested primary model (v1.2.0+).
+   * Populated only when provider failover occurred — i.e. when LlmResponse.requestedModel
+   * is set. When present, model holds the actually-serving fallback model and requestedModel
+   * holds what was originally configured as the primary.
+   * Undefined when no failover happened.
+   */
+  requestedModel?: string;
   prompt_tokens: number;
   completion_tokens: number;
   cache_creation_tokens?: number;

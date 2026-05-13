@@ -15,6 +15,12 @@
  *   complete(), structured(), and withTools() responses carry a cost? LlmCost field.
  *   buildCallRecord() accepts an optional cost and includes it in the CallRecord.
  *   stream() cannot propagate cost — stream chunks don't carry a cost field.
+ *
+ * v1.2.0: requestedModel propagation.
+ *   When llm-client provider failover fired, LlmResponse.requestedModel holds the
+ *   originally-requested primary model. buildCallRecord() accepts requestedModel and
+ *   populates CallRecord.requestedModel so ingestion sees both the serving model
+ *   (CallRecord.model) and the originally-requested one.
  */
 
 import type {
@@ -39,6 +45,8 @@ import type { AgentSdkConfig, CallRecord, InstrumentedLlmClient } from './types.
  * per-tool cost attribution in the Spend Dashboard.
  * cost is optional — propagated from LlmResponse.cost when pricing is configured
  * on the LlmClient. When undefined, the cost field is omitted from the record.
+ * requestedModel is optional — propagated from LlmResponse.requestedModel when
+ * provider failover occurred. When present, model = actually-serving fallback model.
  */
 function buildCallRecord(
   usage: LlmUsage,
@@ -46,7 +54,8 @@ function buildCallRecord(
   latencyMs: number,
   config: AgentSdkConfig,
   toolResponse?: LlmToolResponse,
-  cost?: LlmCost
+  cost?: LlmCost,
+  requestedModel?: string
 ): CallRecord {
   return {
     agent_id: config.identity.agentId,
@@ -73,6 +82,7 @@ function buildCallRecord(
         tool_calls: toolResponse.toolCalls,
       }),
     ...(cost !== undefined && { cost }),
+    ...(requestedModel !== undefined && { requestedModel }),
   };
 }
 
@@ -171,14 +181,15 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const response = await client.complete(...args);
     const latencyMs = Date.now() - start;
 
-    // Propagate cost from llm-client when pricing is configured on the wrapped client
+    // Propagate cost and requestedModel from llm-client when pricing/failover is configured.
     const record = buildCallRecord(
       response.usage,
       response.model,
       latencyMs,
       config,
       undefined,
-      response.cost
+      response.cost,
+      response.requestedModel
     );
     // Dispatch non-blocking — do not await
     void dispatchWithRetry(record, config);
@@ -225,9 +236,9 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const response = await client.structured<T>(messages, schema, options);
     const latencyMs = Date.now() - start;
 
-    // Propagate cost from llm-client when pricing is configured on the wrapped client.
-    // Use response.model (the actually-serving model) for the CallRecord — it accounts for
-    // provider failover where the active model may differ from the requested primary.
+    // Propagate cost from llm-client.
+    // response.model = actually-serving model (accounts for failover).
+    // Note: LlmStructuredResponse does not carry requestedModel — omitted here.
     const record = buildCallRecord(
       response.usage,
       response.model,
@@ -249,14 +260,15 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const response = await client.withTools(...args);
     const latencyMs = Date.now() - start;
 
-    // Propagate cost from llm-client when pricing is configured on the wrapped client
+    // Propagate cost and requestedModel from llm-client when configured.
     const record = buildCallRecord(
       response.usage,
       response.model,
       latencyMs,
       config,
       response,
-      response.cost
+      response.cost,
+      response.requestedModel
     );
     void dispatchWithRetry(record, config);
 

@@ -761,3 +761,83 @@ describe('cost propagation', () => {
     expect(recordedCost.total).toBe(0.001);
   });
 });
+
+// ---------------------------------------------------------------------------
+// requestedModel propagation — v1.2.0 provider failover
+// ---------------------------------------------------------------------------
+
+describe('requestedModel propagation from provider failover', () => {
+  const failoverSdkConfig: AgentSdkConfig = {
+    identity: { agentId: 'failover-test-agent' },
+    ingestionUrl: 'https://spend.example.com/api/ingest',
+    ingestionKey: 'test-key',
+    maxIngestionRetries: 0,
+  };
+
+  it('complete(): CallRecord includes requestedModel when failover occurred', async () => {
+    const client = makeMockClient({
+      complete: vi.fn().mockResolvedValue({
+        content: 'hello',
+        model: 'claude-3-haiku-20240307', // fallback model actually served
+        requestedModel: 'claude-opus-4-99', // primary that was originally requested
+        usage: mockUsage,
+        latencyMs: 80,
+      }),
+    });
+
+    const instrumented = instrumentClient(client, failoverSdkConfig);
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>
+    expect(body['model']).toBe('claude-3-haiku-20240307');
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>
+    expect(body['requestedModel']).toBe('claude-opus-4-99');
+  });
+
+  it('complete(): CallRecord omits requestedModel when no failover occurred', async () => {
+    const client = makeMockClient({
+      complete: vi.fn().mockResolvedValue({
+        content: 'hello',
+        model: 'claude-sonnet-4-6',
+        // requestedModel absent — no failover
+        usage: mockUsage,
+        latencyMs: 80,
+      }),
+    });
+
+    const instrumented = instrumentClient(client, failoverSdkConfig);
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>
+    expect(body['requestedModel']).toBeUndefined();
+  });
+
+  it('withTools(): CallRecord includes requestedModel when failover occurred', async () => {
+    const client = makeMockClient({
+      withTools: vi.fn().mockResolvedValue({
+        content: '',
+        toolCalls: [],
+        model: 'claude-3-haiku-20240307',
+        requestedModel: 'claude-opus-4-99',
+        usage: mockUsage,
+        latencyMs: 90,
+        stopReason: 'end_turn' as const,
+      }),
+    });
+
+    const instrumented = instrumentClient(client, failoverSdkConfig);
+    await instrumented.withTools(mockMessages, []);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>
+    expect(body['requestedModel']).toBe('claude-opus-4-99');
+  });
+});
