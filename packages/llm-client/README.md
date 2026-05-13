@@ -4,12 +4,13 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**v1.0.0 (pending publish).** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
+**v1.3.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
 
 Highlights:
+- **v1.3.0** — Streaming structured output (`streamStructured()`) — token streaming + Zod-validated final object. OpenAI, Anthropic, DeepSeek supported; Gemini and Perplexity throw pre-call.
+- **v1.2.0** — Configurable retry strategy (exponential/linear/fixed/decorrelated), provider failover via `model: string[]`, `Retry-After` header support.
+- **v1.1.0** — Per-response cost computation via `@diabolicallabs/llm-pricing`; concurrency pool at `@diabolicallabs/llm-client/pool`.
 - **v1.0.0** — Native tool calling (`withTools()`), expanded `LlmErrorKind` taxonomy, OpenAI Responses API migration.
-- **v0.4.3** — Opt-in Anthropic prompt caching via `providerOptions.promptCache`.
-- **v0.4.0** — Native strict structured outputs (Zod 4 schema → OpenAI json_schema, Anthropic tool-use, Gemini responseSchema).
 
 ## Install
 
@@ -286,6 +287,7 @@ Reads the API key from the environment automatically:
 | `complete(messages, options?)` | Non-streaming completion. Returns `LlmResponse` (includes `citations` for Perplexity). |
 | `stream(messages, options?)` | Streaming — async generator of `LlmStreamChunk`. Final chunk includes `usage`. Citations unavailable. |
 | `structured(messages, schema, options?)` | Structured output validated against a Zod schema. Returns `LlmStructuredResponse<T>`. |
+| `streamStructured(messages, schema, options?)` | Token streaming + Zod-validated final object. Returns `AsyncGenerator<LlmStreamStructuredEvent<T>>`. See [Streaming structured output (v1.3.0)](#streaming-structured-output-v130). |
 | `withTools(messages, tools, options?)` | Native tool calling. Returns `LlmToolResponse`. See [Tool calling](#tool-calling-v100). |
 
 All methods accept `LlmCallOptions` as the options parameter:
@@ -372,6 +374,58 @@ Each `LlmTool.inputSchema` must expose a `.parse(data: unknown)` method. If the 
 ### Gemini ID synthesis
 
 Gemini does not issue tool call IDs. The toolkit synthesizes UUID v7-style IDs (time-based + random) for every `LlmToolCall.id` on the Gemini path. These IDs are unique within a request but not cryptographically random.
+
+## Streaming structured output (v1.3.0)
+
+`streamStructured()` combines the typing-progress UX of `stream()` with the Zod-validated final object of `structured()`. It emits incremental token events as the model generates output, then validates the accumulated text against the schema before emitting a final `done` event.
+
+```typescript
+import { z } from 'zod';
+import { createClientFromEnv } from '@diabolicallabs/llm-client';
+
+const client = createClientFromEnv('openai', 'gpt-4o');
+const schema = z.object({ summary: z.string(), sentiment: z.enum(['positive', 'negative', 'neutral']) });
+
+for await (const event of client.streamStructured(
+  [{ role: 'user', content: 'Analyze this review: "Great product, fast shipping!"' }],
+  schema
+)) {
+  if (event.type === 'token') {
+    process.stdout.write(event.token); // show typing progress
+  } else if (event.type === 'done') {
+    console.log('\nValidated output:', event.data);
+    console.log('Usage:', event.usage);
+  }
+}
+```
+
+### Event shape
+
+```typescript
+type LlmStreamStructuredEvent<T> =
+  | { type: 'token'; token: string }  // incremental text chunk
+  | { type: 'done'; data: T; usage: LlmUsage };  // final, validated result
+```
+
+`token` events arrive during generation. Exactly one `done` event arrives at the end. If `JSON.parse()` or `schema.parse()` fails, `LlmError` with `kind: 'structured_parse_failed'` is thrown instead (no `done` event).
+
+### Provider support matrix for `streamStructured()`
+
+| Provider | Support | Notes |
+|---|---|---|
+| OpenAI | Supported | Streams `output_text.delta` events via Responses API. Zod 4 schemas enable `json_schema` strict mode; non-Zod schemas use `json_object` mode. |
+| Anthropic | Supported | Uses forced tool-use (`extract` tool, `tool_choice: tool`). Streams `input_json_delta` events — raw JSON fragments that assemble into the final object. |
+| DeepSeek | Supported | Streams Chat Completions deltas with `response_format: { type: 'json_object' }`. Falls back to `parseJsonOrThrow` if `JSON.parse` fails (handles chain-of-thought preamble from `deepseek-reasoner`). |
+| Gemini | Not supported | Throws `LlmError(kind: 'bad_request')` immediately. Gemini does not reliably support simultaneous `responseSchema` constraints and streaming. Use `stream()` for tokens or `structured()` for validation. |
+| Perplexity | Not supported | Throws `LlmError(kind: 'bad_request')` immediately. Search/retrieval models do not return tool-validated JSON. |
+
+### Failover and pricing
+
+`streamStructured()` **does not support provider failover** — mid-stream model switching would corrupt the token sequence. It always uses the primary model from a `model: string[]` config.
+
+`streamStructured()` **does not attach cost** — cost computation requires final token counts from a complete response object. Use `complete()` or `structured()` if you need cost tracking via `config.pricing`.
+
+AbortSignal, stall detection (`streamStallTimeoutMs`), and timeout (`timeoutMs`) all work identically to `stream()`.
 
 ## Cancellation, timeouts, stall detection
 

@@ -25,6 +25,7 @@
 
 import OpenAI from 'openai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
+import { parseJsonOrThrow } from '../extract-json.js';
 import { isZodSchema, type JsonNode, toProviderSchema } from '../json-schema.js';
 import {
   classifyHttpStatus,
@@ -40,6 +41,7 @@ import type {
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
+  LlmStreamStructuredEvent,
   LlmStructuredResponse,
   LlmTool,
   LlmToolCall,
@@ -476,11 +478,118 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     };
   }
 
+  /**
+   * streamStructured() — stream tokens from Chat Completions and validate at end (v1.3.0+).
+   *
+   * DeepSeek supports json_object response_format on Chat Completions stream.
+   * We also inject a system-prompt JSON instruction as a second layer of enforcement,
+   * since DeepSeek does not support full json_schema strict mode.
+   *
+   * Tokens arrive as choices[0].delta.content chunks. We accumulate and parse at end.
+   * If JSON.parse fails on the accumulated text, we fall back to parseJsonOrThrow
+   * (handles markdown fences and prose wrapping). schema.parse() validates the result.
+   *
+   * deepseek-reasoner (R1) note: reasoning models may emit chain-of-thought text before
+   * the JSON object. The parseJsonOrThrow fallback handles this by extracting the first
+   * JSON block from the accumulated text.
+   */
+  async function* streamStructured<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    const jsonSystemInstruction: LlmMessage = {
+      role: 'system',
+      content:
+        'You must respond with valid JSON only. No explanations, no markdown code fences, no extra text. Your entire response must be valid JSON that can be parsed with JSON.parse().',
+    };
+    const augmentedMessages = [jsonSystemInstruction, ...messages];
+
+    const model = options?.model ?? resolvedConfig.model;
+    const chatMessages = buildMessages(augmentedMessages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
+
+    const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
+      model,
+      messages: chatMessages,
+      stream: true,
+      stream_options: { include_usage: true },
+      response_format: { type: 'json_object' },
+    };
+
+    const maxTokens = options?.maxTokens ?? config.maxTokens;
+    if (maxTokens !== undefined) params.max_tokens = maxTokens;
+
+    const temperature = options?.temperature ?? config.temperature;
+    if (temperature !== undefined) params.temperature = temperature;
+
+    const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+    let sdkStream: Awaited<ReturnType<typeof client.chat.completions.create>>;
+
+    try {
+      sdkStream = await client.chat.completions.create(params, { signal: ctl.signal });
+    } catch (err) {
+      ctl.dispose();
+      throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    }
+
+    let fullText = '';
+    let finalUsage: LlmUsage | undefined;
+
+    try {
+      for await (const chunk of withStallTimeout(sdkStream, stallMs, ctl, PROVIDER)) {
+        const delta = chunk.choices[0]?.delta.content;
+        if (delta !== undefined && delta !== null && delta.length > 0) {
+          fullText += delta;
+          yield { type: 'token', token: delta };
+        }
+        if (chunk.usage !== undefined && chunk.usage !== null) {
+          finalUsage = normalizeUsage(chunk.usage);
+        }
+      }
+    } catch (err) {
+      throw normalizeDeepSeekError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    } finally {
+      ctl.dispose();
+    }
+
+    // First try a direct JSON.parse. If that fails (e.g. reasoner chain-of-thought prefix),
+    // fall back to parseJsonOrThrow which extracts the first JSON block from prose or fences.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(fullText);
+    } catch {
+      // parseJsonOrThrow throws LlmError(structured_parse_failed) if no JSON block found
+      parsed = parseJsonOrThrow(fullText, PROVIDER);
+    }
+
+    let data: T;
+    try {
+      data = schema.parse(parsed);
+    } catch (err) {
+      throw new LlmError({
+        message: `DeepSeek streamStructured: response failed schema validation. ${String(err)}`,
+        provider: PROVIDER,
+        kind: 'structured_parse_failed',
+        retryable: false,
+        cause: err,
+      });
+    }
+
+    yield {
+      type: 'done',
+      data,
+      usage: finalUsage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    };
+  }
+
   return {
     config: resolvedConfig,
     complete,
     stream,
     structured,
+    streamStructured,
     withTools,
   };
 }

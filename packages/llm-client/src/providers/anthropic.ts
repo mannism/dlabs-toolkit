@@ -43,6 +43,7 @@ import type {
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
+  LlmStreamStructuredEvent,
   LlmStructuredResponse,
   LlmTool,
   LlmToolCall,
@@ -465,6 +466,134 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
   }
 
   /**
+   * streamStructured() — stream tokens from Anthropic messages.stream() and validate at end (v1.3.0+).
+   *
+   * Uses the same forced tool-use path as structured() (tool named 'extract', tool_choice: tool).
+   * Anthropic streams the tool input as `input_json_delta` events — these are raw JSON fragment
+   * strings that assemble into the full JSON object. We yield each delta as a 'token' event
+   * so callers can show typing progress, then validate the accumulated JSON at stream end.
+   *
+   * usage: pulled from finalMessage() after the stream ends (same pattern as stream()).
+   *
+   * AbortSignal and stall detection are wired the same as stream().
+   */
+  async function* streamStructured<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    const { system, messages: anthropicMessages } = buildAnthropicMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
+    // biome-ignore lint/complexity/useLiteralKeys: providerOptions is Record<string,unknown> — noPropertyAccessFromIndexSignature requires bracket notation
+    const promptCache = options?.providerOptions?.['promptCache'] as string | undefined;
+
+    // Build the 'extract' tool — same forced tool-use path as structured().
+    const inputSchema = toProviderSchema(schema as import('zod').ZodType, 'anthropic');
+    const extractTool: Anthropic.Tool =
+      promptCache === 'ephemeral'
+        ? {
+            name: 'extract',
+            description: 'Return the structured data.',
+            input_schema: inputSchema as Anthropic.Tool['input_schema'],
+            cache_control: { type: 'ephemeral' },
+          }
+        : {
+            name: 'extract',
+            description: 'Return the structured data.',
+            input_schema: inputSchema as Anthropic.Tool['input_schema'],
+          };
+
+    const params: Anthropic.MessageStreamParams = {
+      model: options?.model ?? resolvedConfig.model,
+      messages: anthropicMessages,
+      max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
+      tools: [extractTool],
+      tool_choice: { type: 'tool', name: 'extract' },
+    };
+
+    if (system !== undefined) params.system = buildSystemParam(system, promptCache);
+    const temperature = options?.temperature ?? config.temperature;
+    if (temperature !== undefined) params.temperature = temperature;
+
+    const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+    let sdkStream: Awaited<ReturnType<typeof client.messages.stream>>;
+
+    try {
+      sdkStream = client.messages.stream(params, {
+        signal: ctl.signal,
+        timeout: effectiveTimeoutMs,
+      });
+    } catch (err) {
+      ctl.dispose();
+      throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    }
+
+    let fullText = '';
+    let finalUsage: LlmUsage | undefined;
+
+    try {
+      const stallWrapped = withStallTimeout<Anthropic.MessageStreamEvent>(
+        sdkStream as AsyncIterable<Anthropic.MessageStreamEvent>,
+        stallMs,
+        ctl,
+        PROVIDER
+      );
+      for await (const event of stallWrapped) {
+        // input_json_delta events carry the streamed JSON fragments from tool input.
+        // We yield each fragment as a 'token' event for typing-progress UIs.
+        if (event.type === 'content_block_delta' && event.delta.type === 'input_json_delta') {
+          const delta = event.delta.partial_json;
+          if (delta !== undefined && delta.length > 0) {
+            fullText += delta;
+            yield { type: 'token', token: delta };
+          }
+        } else if (event.type === 'message_delta' && 'usage' in event) {
+          const accum = await sdkStream.finalMessage();
+          finalUsage = normalizeUsage(accum.usage);
+        }
+      }
+    } catch (err) {
+      throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    } finally {
+      ctl.dispose();
+    }
+
+    // Parse and validate the accumulated JSON — throw structured_parse_failed if invalid.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(fullText);
+    } catch (err) {
+      throw new LlmError({
+        message: `Anthropic streamStructured: accumulated text is not valid JSON. Raw: ${fullText.slice(0, 200)}`,
+        provider: PROVIDER,
+        kind: 'structured_parse_failed',
+        retryable: false,
+        cause: err,
+      });
+    }
+
+    let data: T;
+    try {
+      data = schema.parse(parsed);
+    } catch (err) {
+      throw new LlmError({
+        message: `Anthropic streamStructured: response failed schema validation. ${String(err)}`,
+        provider: PROVIDER,
+        kind: 'structured_parse_failed',
+        retryable: false,
+        cause: err,
+      });
+    }
+
+    yield {
+      type: 'done',
+      data,
+      usage: finalUsage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    };
+  }
+
+  /**
    * Prompt-only fallback for structured() — used when schema is not Zod 4 or
    * providerOptions.structuredMode === 'prompt'. Preserves v0.3.0 behavior exactly.
    * promptCache flows through via options → complete(), which reads providerOptions.promptCache.
@@ -671,6 +800,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     complete,
     stream,
     structured,
+    streamStructured,
     withTools,
   };
 }

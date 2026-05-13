@@ -1202,3 +1202,185 @@ describe('OpenAI provider (Responses API) — withTools()', () => {
     expect(result.stopReason).toBe('refusal');
   });
 });
+
+// ─── streamStructured() ───────────────────────────────────────────────────────
+
+describe('OpenAI provider (Responses API) — streamStructured()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Build a stream of response.output_text.delta events that produce a JSON string,
+   * followed by a response.completed event with usage.
+   */
+  function buildJsonStream(jsonString: string, inputTokens = 8, outputTokens = 4) {
+    // Split the JSON into chunks to simulate token streaming
+    const chunkSize = Math.ceil(jsonString.length / 3);
+    const chunks: string[] = [];
+    for (let i = 0; i < jsonString.length; i += chunkSize) {
+      chunks.push(jsonString.slice(i, i + chunkSize));
+    }
+
+    const events = [
+      ...chunks.map((c) => ({ type: 'response.output_text.delta', delta: c })),
+      {
+        type: 'response.completed',
+        response: {
+          usage: {
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
+            total_tokens: inputTokens + outputTokens,
+          },
+        },
+      },
+    ];
+
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        yield* events;
+      },
+    };
+  }
+
+  it('yields token events then done event with validated data', async () => {
+    const schema = z.object({ name: z.string(), score: z.number() });
+    const payload = { name: 'Alice', score: 42 };
+    const jsonStr = JSON.stringify(payload);
+
+    const mockCreate = vi.fn().mockResolvedValue(buildJsonStream(jsonStr));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const tokens: string[] = [];
+    let doneEvent:
+      | { type: 'done'; data: { name: string; score: number }; usage: LlmUsage }
+      | undefined;
+
+    for await (const event of client.streamStructured(
+      [{ role: 'user', content: 'Give me a person object' }],
+      schema
+    )) {
+      if (event.type === 'token') {
+        tokens.push(event.token);
+      } else {
+        doneEvent = event;
+      }
+    }
+
+    // Should have received token events followed by done
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(tokens.join('')).toBe(jsonStr);
+    expect(doneEvent).toBeDefined();
+    if (doneEvent !== undefined) {
+      expect(doneEvent.data.name).toBe('Alice');
+      expect(doneEvent.data.score).toBe(42);
+      expect(doneEvent.usage.inputTokens).toBe(8);
+      expect(doneEvent.usage.outputTokens).toBe(4);
+    }
+  });
+
+  it('uses text.format json_schema (strict) when schema is Zod 4', async () => {
+    const schema = z.object({ value: z.string() });
+    const mockCreate = vi.fn().mockResolvedValue(buildJsonStream(JSON.stringify({ value: 'ok' })));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], schema)) {
+      // consume
+    }
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as { text?: { format?: { type?: string } } };
+    expect(callArgs.text?.format?.type).toBe('json_schema');
+  });
+
+  it('uses text.format json_object when schema is not Zod 4', async () => {
+    const schema = { parse: (d: unknown) => d as { value: string } };
+    const mockCreate = vi.fn().mockResolvedValue(buildJsonStream(JSON.stringify({ value: 'ok' })));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], schema)) {
+      // consume
+    }
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as { text?: { format?: { type?: string } } };
+    expect(callArgs.text?.format?.type).toBe('json_object');
+  });
+
+  it('throws structured_parse_failed if accumulated text is not valid JSON', async () => {
+    const schema = z.object({ value: z.string() });
+    const badStream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'response.output_text.delta', delta: 'not json at all' };
+        yield {
+          type: 'response.completed',
+          response: { usage: { input_tokens: 2, output_tokens: 2, total_tokens: 4 } },
+        };
+      },
+    };
+    const mockCreate = vi.fn().mockResolvedValue(badStream);
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    async function consumeStream() {
+      for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], schema)) {
+        // consume
+      }
+    }
+
+    const thrown = await consumeStream().catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('structured_parse_failed');
+      expect(thrown.retryable).toBe(false);
+    }
+  });
+
+  it('throws structured_parse_failed if Zod schema validation fails on valid JSON', async () => {
+    const schema = z.object({ value: z.number() }); // expects number
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(buildJsonStream(JSON.stringify({ value: 'not-a-number' })));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    async function consumeStream() {
+      for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], schema)) {
+        // consume
+      }
+    }
+
+    const thrown = await consumeStream().catch((e: unknown) => e);
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('structured_parse_failed');
+    }
+  });
+
+  it('stream: true is set in the params', async () => {
+    const schema = z.object({ ok: z.boolean() });
+    const mockCreate = vi.fn().mockResolvedValue(buildJsonStream(JSON.stringify({ ok: true })));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    for await (const _ of client.streamStructured([{ role: 'user', content: 'Go' }], schema)) {
+      // consume
+    }
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as { stream?: boolean };
+    expect(callArgs.stream).toBe(true);
+  });
+});

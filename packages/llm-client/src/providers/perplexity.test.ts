@@ -1217,3 +1217,31 @@ describe('Perplexity provider — withTools()', () => {
     expect(mockCreate).not.toHaveBeenCalled();
   });
 });
+
+// ─── streamStructured() pre-call throw ───────────────────────────────────────
+
+describe('Perplexity provider — streamStructured() pre-call throw', () => {
+  it('throws LlmError with kind:bad_request immediately without calling the API', async () => {
+    const mockCreate = vi.fn();
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const thrown = await (async () => {
+      for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], {
+        parse: (d: unknown) => d,
+      })) {
+        // consume
+      }
+    })().catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('bad_request');
+      expect(thrown.retryable).toBe(false);
+      expect(thrown.message).toContain('streamStructured()');
+    }
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+});

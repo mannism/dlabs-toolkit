@@ -1441,3 +1441,177 @@ describe('Anthropic provider — withTools()', () => {
     expect(result.stopReason).toBe('pause_turn');
   });
 });
+
+// ─── streamStructured() ───────────────────────────────────────────────────────
+
+describe('Anthropic provider — streamStructured()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Build a mock messages.stream() that emits input_json_delta events for the given JSON,
+   * followed by a message_delta event that triggers finalMessage() usage collection.
+   */
+  function buildJsonStream(jsonString: string, inputTokens = 10, outputTokens = 5) {
+    // Split the JSON into 3 chunks for realistic token simulation
+    const chunkSize = Math.ceil(jsonString.length / 3);
+    const chunks: string[] = [];
+    for (let i = 0; i < jsonString.length; i += chunkSize) {
+      chunks.push(jsonString.slice(i, i + chunkSize));
+    }
+
+    const deltaEvents: Anthropic.MessageStreamEvent[] = chunks.map((c) => ({
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: c },
+    }));
+
+    const finalMsg = {
+      id: 'msg_stream',
+      type: 'message',
+      role: 'assistant',
+      model: TEST_CONFIG.model,
+      content: [],
+      stop_reason: 'tool_use',
+      stop_sequence: null,
+      usage: { input_tokens: inputTokens, output_tokens: outputTokens } as Anthropic.Usage,
+    } as unknown as Anthropic.Message;
+
+    const allEvents: Anthropic.MessageStreamEvent[] = [
+      ...deltaEvents,
+      // message_delta triggers the finalMessage() branch in streamStructured
+      {
+        type: 'message_delta',
+        delta: { stop_reason: 'tool_use', stop_sequence: null },
+        usage: { output_tokens: outputTokens },
+      } as unknown as Anthropic.MessageStreamEvent,
+    ];
+
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        yield* allEvents;
+      },
+      finalMessage: vi.fn().mockResolvedValue(finalMsg),
+    };
+  }
+
+  it('yields token events (input_json_delta) then done event with validated data', async () => {
+    const schema = z.object({ city: z.string(), temp: z.number() });
+    const payload = { city: 'London', temp: 15 };
+    const jsonStr = JSON.stringify(payload);
+
+    const mockStream = buildJsonStream(jsonStr);
+    const mockStreamFn = vi.fn().mockReturnValue(mockStream);
+
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return { messages: { create: vi.fn(), stream: mockStreamFn } };
+    });
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const tokens: string[] = [];
+    let doneEvent:
+      | { type: 'done'; data: { city: string; temp: number }; usage: LlmUsage }
+      | undefined;
+
+    for await (const event of client.streamStructured(
+      [{ role: 'user', content: 'What is the weather?' }],
+      schema
+    )) {
+      if (event.type === 'token') {
+        tokens.push(event.token);
+      } else {
+        doneEvent = event;
+      }
+    }
+
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(tokens.join('')).toBe(jsonStr);
+    expect(doneEvent).toBeDefined();
+    if (doneEvent !== undefined) {
+      expect(doneEvent.data.city).toBe('London');
+      expect(doneEvent.data.temp).toBe(15);
+      expect(doneEvent.usage.inputTokens).toBe(10);
+    }
+  });
+
+  it('uses forced tool_choice: tool with extract tool in stream params', async () => {
+    const schema = z.object({ value: z.string() });
+    const mockStreamFn = vi.fn().mockReturnValue(buildJsonStream(JSON.stringify({ value: 'ok' })));
+
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return { messages: { create: vi.fn(), stream: mockStreamFn } };
+    });
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], schema)) {
+      // consume
+    }
+
+    const callArgs = mockStreamFn.mock.calls[0]?.[0] as Anthropic.MessageStreamParams;
+    expect(callArgs.tool_choice).toEqual({ type: 'tool', name: 'extract' });
+    expect(callArgs.tools?.[0]?.name).toBe('extract');
+  });
+
+  it('throws structured_parse_failed if accumulated text is not valid JSON', async () => {
+    const schema = z.object({ value: z.string() });
+
+    const badStream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'input_json_delta', partial_json: 'NOT-JSON' },
+        } as Anthropic.MessageStreamEvent;
+        yield {
+          type: 'message_delta',
+          delta: { stop_reason: 'tool_use', stop_sequence: null },
+          usage: { output_tokens: 2 },
+        } as unknown as Anthropic.MessageStreamEvent;
+      },
+      finalMessage: vi
+        .fn()
+        .mockResolvedValue(
+          mockMessageResponse({ usage: { input_tokens: 2, output_tokens: 2 } as Anthropic.Usage })
+        ),
+    };
+
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return { messages: { create: vi.fn(), stream: vi.fn().mockReturnValue(badStream) } };
+    });
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const thrown = await (async () => {
+      for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], schema)) {
+        // consume
+      }
+    })().catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('structured_parse_failed');
+      expect(thrown.retryable).toBe(false);
+    }
+  });
+
+  it('throws structured_parse_failed if schema validation fails on valid JSON', async () => {
+    const schema = z.object({ count: z.number() }); // expects number
+    const mockStream = buildJsonStream(JSON.stringify({ count: 'not-a-number' }));
+
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return { messages: { create: vi.fn(), stream: vi.fn().mockReturnValue(mockStream) } };
+    });
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const thrown = await (async () => {
+      for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], schema)) {
+        // consume
+      }
+    })().catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('structured_parse_failed');
+    }
+  });
+});

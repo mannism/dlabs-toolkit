@@ -43,6 +43,7 @@ import type {
   LlmErrorKind,
   LlmMessage,
   LlmResponse,
+  LlmStreamStructuredEvent,
   LlmStructuredResponse,
   LlmTool,
   LlmToolResponse,
@@ -214,6 +215,19 @@ function createFailoverClient(
     yield* getProvider(0).stream(messages, options);
   }
 
+  /**
+   * streamStructured() does not support failover — same reason as stream().
+   * Mid-stream model switching would break the token sequence the consumer is accumulating.
+   * Always uses the primary model.
+   */
+  async function* streamStructured<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    yield* getProvider(0).streamStructured(messages, schema, options);
+  }
+
   async function structured<T>(
     messages: LlmMessage[],
     schema: { parse: (data: unknown) => T },
@@ -275,6 +289,7 @@ function createFailoverClient(
     complete,
     stream,
     structured,
+    streamStructured,
     withTools,
   };
 }
@@ -415,6 +430,13 @@ function wrapWithPricing(base: LlmClient, config: LlmClientConfig): LlmClient {
     // stream() yields individual chunks — cost cannot be computed mid-stream.
     // Delegate directly to the base provider's generator.
     stream: (messages: LlmMessage[], options?: LlmCallOptions) => base.stream(messages, options),
+    // streamStructured() accumulates tokens; the 'done' event carries usage but not cost.
+    // Cost annotation on streaming calls is out of scope — delegate to base.
+    streamStructured: <T>(
+      messages: LlmMessage[],
+      schema: { parse: (data: unknown) => T },
+      options?: LlmCallOptions
+    ) => base.streamStructured(messages, schema, options),
     structured,
     withTools,
   };

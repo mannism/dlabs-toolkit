@@ -913,3 +913,48 @@ describe('Gemini provider — withTools()', () => {
     }
   });
 });
+
+// ─── streamStructured() pre-call throw ───────────────────────────────────────
+
+describe('Gemini provider — streamStructured() pre-call throw', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('throws LlmError with kind:bad_request immediately without calling the API', async () => {
+    const mockGenerateContent = vi.fn();
+    const mockGenerateContentStream = vi.fn();
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: mockGenerateContentStream,
+        },
+      };
+    });
+
+    const client = createGeminiProvider({
+      ...TEST_CONFIG,
+      model: 'gemini-1.5-flash',
+    });
+
+    const thrown = await (async () => {
+      for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], {
+        parse: (d: unknown) => d,
+      })) {
+        // consume
+      }
+    })().catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('bad_request');
+      expect(thrown.retryable).toBe(false);
+      expect(thrown.message).toContain('streamStructured()');
+    }
+
+    // No API call should have been made
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+    expect(mockGenerateContentStream).not.toHaveBeenCalled();
+  });
+});

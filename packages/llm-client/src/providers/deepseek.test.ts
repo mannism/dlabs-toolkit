@@ -836,3 +836,174 @@ describe('DeepSeek provider — withTools()', () => {
     }
   });
 });
+
+// ─── streamStructured() ───────────────────────────────────────────────────────
+
+describe('DeepSeek provider — streamStructured()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Build a streaming mock that emits Chat Completions delta chunks for the given JSON,
+   * then a final chunk with usage.
+   */
+  function buildJsonStream(jsonString: string, inputTokens = 8, outputTokens = 4) {
+    const chunkSize = Math.ceil(jsonString.length / 3);
+    const chunks: string[] = [];
+    for (let i = 0; i < jsonString.length; i += chunkSize) {
+      chunks.push(jsonString.slice(i, i + chunkSize));
+    }
+
+    const deltaChunks = chunks.map(
+      (c) =>
+        ({
+          id: 'chunk-1',
+          object: 'chat.completion.chunk',
+          created: 1234567890,
+          model: 'deepseek-chat',
+          choices: [{ index: 0, delta: { content: c }, finish_reason: null }],
+          usage: null,
+        }) as unknown as OpenAI.Chat.ChatCompletionChunk
+    );
+
+    const usageChunk = {
+      id: 'chunk-1',
+      object: 'chat.completion.chunk',
+      created: 1234567890,
+      model: 'deepseek-chat',
+      choices: [],
+      usage: {
+        prompt_tokens: inputTokens,
+        completion_tokens: outputTokens,
+        total_tokens: inputTokens + outputTokens,
+      },
+    } as unknown as OpenAI.Chat.ChatCompletionChunk;
+
+    const allChunks = [...deltaChunks, usageChunk];
+
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        yield* allChunks;
+      },
+    };
+  }
+
+  it('yields token events then done event with validated data', async () => {
+    const schema = { parse: (d: unknown) => d as { score: number } };
+    const payload = { score: 99 };
+    const jsonStr = JSON.stringify(payload);
+
+    const mockCreate = vi.fn().mockResolvedValue(buildJsonStream(jsonStr));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const tokens: string[] = [];
+    let doneEvent: { type: 'done'; data: { score: number }; usage: LlmUsage } | undefined;
+
+    for await (const event of client.streamStructured(
+      [{ role: 'user', content: 'Give me a score' }],
+      schema
+    )) {
+      if (event.type === 'token') {
+        tokens.push(event.token);
+      } else {
+        doneEvent = event;
+      }
+    }
+
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(tokens.join('')).toBe(jsonStr);
+    expect(doneEvent).toBeDefined();
+    if (doneEvent !== undefined) {
+      expect(doneEvent.data.score).toBe(99);
+      expect(doneEvent.usage.inputTokens).toBe(8);
+    }
+  });
+
+  it('uses json_object response_format in Chat Completions params', async () => {
+    const schema = { parse: (d: unknown) => d as { ok: boolean } };
+    const mockCreate = vi.fn().mockResolvedValue(buildJsonStream(JSON.stringify({ ok: true })));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], schema)) {
+      // consume
+    }
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as {
+      response_format?: { type?: string };
+      stream?: boolean;
+    };
+    expect(callArgs.response_format?.type).toBe('json_object');
+    expect(callArgs.stream).toBe(true);
+  });
+
+  it('throws structured_parse_failed if accumulated text is not valid JSON and extractJsonBlock fails', async () => {
+    const schema = { parse: (d: unknown) => d as { value: string } };
+    const badStream = {
+      [Symbol.asyncIterator]: async function* () {
+        // Completely unparseable — not a JSON block anywhere
+        yield {
+          id: 'c1',
+          object: 'chat.completion.chunk',
+          created: 1234567890,
+          model: 'deepseek-chat',
+          choices: [{ index: 0, delta: { content: 'plain text no json' }, finish_reason: null }],
+          usage: null,
+        } as unknown as OpenAI.Chat.ChatCompletionChunk;
+      },
+    };
+
+    const mockCreate = vi.fn().mockResolvedValue(badStream);
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await (async () => {
+      for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], schema)) {
+        // consume
+      }
+    })().catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('structured_parse_failed');
+      expect(thrown.retryable).toBe(false);
+    }
+  });
+
+  it('throws structured_parse_failed if schema validation fails on valid JSON', async () => {
+    const schema = {
+      parse: (d: unknown) => {
+        const obj = d as { count: number };
+        if (typeof obj.count !== 'number') throw new Error('count must be number');
+        return obj;
+      },
+    };
+
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(buildJsonStream(JSON.stringify({ count: 'not-a-number' })));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await (async () => {
+      for await (const _ of client.streamStructured([{ role: 'user', content: 'Hi' }], schema)) {
+        // consume
+      }
+    })().catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('structured_parse_failed');
+    }
+  });
+});

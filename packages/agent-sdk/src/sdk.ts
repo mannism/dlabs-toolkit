@@ -1,7 +1,8 @@
 /**
  * instrumentClient — wraps an LlmClient with cost-tracking middleware.
  *
- * Each call to complete(), stream(), or structured() is intercepted:
+ * Each call to complete(), stream(), structured(), streamStructured(), or withTools()
+ * is intercepted:
  *  1. The LLM call executes normally.
  *  2. A CallRecord is built from the response (tokens, latency, identifiers).
  *  3. The record is dispatched to config.ingestionUrl asynchronously — the LLM
@@ -14,19 +15,27 @@
  *   When the wrapped LlmClient has pricing configured (via LlmClientConfig.pricing),
  *   complete(), structured(), and withTools() responses carry a cost? LlmCost field.
  *   buildCallRecord() accepts an optional cost and includes it in the CallRecord.
- *   stream() cannot propagate cost — stream chunks don't carry a cost field.
+ *   stream() and streamStructured() cannot propagate cost — streaming does not
+ *   produce a single accumulated response with a cost field.
  *
  * v1.2.0: requestedModel propagation.
  *   When llm-client provider failover fired, LlmResponse.requestedModel holds the
  *   originally-requested primary model. buildCallRecord() accepts requestedModel and
  *   populates CallRecord.requestedModel so ingestion sees both the serving model
  *   (CallRecord.model) and the originally-requested one.
+ *
+ * v1.3.0: streamStructured() wrapper.
+ *   Async generator passthrough that collects usage from the final 'done' event and
+ *   dispatches exactly one CallRecord per call. No cost annotation (same as stream()).
  */
 
 import type {
+  LlmCallOptions,
   LlmClient,
+  LlmMessage,
   LlmResponse,
   LlmStreamChunk,
+  LlmStreamStructuredEvent,
   LlmStructuredResponse,
   LlmToolResponse,
   LlmUsage,
@@ -236,20 +245,51 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const response = await client.structured<T>(messages, schema, options);
     const latencyMs = Date.now() - start;
 
-    // Propagate cost from llm-client.
-    // response.model = actually-serving model (accounts for failover).
-    // Note: LlmStructuredResponse does not carry requestedModel — omitted here.
+    // Propagate cost and requestedModel from llm-client when pricing/failover is configured.
+    // response.requestedModel is set when provider failover fired (Wave 2b, v1.2.0+).
     const record = buildCallRecord(
       response.usage,
       response.model,
       latencyMs,
       config,
       undefined,
-      response.cost
+      response.cost,
+      response.requestedModel
     );
     void dispatchWithRetry(record, config);
 
     return response;
+  }
+
+  // streamStructured() — async generator passthrough; usage arrives on the final 'done' event.
+  // One CallRecord is dispatched per call using the done event's usage field.
+  // Cost is NOT propagated (same rationale as stream() — no accumulated response object).
+  // Model is resolved from client.config the same way as stream() — primary or first element.
+  async function* streamStructured<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    let finalUsage: LlmUsage | undefined;
+    const model = Array.isArray(client.config.model)
+      ? (client.config.model[0] ?? 'unknown')
+      : client.config.model;
+    const start = Date.now();
+
+    for await (const event of client.streamStructured<T>(messages, schema, options)) {
+      if (event.type === 'done') {
+        finalUsage = event.usage;
+      }
+      yield event; // pass through immediately — never buffer
+    }
+
+    // Stream completed — dispatch if usage was captured from the done event
+    if (finalUsage !== undefined) {
+      const latencyMs = Date.now() - start;
+      const record = buildCallRecord(finalUsage, model, latencyMs, config);
+      // Non-blocking — void the promise
+      void dispatchWithRetry(record, config);
+    }
   }
 
   // withTools() — intercepts native tool-calling calls.
@@ -281,6 +321,7 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     complete,
     stream,
     structured,
+    streamStructured,
     withTools,
   };
 }
