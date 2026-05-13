@@ -9,6 +9,12 @@
  *  4. Failed dispatches retry with exponential backoff up to maxIngestionRetries.
  *  5. If all retries fail, the record is dropped and a structured warning is logged.
  *     The error is never propagated to the LLM caller.
+ *
+ * v1.1.0: cost field propagation.
+ *   When the wrapped LlmClient has pricing configured (via LlmClientConfig.pricing),
+ *   complete(), structured(), and withTools() responses carry a cost? LlmCost field.
+ *   buildCallRecord() accepts an optional cost and includes it in the CallRecord.
+ *   stream() cannot propagate cost — stream chunks don't carry a cost field.
  */
 
 import type {
@@ -19,6 +25,7 @@ import type {
   LlmToolResponse,
   LlmUsage,
 } from '@diabolicallabs/llm-client';
+import type { LlmCost } from '@diabolicallabs/llm-pricing';
 import type { AgentSdkConfig, CallRecord, InstrumentedLlmClient } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -30,13 +37,16 @@ import type { AgentSdkConfig, CallRecord, InstrumentedLlmClient } from './types.
  * call_id uses crypto.randomUUID() — Node 20 built-in, no external package.
  * toolResponse is optional — populated only for withTools() calls to enable
  * per-tool cost attribution in the Spend Dashboard.
+ * cost is optional — propagated from LlmResponse.cost when pricing is configured
+ * on the LlmClient. When undefined, the cost field is omitted from the record.
  */
 function buildCallRecord(
   usage: LlmUsage,
   model: string,
   latencyMs: number,
   config: AgentSdkConfig,
-  toolResponse?: LlmToolResponse
+  toolResponse?: LlmToolResponse,
+  cost?: LlmCost
 ): CallRecord {
   return {
     agent_id: config.identity.agentId,
@@ -62,6 +72,7 @@ function buildCallRecord(
       toolResponse.toolCalls.length > 0 && {
         tool_calls: toolResponse.toolCalls,
       }),
+    ...(cost !== undefined && { cost }),
   };
 }
 
@@ -160,14 +171,25 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const response = await client.complete(...args);
     const latencyMs = Date.now() - start;
 
-    const record = buildCallRecord(response.usage, response.model, latencyMs, config);
+    // Propagate cost from llm-client when pricing is configured on the wrapped client
+    const record = buildCallRecord(
+      response.usage,
+      response.model,
+      latencyMs,
+      config,
+      undefined,
+      response.cost
+    );
     // Dispatch non-blocking — do not await
     void dispatchWithRetry(record, config);
 
     return response;
   }
 
-  // stream() — async generator passthrough; usage arrives on final chunk
+  // stream() — async generator passthrough; usage arrives on final chunk.
+  // Cost is NOT propagated for streams: there is no single response object,
+  // and chunk-level cost accumulation is out of scope. Callers who need
+  // per-call cost should use complete() or structured() instead.
   async function* stream(...args: Parameters<LlmClient['stream']>): AsyncGenerator<LlmStreamChunk> {
     let finalUsage: LlmUsage | undefined;
     const model = client.config.model;
@@ -199,7 +221,15 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const response = await client.structured<T>(messages, schema, options);
     const latencyMs = Date.now() - start;
 
-    const record = buildCallRecord(response.usage, client.config.model, latencyMs, config);
+    // Propagate cost from llm-client when pricing is configured on the wrapped client
+    const record = buildCallRecord(
+      response.usage,
+      client.config.model,
+      latencyMs,
+      config,
+      undefined,
+      response.cost
+    );
     void dispatchWithRetry(record, config);
 
     return response;
@@ -213,7 +243,15 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const response = await client.withTools(...args);
     const latencyMs = Date.now() - start;
 
-    const record = buildCallRecord(response.usage, response.model, latencyMs, config, response);
+    // Propagate cost from llm-client when pricing is configured on the wrapped client
+    const record = buildCallRecord(
+      response.usage,
+      response.model,
+      latencyMs,
+      config,
+      response,
+      response.cost
+    );
     void dispatchWithRetry(record, config);
 
     return response;
