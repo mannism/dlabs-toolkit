@@ -267,7 +267,8 @@ function geminiPostprocess(node: unknown): JsonNode {
       }
       if (Object.keys(processedProps).length === 0) {
         // Empty properties — inject sentinel property
-        processedProps._placeholder = { type: 'string', description: '_placeholder sentinel' };
+        // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket notation on Record<string, T>
+        processedProps['_placeholder'] = { type: 'string', description: '_placeholder sentinel' };
       }
       obj.properties = processedProps;
     } else {

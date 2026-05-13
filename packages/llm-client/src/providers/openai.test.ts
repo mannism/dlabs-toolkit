@@ -153,8 +153,10 @@ describe('OpenAI provider (Responses API) — complete()', () => {
     const client = createOpenAIProvider(configWithoutMax);
     await client.complete([{ role: 'user', content: 'Hi' }]);
 
-    const callArgs = mockCreate.mock.calls[0]?.[0] as Record<string, unknown>;
-    expect(callArgs['max_output_tokens']).toBeUndefined();
+    // Concrete shape avoids TS4111 (noPropertyAccessFromIndexSignature fires on Record types)
+    type CallShape = { max_output_tokens?: unknown };
+    const callArgs = mockCreate.mock.calls[0]?.[0] as CallShape;
+    expect(callArgs.max_output_tokens).toBeUndefined();
   });
 
   it('uses responses.create — not chat.completions.create', async () => {
@@ -1083,12 +1085,14 @@ describe('OpenAI provider (Responses API) — withTools()', () => {
     await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
 
     const callParams = mockCreate.mock.calls[0]?.[0] as { tools?: unknown[] };
-    const toolParam = callParams.tools?.[0] as Record<string, unknown>;
+    // Concrete shape avoids TS4111 (noPropertyAccessFromIndexSignature fires on Record types)
+    type ToolParamShape = { name: string; description: string; type: string; function?: unknown };
+    const toolParam = callParams.tools?.[0] as ToolParamShape;
     // Flat shape: top-level name, description, parameters — no nested 'function' key
-    expect(toolParam['name']).toBe('get_weather');
-    expect(toolParam['description']).toBe('Get the current weather for a city.');
-    expect(toolParam['type']).toBe('function');
-    expect(toolParam['function']).toBeUndefined();
+    expect(toolParam.name).toBe('get_weather');
+    expect(toolParam.description).toBe('Get the current weather for a city.');
+    expect(toolParam.type).toBe('function');
+    expect(toolParam.function).toBeUndefined();
   });
 
   it("maps toolChoice:'any' to 'required' on the Responses API", async () => {

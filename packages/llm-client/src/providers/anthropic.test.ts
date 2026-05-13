@@ -1357,8 +1357,14 @@ describe('Anthropic provider — withTools()', () => {
     await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
 
     const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
-    // Cast via unknown to avoid TS overlap error: ToolUnion has no index signature
-    const tool = callArgs.tools?.[0] as unknown as Record<string, unknown>;
+    // Cast to concrete shape — avoids TS4111 (noPropertyAccessFromIndexSignature on Record types)
+    type AnthropicToolShape = {
+      name: string;
+      description: string;
+      input_schema: unknown;
+      function: unknown;
+    };
+    const tool = callArgs.tools?.[0] as unknown as AnthropicToolShape;
     expect(tool.name).toBe('get_weather');
     expect(tool.description).toBe('Get the current weather for a city.');
     expect(tool.input_schema).toBeDefined();
@@ -1383,8 +1389,9 @@ describe('Anthropic provider — withTools()', () => {
     });
 
     const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
-    // Cast via unknown — ToolChoice union types have no index signature
-    const toolChoice = callArgs.tool_choice as unknown as Record<string, unknown>;
+    // Cast to concrete shape — avoids TS4111 (noPropertyAccessFromIndexSignature on Record types)
+    type ToolChoiceShape = { type: string; disable_parallel_tool_use?: boolean };
+    const toolChoice = callArgs.tool_choice as unknown as ToolChoiceShape;
     expect(toolChoice.disable_parallel_tool_use).toBe(true);
   });
 

@@ -744,11 +744,14 @@ describe('DeepSeek provider — withTools()', () => {
     await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
 
     const callParams = mockCreate.mock.calls[0]?.[0] as { tools?: unknown[] };
-    const toolParam = callParams.tools?.[0] as Record<string, unknown>;
+    // Concrete shape avoids TS4111 (noPropertyAccessFromIndexSignature fires on Record types)
+    type FnShape = { name: string; description: string };
+    type ToolParamShape = { type: string; function?: FnShape; name?: string };
+    const toolParam = callParams.tools?.[0] as ToolParamShape;
     // Chat Completions nested shape — must have 'function' key
     expect(toolParam.type).toBe('function');
     expect(typeof toolParam.function).toBe('object');
-    const fn = toolParam.function as Record<string, unknown>;
+    const fn = toolParam.function as FnShape;
     expect(fn.name).toBe('get_weather');
     expect(fn.description).toBe('Get the current weather for a city.');
     // Must NOT have top-level 'name' (that is the Responses API flat shape)

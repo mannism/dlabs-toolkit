@@ -837,7 +837,9 @@ describe('Gemini provider — withTools()', () => {
     };
     const decls = callArgs.config?.tools?.[0]?.functionDeclarations;
     expect(Array.isArray(decls)).toBe(true);
-    const decl = decls?.[0] as Record<string, unknown>;
+    // Concrete shape avoids TS4111 (noPropertyAccessFromIndexSignature fires on Record types)
+    type DeclShape = { name: string; parametersJsonSchema?: unknown; parameters?: unknown };
+    const decl = decls?.[0] as DeclShape;
     expect(decl.name).toBe('get_weather');
     // parametersJsonSchema is the plain JSON Schema field (not Gemini's Schema type 'parameters')
     expect(decl.parametersJsonSchema).toBeDefined();
