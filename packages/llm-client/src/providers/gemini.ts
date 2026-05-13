@@ -52,7 +52,12 @@ import {
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { parseJsonOrThrow } from '../extract-json.js';
 import { isZodSchema, toProviderSchema } from '../json-schema.js';
-import { mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
+import {
+  classifyHttpStatus,
+  mergeRetryOptsWithSignal,
+  normalizeThrownError,
+  withRetry,
+} from '../retry.js';
 import type {
   LlmCallOptions,
   LlmClient,
@@ -115,11 +120,13 @@ export function normalizeGeminiError(err: unknown): LlmError {
   // ApiError is the only publicly-exported SDK error class.
   // status is always number (not undefined) per the ApiError type definition.
   if (err instanceof ApiError) {
-    const retryable = err.status === 429 || err.status >= 500;
+    const kind = classifyHttpStatus(err.status);
+    const retryable = kind === 'rate_limit' || kind === 'server_error';
     return new LlmError({
       message: err.message,
       provider: PROVIDER,
       statusCode: err.status,
+      kind,
       retryable,
       cause: err,
     });
@@ -352,6 +359,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
       throw new LlmError({
         message: `Gemini structured output: response failed schema validation. ${String(err)}`,
         provider: PROVIDER,
+        kind: 'structured_parse_failed',
         retryable: false,
         cause: err,
       });
@@ -430,6 +438,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
       throw new LlmError({
         message: `Gemini structured output: response failed schema validation. ${String(err)}`,
         provider: PROVIDER,
+        kind: 'structured_parse_failed',
         retryable: false,
         cause: err,
       });

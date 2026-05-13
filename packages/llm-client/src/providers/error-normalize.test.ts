@@ -22,7 +22,7 @@ import { normalizeOpenAIError } from './openai.js';
 import { normalizePerplexityError } from './perplexity.js';
 
 describe('normalizeAnthropicError — real Anthropic SDK error classes', () => {
-  it('maps Anthropic.APIError 429 to retryable LlmError', () => {
+  it('maps Anthropic.APIError 429 to kind:"rate_limit", retryable LlmError', () => {
     // This exercises the `typeof Anthropic.APIError === 'function' && instanceof` branch
     const apiErr = Anthropic.APIError.generate(
       429,
@@ -34,10 +34,11 @@ describe('normalizeAnthropicError — real Anthropic SDK error classes', () => {
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('anthropic');
     expect(result.statusCode).toBe(429);
+    expect(result.kind).toBe('rate_limit');
     expect(result.retryable).toBe(true);
   });
 
-  it('maps Anthropic.APIError 401 to non-retryable LlmError', () => {
+  it('maps Anthropic.APIError 401 to kind:"auth", non-retryable LlmError', () => {
     const apiErr = Anthropic.APIError.generate(
       401,
       { type: 'error', error: { type: 'authentication_error', message: 'Unauthorized' } },
@@ -45,11 +46,51 @@ describe('normalizeAnthropicError — real Anthropic SDK error classes', () => {
       new Headers()
     );
     const result = normalizeAnthropicError(apiErr);
+    expect(result.kind).toBe('auth');
     expect(result.retryable).toBe(false);
     expect(result.statusCode).toBe(401);
   });
 
-  it('maps Anthropic.APIError 500 to retryable LlmError', () => {
+  it('maps Anthropic.APIError 403 to kind:"auth", non-retryable LlmError', () => {
+    const apiErr = Anthropic.APIError.generate(
+      403,
+      { type: 'error', error: { type: 'permission_error', message: 'Forbidden' } },
+      'Forbidden',
+      new Headers()
+    );
+    const result = normalizeAnthropicError(apiErr);
+    expect(result.kind).toBe('auth');
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBe(403);
+  });
+
+  it('maps Anthropic.APIError 404 to kind:"not_found", non-retryable LlmError', () => {
+    const apiErr = Anthropic.APIError.generate(
+      404,
+      { type: 'error', error: { type: 'not_found_error', message: 'Not found' } },
+      'Not found',
+      new Headers()
+    );
+    const result = normalizeAnthropicError(apiErr);
+    expect(result.kind).toBe('not_found');
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBe(404);
+  });
+
+  it('maps Anthropic.APIError 400 to kind:"bad_request", non-retryable LlmError', () => {
+    const apiErr = Anthropic.APIError.generate(
+      400,
+      { type: 'error', error: { type: 'invalid_request_error', message: 'Bad request' } },
+      'Bad request',
+      new Headers()
+    );
+    const result = normalizeAnthropicError(apiErr);
+    expect(result.kind).toBe('bad_request');
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBe(400);
+  });
+
+  it('maps Anthropic.APIError 500 to kind:"server_error", retryable LlmError', () => {
     const apiErr = Anthropic.APIError.generate(
       500,
       { type: 'error', error: { type: 'internal_server_error', message: 'Server error' } },
@@ -57,16 +98,18 @@ describe('normalizeAnthropicError — real Anthropic SDK error classes', () => {
       new Headers()
     );
     const result = normalizeAnthropicError(apiErr);
+    expect(result.kind).toBe('server_error');
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBe(500);
   });
 
-  it('maps Anthropic.APIConnectionError to retryable LlmError with no statusCode', () => {
+  it('maps Anthropic.APIConnectionError to kind:"network", retryable LlmError with no statusCode', () => {
     const connErr = new Anthropic.APIConnectionError({
       message: 'Connection refused',
     });
     const result = normalizeAnthropicError(connErr);
     expect(result).toBeInstanceOf(LlmError);
+    expect(result.kind).toBe('network');
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBeUndefined();
   });
@@ -89,7 +132,7 @@ describe('normalizeAnthropicError — real Anthropic SDK error classes', () => {
 });
 
 describe('normalizeOpenAIError — real OpenAI SDK error classes', () => {
-  it('maps OpenAI.APIError 429 to retryable LlmError', () => {
+  it('maps OpenAI.APIError 429 to kind:"rate_limit", retryable LlmError', () => {
     const apiErr = OpenAI.APIError.generate(
       429,
       { error: { message: 'Rate limited', type: 'tokens', code: null, param: null } },
@@ -100,10 +143,11 @@ describe('normalizeOpenAIError — real OpenAI SDK error classes', () => {
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('openai');
     expect(result.statusCode).toBe(429);
+    expect(result.kind).toBe('rate_limit');
     expect(result.retryable).toBe(true);
   });
 
-  it('maps OpenAI.APIError 401 to non-retryable LlmError', () => {
+  it('maps OpenAI.APIError 401 to kind:"auth", non-retryable LlmError', () => {
     const apiErr = OpenAI.APIError.generate(
       401,
       {
@@ -113,11 +157,38 @@ describe('normalizeOpenAIError — real OpenAI SDK error classes', () => {
       new Headers()
     );
     const result = normalizeOpenAIError(apiErr);
+    expect(result.kind).toBe('auth');
     expect(result.retryable).toBe(false);
     expect(result.statusCode).toBe(401);
   });
 
-  it('maps OpenAI.APIError 500 to retryable LlmError', () => {
+  it('maps OpenAI.APIError 404 to kind:"not_found", non-retryable LlmError', () => {
+    const apiErr = OpenAI.APIError.generate(
+      404,
+      { error: { message: 'Not found', type: 'invalid_request_error', code: null, param: null } },
+      'Not found',
+      new Headers()
+    );
+    const result = normalizeOpenAIError(apiErr);
+    expect(result.kind).toBe('not_found');
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBe(404);
+  });
+
+  it('maps OpenAI.APIError 400 to kind:"bad_request", non-retryable LlmError', () => {
+    const apiErr = OpenAI.APIError.generate(
+      400,
+      { error: { message: 'Bad request', type: 'invalid_request_error', code: null, param: null } },
+      'Bad request',
+      new Headers()
+    );
+    const result = normalizeOpenAIError(apiErr);
+    expect(result.kind).toBe('bad_request');
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBe(400);
+  });
+
+  it('maps OpenAI.APIError 500 to kind:"server_error", retryable LlmError', () => {
     const apiErr = OpenAI.APIError.generate(
       500,
       { error: { message: 'Internal error', type: 'server_error', code: null, param: null } },
@@ -125,16 +196,18 @@ describe('normalizeOpenAIError — real OpenAI SDK error classes', () => {
       new Headers()
     );
     const result = normalizeOpenAIError(apiErr);
+    expect(result.kind).toBe('server_error');
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBe(500);
   });
 
-  it('maps OpenAI.APIConnectionError to retryable LlmError with no statusCode', () => {
+  it('maps OpenAI.APIConnectionError to kind:"network", retryable LlmError with no statusCode', () => {
     const connErr = new OpenAI.APIConnectionError({
       message: 'Connection refused',
     });
     const result = normalizeOpenAIError(connErr);
     expect(result).toBeInstanceOf(LlmError);
+    expect(result.kind).toBe('network');
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBeUndefined();
   });
@@ -171,33 +244,53 @@ describe('normalizeOpenAIError — real OpenAI SDK error classes', () => {
 });
 
 describe('normalizeGeminiError — real @google/genai ApiError class', () => {
-  it('maps ApiError 429 to retryable LlmError', () => {
+  it('maps ApiError 429 to kind:"rate_limit", retryable LlmError', () => {
     // ApiError is publicly exported and directly constructable
     const apiErr = new ApiError({ status: 429, message: 'Rate limited' });
     const result = normalizeGeminiError(apiErr);
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('gemini');
     expect(result.statusCode).toBe(429);
+    expect(result.kind).toBe('rate_limit');
     expect(result.retryable).toBe(true);
   });
 
-  it('maps ApiError 401 to non-retryable LlmError', () => {
+  it('maps ApiError 401 to kind:"auth", non-retryable LlmError', () => {
     const apiErr = new ApiError({ status: 401, message: 'Unauthorized' });
     const result = normalizeGeminiError(apiErr);
+    expect(result.kind).toBe('auth');
     expect(result.retryable).toBe(false);
     expect(result.statusCode).toBe(401);
   });
 
-  it('maps ApiError 500 to retryable LlmError', () => {
+  it('maps ApiError 404 to kind:"not_found", non-retryable LlmError', () => {
+    const apiErr = new ApiError({ status: 404, message: 'Model not found' });
+    const result = normalizeGeminiError(apiErr);
+    expect(result.kind).toBe('not_found');
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBe(404);
+  });
+
+  it('maps ApiError 400 to kind:"bad_request", non-retryable LlmError', () => {
+    const apiErr = new ApiError({ status: 400, message: 'Invalid schema' });
+    const result = normalizeGeminiError(apiErr);
+    expect(result.kind).toBe('bad_request');
+    expect(result.retryable).toBe(false);
+    expect(result.statusCode).toBe(400);
+  });
+
+  it('maps ApiError 500 to kind:"server_error", retryable LlmError', () => {
     const apiErr = new ApiError({ status: 500, message: 'Internal server error' });
     const result = normalizeGeminiError(apiErr);
+    expect(result.kind).toBe('server_error');
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBe(500);
   });
 
-  it('maps ApiError 503 to retryable LlmError', () => {
+  it('maps ApiError 503 to kind:"server_error", retryable LlmError', () => {
     const apiErr = new ApiError({ status: 503, message: 'Service unavailable' });
     const result = normalizeGeminiError(apiErr);
+    expect(result.kind).toBe('server_error');
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBe(503);
   });
@@ -222,7 +315,7 @@ describe('normalizeGeminiError — real @google/genai ApiError class', () => {
 });
 
 describe('normalizePerplexityError — OpenAI SDK error classes (same hierarchy as OpenAI/DeepSeek provider)', () => {
-  it('maps OpenAI.APIError 429 to retryable LlmError with perplexity provider', () => {
+  it('maps OpenAI.APIError 429 to kind:"rate_limit", retryable LlmError with perplexity provider', () => {
     const apiErr = OpenAI.APIError.generate(
       429,
       { error: { message: 'Rate limited', type: 'tokens', code: null, param: null } },
@@ -233,10 +326,11 @@ describe('normalizePerplexityError — OpenAI SDK error classes (same hierarchy 
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('perplexity');
     expect(result.statusCode).toBe(429);
+    expect(result.kind).toBe('rate_limit');
     expect(result.retryable).toBe(true);
   });
 
-  it('maps OpenAI.APIError 401 to non-retryable LlmError', () => {
+  it('maps OpenAI.APIError 401 to kind:"auth", non-retryable LlmError', () => {
     const apiErr = OpenAI.APIError.generate(
       401,
       {
@@ -246,11 +340,12 @@ describe('normalizePerplexityError — OpenAI SDK error classes (same hierarchy 
       new Headers()
     );
     const result = normalizePerplexityError(apiErr);
+    expect(result.kind).toBe('auth');
     expect(result.retryable).toBe(false);
     expect(result.statusCode).toBe(401);
   });
 
-  it('maps OpenAI.APIError 500 to retryable LlmError with perplexity provider', () => {
+  it('maps OpenAI.APIError 500 to kind:"server_error", retryable LlmError with perplexity provider', () => {
     const apiErr = OpenAI.APIError.generate(
       500,
       { error: { message: 'Internal error', type: 'server_error', code: null, param: null } },
@@ -258,14 +353,16 @@ describe('normalizePerplexityError — OpenAI SDK error classes (same hierarchy 
       new Headers()
     );
     const result = normalizePerplexityError(apiErr);
+    expect(result.kind).toBe('server_error');
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBe(500);
   });
 
-  it('maps OpenAI.APIConnectionError to retryable LlmError with no statusCode', () => {
+  it('maps OpenAI.APIConnectionError to kind:"network", retryable LlmError with no statusCode', () => {
     const connErr = new OpenAI.APIConnectionError({ message: 'Connection refused' });
     const result = normalizePerplexityError(connErr);
     expect(result).toBeInstanceOf(LlmError);
+    expect(result.kind).toBe('network');
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBeUndefined();
   });
@@ -291,7 +388,7 @@ describe('normalizePerplexityError — OpenAI SDK error classes (same hierarchy 
 });
 
 describe('normalizeDeepSeekError — OpenAI SDK error classes (same hierarchy as OpenAI provider)', () => {
-  it('maps OpenAI.APIError 429 to retryable LlmError with deepseek provider', () => {
+  it('maps OpenAI.APIError 429 to kind:"rate_limit", retryable LlmError with deepseek provider', () => {
     const apiErr = OpenAI.APIError.generate(
       429,
       { error: { message: 'Rate limited', type: 'tokens', code: null, param: null } },
@@ -302,10 +399,11 @@ describe('normalizeDeepSeekError — OpenAI SDK error classes (same hierarchy as
     expect(result).toBeInstanceOf(LlmError);
     expect(result.provider).toBe('deepseek');
     expect(result.statusCode).toBe(429);
+    expect(result.kind).toBe('rate_limit');
     expect(result.retryable).toBe(true);
   });
 
-  it('maps OpenAI.APIError 401 to non-retryable LlmError', () => {
+  it('maps OpenAI.APIError 401 to kind:"auth", non-retryable LlmError', () => {
     const apiErr = OpenAI.APIError.generate(
       401,
       {
@@ -315,14 +413,29 @@ describe('normalizeDeepSeekError — OpenAI SDK error classes (same hierarchy as
       new Headers()
     );
     const result = normalizeDeepSeekError(apiErr);
+    expect(result.kind).toBe('auth');
     expect(result.retryable).toBe(false);
     expect(result.statusCode).toBe(401);
   });
 
-  it('maps OpenAI.APIConnectionError to retryable LlmError with no statusCode', () => {
+  it('maps OpenAI.APIError 500 to kind:"server_error", retryable LlmError with deepseek provider', () => {
+    const apiErr = OpenAI.APIError.generate(
+      500,
+      { error: { message: 'Internal error', type: 'server_error', code: null, param: null } },
+      'Internal error',
+      new Headers()
+    );
+    const result = normalizeDeepSeekError(apiErr);
+    expect(result.kind).toBe('server_error');
+    expect(result.retryable).toBe(true);
+    expect(result.statusCode).toBe(500);
+  });
+
+  it('maps OpenAI.APIConnectionError to kind:"network", retryable LlmError with no statusCode', () => {
     const connErr = new OpenAI.APIConnectionError({ message: 'Connection refused' });
     const result = normalizeDeepSeekError(connErr);
     expect(result).toBeInstanceOf(LlmError);
+    expect(result.kind).toBe('network');
     expect(result.retryable).toBe(true);
     expect(result.statusCode).toBeUndefined();
   });

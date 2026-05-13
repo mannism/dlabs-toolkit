@@ -15,6 +15,7 @@
  */
 
 import { cancellableSleep } from './abort.js';
+import type { LlmErrorKind } from './types.js';
 import { LlmError } from './types.js';
 
 // HTTP status codes that should trigger a retry
@@ -25,6 +26,20 @@ const RETRYABLE_ERROR_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED'
 
 // HTTP status codes that should never retry (fail immediately)
 const NON_RETRYABLE_HTTP_STATUSES = new Set([400, 401, 403, 404]);
+
+/**
+ * Classify an HTTP status code into the refined LlmErrorKind taxonomy.
+ * Exported for use by provider normalizers.
+ */
+export function classifyHttpStatus(statusCode: number): LlmErrorKind {
+  if (statusCode === 429) return 'rate_limit';
+  if (statusCode === 401 || statusCode === 403) return 'auth';
+  if (statusCode === 404) return 'not_found';
+  if (statusCode === 400) return 'bad_request';
+  if (statusCode >= 500) return 'server_error';
+  // Residual fallback for unclassified 4xx (402, 405, 408, etc.)
+  return 'http';
+}
 
 /** Determine if an HTTP status code is retryable. */
 export function isRetryableStatus(statusCode: number): boolean {
@@ -176,15 +191,14 @@ export function normalizeThrownError(err: unknown, provider: string): LlmError {
       });
     }
 
-    // Check for retryable HTTP status codes
+    // Check for HTTP status codes — classify to specific kind
     if (statusCode !== undefined) {
-      const retryable = isRetryableStatus(statusCode);
       return new LlmError({
         message: err.message,
         provider,
         statusCode,
-        kind: retryable ? 'http' : 'http',
-        retryable,
+        kind: classifyHttpStatus(statusCode),
+        retryable: isRetryableStatus(statusCode),
         cause: err,
       });
     }

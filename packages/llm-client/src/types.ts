@@ -20,6 +20,13 @@
  *   LlmStructuredResponse.citations  — web citations from Perplexity structured responses.
  *   LlmClient.structured JSDoc       — Zod 4 trigger and structuredMode escape hatch.
  *
+ * v1.0.0 additions (breaking):
+ *   LlmErrorKind — expanded from 6 to 15 kinds. Paths that previously emitted kind:'http' for
+ *   classified HTTP errors now emit the specific kind (rate_limit, server_error, auth, not_found,
+ *   bad_request, content_filter, context_length). kind:'http' is preserved as a residual fallback
+ *   only. Consumers checking err.kind === 'http' must migrate — see MIGRATION.md.
+ *   LlmError.kind — type updated from LlmErrorKind|undefined to always LlmErrorKind (required).
+ *
  * v0.4.3 additions (Anthropic prompt cache opt-in):
  *   LlmCallOptions.providerOptions.promptCache — Anthropic-only. Pass 'ephemeral' to inject
  *   cache_control: { type: 'ephemeral' } on the system message block. Anthropic caches the
@@ -132,20 +139,41 @@ export interface LlmStreamChunk {
  * Discriminator for LlmError — lets callers branch on error class without
  * parsing message strings.
  *
- * cancelled    — AbortSignal fired (caller-initiated). Never retried.
- * timeout      — Per-call timeoutMs deadline exceeded. Retried by withRetry.
- * stream_stall — No chunk received within streamStallTimeoutMs. Not retried
- *                (partial stream output is unsafe to re-issue).
- * http         — Non-retryable HTTP error (4xx excluding 429).
- * network      — Retryable network-layer error (ECONNRESET, ETIMEDOUT, etc.).
- * unknown      — Unclassified error.
+ * Retryable defaults (source of truth is LlmError.retryable — providers may override):
+ *
+ * | Kind                   | Default retryable | Notes                                              |
+ * |------------------------|-------------------|----------------------------------------------------|
+ * | rate_limit             | yes               | 429 from any provider                              |
+ * | server_error           | yes               | 5xx from any provider                              |
+ * | timeout                | yes               | Per-call timeoutMs exceeded / APIConnectionTimeout |
+ * | stream_stall           | no                | Inter-chunk stall; partial output unsafe to retry  |
+ * | network                | yes               | ECONNRESET, ENETUNREACH, DNS failures              |
+ * | auth                   | no                | 401, 403                                           |
+ * | not_found              | no                | 404 — typically wrong model name                   |
+ * | bad_request            | no                | 400 — schema or payload error                      |
+ * | content_filter         | no                | Provider refused on safety grounds                 |
+ * | context_length         | no                | Input exceeded model context window                |
+ * | tool_arguments_invalid | no                | Tool call arguments failed Zod parse               |
+ * | structured_parse_failed| no                | structured() output failed Zod parse               |
+ * | cancelled              | no                | AbortSignal fired (caller-initiated)               |
+ * | http                   | no                | Residual fallback for unclassified HTTP errors     |
+ * | unknown                | yes               | Catch-all; should be empty for instrumented paths  |
  */
 export type LlmErrorKind =
-  | 'cancelled'
+  | 'rate_limit'
+  | 'server_error'
   | 'timeout'
   | 'stream_stall'
-  | 'http'
   | 'network'
+  | 'auth'
+  | 'not_found'
+  | 'bad_request'
+  | 'content_filter'
+  | 'context_length'
+  | 'tool_arguments_invalid'
+  | 'structured_parse_failed'
+  | 'cancelled'
+  | 'http'
   | 'unknown';
 
 // Normalized error — wraps provider-specific errors
@@ -155,12 +183,11 @@ export class LlmError extends Error {
   readonly statusCode: number | undefined;
   readonly retryable: boolean;
   /**
-   * Optional error kind discriminator. Present on errors produced by the abort/timeout/stall
-   * machinery (v0.3.0+). May be undefined on errors from providers that pre-date the kind field
-   * or on errors that fall through to the generic normalization path.
-   * Typed as LlmErrorKind | undefined to satisfy exactOptionalPropertyTypes.
+   * Error kind discriminator — always present as of v1.0.0.
+   * Use this to drive retry logic and error handling without parsing message strings.
+   * See the LlmErrorKind table above for the full taxonomy and default retryability.
    */
-  readonly kind: LlmErrorKind | undefined;
+  readonly kind: LlmErrorKind;
   // `cause` is declared on Error in lib.es2022.error.d.ts as `cause?: unknown`
   // We override it here to make it always present (not optional) after construction.
   override readonly cause: unknown;
@@ -170,6 +197,7 @@ export class LlmError extends Error {
     provider: string;
     statusCode?: number;
     retryable: boolean;
+    /** Default: 'unknown'. All provider normalizers must supply an explicit kind. */
     kind?: LlmErrorKind;
     cause?: unknown;
   }) {
@@ -177,7 +205,7 @@ export class LlmError extends Error {
     this.provider = opts.provider;
     this.statusCode = opts.statusCode;
     this.retryable = opts.retryable;
-    this.kind = opts.kind;
+    this.kind = opts.kind ?? 'unknown';
     this.cause = opts.cause;
   }
 }

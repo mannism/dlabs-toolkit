@@ -12,17 +12,21 @@
 
 // Factory functions — all five providers fully implemented
 export { createClient, createClientFromEnv } from './client.js';
+// HTTP status classifier — useful for consumers building custom error handlers
+export { classifyHttpStatus } from './retry.js';
 // Core message format shared across all providers
 // Client config, usage, response, streaming, error types
+// Error kind type — consumers use this to branch without parsing message strings
 export type {
   LlmCallOptions,
   LlmClient,
   LlmClientConfig,
+  LlmErrorKind,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
   LlmStructuredResponse,
   LlmUsage,
 } from './types.js';
-// Error class — exported as value, not just type
+// Error class and kind discriminator — exported as value, not just type
 export { LlmError } from './types.js';
