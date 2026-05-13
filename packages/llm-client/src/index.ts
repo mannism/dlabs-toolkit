@@ -10,6 +10,9 @@
  * Week 5: Perplexity — search-grounded, citations, providerOptions escape hatch.
  */
 
+// Linked AbortController helper — fan-out with shared root signal + per-call timeouts (v1.4.0+)
+export type { LinkedAbortControllerOptions, LinkedAbortHandle } from './abort.js';
+export { linkedAbortController } from './abort.js';
 // Factory functions — all five providers fully implemented
 export { createClient, createClientFromEnv } from './client.js';
 // HTTP status classifier — useful for consumers building custom error handlers

@@ -230,6 +230,117 @@ export function classifyAbort(
   }
 }
 
+// ─── linkedAbortController ───────────────────────────────────────────────────
+
+/**
+ * Options for linkedAbortController().
+ */
+export interface LinkedAbortControllerOptions {
+  /**
+   * Optional per-child timeout in milliseconds. When supplied, a timer is
+   * started that aborts the child with a timeout reason after the elapsed time.
+   * Independent of the parent signal — either the parent firing OR the timeout
+   * firing will abort the child, whichever comes first.
+   */
+  timeoutMs?: number;
+}
+
+/**
+ * Handle returned by linkedAbortController().
+ *
+ * signal — pass to client.complete(), client.stream(), etc.
+ * abort  — abort the child immediately (for manual cancellation, e.g. early success).
+ * dispose — clean up the parent listener and timeout timer without aborting the child.
+ *           Call in the finally block of the call that uses this signal, or when the
+ *           call completes normally, to prevent listener leaks if the parent fires later.
+ */
+export interface LinkedAbortHandle {
+  signal: AbortSignal;
+  abort: (reason?: unknown) => void;
+  dispose: () => void;
+}
+
+/**
+ * Create a child AbortController that is linked to a parent AbortSignal.
+ *
+ * Behaviour:
+ *   1. If the parent signal is already aborted, the child aborts immediately
+ *      with the parent's reason (synchronous, before any API call is made).
+ *   2. While the parent signal is live, any future abort on the parent is
+ *      forwarded to the child with the same reason.
+ *   3. If options.timeoutMs is set, a timer fires after that many milliseconds
+ *      and aborts the child with a timeout reason string
+ *      ('llm-client: linkedAbortController timeout').
+ *   4. dispose() removes the parent listener and clears the timer without
+ *      aborting the child — call this when the call completes normally.
+ *
+ * Use case — fan-out with a shared root signal + per-call timeouts:
+ * ```ts
+ * const root = new AbortController();
+ * const calls = tasks.map(t => {
+ *   const child = linkedAbortController(root.signal, { timeoutMs: 30_000 });
+ *   return client
+ *     .complete(t.messages, { signal: child.signal })
+ *     .finally(() => child.dispose());
+ * });
+ * // root.abort() cancels all in-flight calls.
+ * // Individual 30s timeouts also fire per child independently.
+ * const results = await Promise.allSettled(calls);
+ * ```
+ *
+ * @param parentSignal  The parent AbortSignal to link from.
+ * @param options       Optional per-child timeout.
+ */
+export function linkedAbortController(
+  parentSignal: AbortSignal,
+  options?: LinkedAbortControllerOptions
+): LinkedAbortHandle {
+  const internal = new AbortController();
+
+  // Forward parent abort → child, capturing the parent's reason.
+  const onParentAbort = (): void => {
+    if (!internal.signal.aborted) {
+      internal.abort(parentSignal.reason);
+    }
+  };
+
+  // Timer handle — only set when timeoutMs is provided.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  if (parentSignal.aborted) {
+    // Parent already aborted — forward immediately before registering anything.
+    onParentAbort();
+  } else {
+    parentSignal.addEventListener('abort', onParentAbort, { once: true });
+  }
+
+  // Start the per-child timeout if requested.
+  if (options?.timeoutMs !== undefined && !internal.signal.aborted) {
+    const ms = options.timeoutMs;
+    timer = setTimeout(() => {
+      if (!internal.signal.aborted) {
+        internal.abort(new Error('llm-client: linkedAbortController timeout'));
+      }
+    }, ms);
+    // Allow Node.js process to exit even if the timer is live.
+    (timer as unknown as { unref?: () => void }).unref?.();
+  }
+
+  const dispose = (): void => {
+    parentSignal.removeEventListener('abort', onParentAbort);
+    if (timer !== undefined) clearTimeout(timer);
+  };
+
+  return {
+    signal: internal.signal,
+    abort: (reason?: unknown) => {
+      dispose();
+      if (!internal.signal.aborted) internal.abort(reason);
+    },
+    dispose,
+  };
+}
+
 /** Returns true if the thrown value is a DOM/Node AbortError. */
 function isAbortError(err: unknown): boolean {
   if (err instanceof Error && err.name === 'AbortError') return true;
