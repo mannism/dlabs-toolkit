@@ -958,3 +958,44 @@ describe('Gemini provider — streamStructured() pre-call throw', () => {
     expect(mockGenerateContentStream).not.toHaveBeenCalled();
   });
 });
+
+// ─── Response IDs (Wave 3a §3.4) ─────────────────────────────────────────────
+
+describe('Gemini provider — response IDs (v1.4.0)', () => {
+  let mockGenerateContent: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateContent = vi.fn().mockResolvedValue(mockGeminiResponse());
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: vi.fn(),
+        },
+      };
+    });
+  });
+
+  it('complete(): id is synthesized (non-empty string) and idSource is "synthesized"', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }]);
+    // Gemini does not issue native response IDs — toolkit synthesizes a UUID v7-style ID.
+    expect(typeof result.id).toBe('string');
+    expect(result.id.length).toBeGreaterThan(0);
+    expect(result.idSource).toBe('synthesized');
+  });
+
+  it('structured(): id is synthesized and idSource is "synthesized"', async () => {
+    const schema = z.object({ name: z.string() });
+    mockGenerateContent.mockResolvedValue({
+      ...mockGeminiResponse(),
+      text: JSON.stringify({ name: 'Sable' }),
+    });
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'name?' }], schema);
+    expect(typeof result.id).toBe('string');
+    expect(result.id.length).toBeGreaterThan(0);
+    expect(result.idSource).toBe('synthesized');
+  });
+});

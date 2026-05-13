@@ -214,6 +214,31 @@ export interface LlmResponse {
   usage: LlmUsage;
   latencyMs: number;
   /**
+   * Response / request ID for tracing and correlation (v1.4.0+).
+   *
+   * Always present. Sources:
+   *   - Anthropic: response.id (message ID).
+   *   - OpenAI: rawResponse.id (Responses API response ID).
+   *   - DeepSeek: rawResponse.id (Chat Completions response ID).
+   *   - Perplexity: response.id (Chat Completions response ID).
+   *   - Gemini: synthesized UUID v7-style (time-derived + random) — Gemini does not
+   *     issue native response IDs on generateContent calls.
+   *
+   * Use idSource to distinguish provider-issued from toolkit-synthesized IDs.
+   */
+  id: string;
+  /**
+   * Indicates whether id was issued by the provider or synthesized by the toolkit (v1.4.0+).
+   *
+   * 'provider'    — the provider issued this id natively.
+   * 'synthesized' — the toolkit generated a UUID v7-style id because the provider
+   *                 does not issue native response IDs (currently: Gemini).
+   *
+   * Use this field when building trace correlation systems to distinguish durable
+   * provider IDs from toolkit-generated correlation IDs.
+   */
+  idSource: 'provider' | 'synthesized';
+  /**
    * Web citations returned by the Perplexity provider.
    * Populated only when the Perplexity API returns source references.
    * Always undefined for Anthropic, OpenAI, Gemini, and DeepSeek.
@@ -380,11 +405,25 @@ export class LlmError extends Error {
  *                Undefined for Gemini, DeepSeek, and Perplexity.
  *   citations  — web citations propagated from Perplexity structured calls.
  *                Undefined for all other providers.
+ *
+ * v1.4.0 — id is now always present (no longer optional).
+ *   idSource   — 'provider' | 'synthesized'. Indicates whether id was issued by the
+ *                provider (Anthropic, OpenAI, DeepSeek, Perplexity) or synthesized by
+ *                the toolkit (Gemini — UUID v7-style, time-derived + random).
  */
 export type LlmStructuredResponse<T> = {
   data: T;
   model: string;
-  id?: string;
+  /**
+   * Response / request ID for tracing and correlation (v1.4.0+).
+   * Always present. See LlmResponse.id for full source documentation.
+   */
+  id: string;
+  /**
+   * Indicates whether id was issued by the provider or synthesized by the toolkit (v1.4.0+).
+   * See LlmResponse.idSource for full documentation.
+   */
+  idSource: 'provider' | 'synthesized';
   usage: LlmUsage;
   latencyMs: number;
   citations?: Array<{ url: string; title?: string }>;
@@ -460,7 +499,16 @@ export interface LlmToolResponse {
   requestedModel?: string;
   usage: LlmUsage;
   latencyMs: number;
-  id?: string;
+  /**
+   * Response / request ID for tracing and correlation (v1.4.0+).
+   * Always present. See LlmResponse.id for full source documentation.
+   */
+  id: string;
+  /**
+   * Indicates whether id was issued by the provider or synthesized by the toolkit (v1.4.0+).
+   * See LlmResponse.idSource for full documentation.
+   */
+  idSource: 'provider' | 'synthesized';
   stopReason:
     | 'tool_use'
     | 'end_turn'

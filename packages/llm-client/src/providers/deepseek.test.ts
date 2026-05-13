@@ -1007,3 +1007,28 @@ describe('DeepSeek provider — streamStructured()', () => {
     }
   });
 });
+
+// ─── Response IDs (Wave 3a §3.4) ─────────────────────────────────────────────
+
+describe('DeepSeek provider — response IDs (v1.4.0)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('complete(): id is provider-issued and idSource is "provider"', async () => {
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        chat: {
+          completions: {
+            create: vi.fn().mockResolvedValue(mockChatCompletion('Hello!')),
+          },
+        },
+      };
+    });
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }]);
+    // mockChatCompletion uses 'chatcmpl-ds-123' as default id
+    expect(result.id).toBe('chatcmpl-ds-123');
+    expect(result.idSource).toBe('provider');
+  });
+});

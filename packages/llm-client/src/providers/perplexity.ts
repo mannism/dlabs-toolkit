@@ -279,6 +279,8 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
           const result: LlmResponse = {
             content,
             model: response.model,
+            id: response.id,
+            idSource: 'provider',
             usage: normalizeUsage(response.usage),
             latencyMs: Date.now() - start,
           };
@@ -447,6 +449,7 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
       data,
       model: response.model,
       id: response.id,
+      idSource: 'provider',
       usage: normalizeUsage(response.usage),
       latencyMs: Date.now() - start,
     };

@@ -1384,3 +1384,39 @@ describe('OpenAI provider (Responses API) — streamStructured()', () => {
     expect(callArgs.stream).toBe(true);
   });
 });
+
+// ─── Response IDs (Wave 3a §3.4) ─────────────────────────────────────────────
+
+describe('OpenAI provider — response IDs (v1.4.0)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('complete(): id is provider-issued and idSource is "provider"', async () => {
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: vi.fn().mockResolvedValue(mockResponse('Hello!')) } };
+    });
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }]);
+    // mockResponse uses 'resp-123' as default id
+    expect(result.id).toBe('resp-123');
+    expect(result.idSource).toBe('provider');
+  });
+
+  it('structured(): id is provider-issued and idSource is "provider"', async () => {
+    const schema = z.object({ name: z.string() });
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        responses: {
+          create: vi.fn().mockResolvedValue(
+            mockResponse(JSON.stringify({ name: 'Sable' }), { id: 'resp-struct-1' })
+          ),
+        },
+      };
+    });
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'name?' }], schema);
+    expect(result.id).toBe('resp-struct-1');
+    expect(result.idSource).toBe('provider');
+  });
+});

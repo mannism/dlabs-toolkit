@@ -255,6 +255,8 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           return {
             content,
             model: response.model,
+            id: response.id,
+            idSource: 'provider' as const,
             usage: normalizeUsage(response.usage),
             latencyMs: Date.now() - start,
           };
@@ -460,6 +462,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
       data,
       model: response.model,
       id: response.id,
+      idSource: 'provider' as const,
       usage: normalizeUsage(response.usage),
       latencyMs: Date.now() - start,
     };
@@ -635,6 +638,8 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     return {
       data,
       model: response.model,
+      id: response.id,
+      idSource: 'provider' as const,
       usage: response.usage,
       latencyMs: Date.now() - start,
     };
@@ -789,6 +794,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
       toolCalls,
       model: response.model,
       id: response.id,
+      idSource: 'provider' as const,
       usage: normalizeUsage(response.usage),
       latencyMs: Date.now() - start,
       stopReason: mapStopReason(response.stop_reason),

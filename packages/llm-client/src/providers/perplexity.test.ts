@@ -1245,3 +1245,25 @@ describe('Perplexity provider — streamStructured() pre-call throw', () => {
     expect(mockCreate).not.toHaveBeenCalled();
   });
 });
+
+// ─── Response IDs (Wave 3a §3.4) ─────────────────────────────────────────────
+
+describe('Perplexity provider — response IDs (v1.4.0)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('Hello!'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+  });
+
+  it('complete(): id is provider-issued and idSource is "provider"', async () => {
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }]);
+    // mockChatCompletion uses 'chatcmpl-pplx-123' as default id
+    expect(result.id).toBe('chatcmpl-pplx-123');
+    expect(result.idSource).toBe('provider');
+  });
+});

@@ -1615,3 +1615,55 @@ describe('Anthropic provider — streamStructured()', () => {
     }
   });
 });
+
+// ─── Response IDs (Wave 3a §3.4) ─────────────────────────────────────────────
+
+describe('Anthropic provider — response IDs (v1.4.0)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn().mockResolvedValue(mockMessageResponse()),
+          stream: vi.fn(),
+        },
+      };
+    });
+  });
+
+  it('complete(): id is provider-issued (msg_123) and idSource is "provider"', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }]);
+    expect(result.id).toBe('msg_123');
+    expect(result.idSource).toBe('provider');
+  });
+
+  it('structured(): id is provider-issued and idSource is "provider"', async () => {
+    const schema = z.object({ name: z.string() });
+    // Strict-mode structured() uses tool-use — mock a tool_use response.
+    const toolUseResponse = mockMessageResponse({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'tool_id_test',
+          name: 'extract',
+          input: { name: 'Sable' },
+        } as unknown as Anthropic.TextBlock,
+      ],
+      stop_reason: 'tool_use',
+    });
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn().mockResolvedValue(toolUseResponse),
+          stream: vi.fn(),
+        },
+      };
+    });
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'name?' }], schema);
+    expect(typeof result.id).toBe('string');
+    expect(result.id.length).toBeGreaterThan(0);
+    expect(result.idSource).toBe('provider');
+  });
+});

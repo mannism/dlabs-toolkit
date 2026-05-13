@@ -173,6 +173,8 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
           return {
             content,
             model: response.model,
+            id: response.id,
+            idSource: 'provider' as const,
             usage: normalizeUsage(response.usage),
             latencyMs: Date.now() - start,
           };
@@ -324,6 +326,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
       data,
       model: rawResponse.model,
       id: rawResponse.id,
+      idSource: 'provider' as const,
       usage: normalizeUsage(rawResponse.usage),
       latencyMs: Date.now() - start,
     };
@@ -472,6 +475,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
       toolCalls,
       model: rawResponse.model,
       id: rawResponse.id,
+      idSource: 'provider' as const,
       usage: normalizeUsage(rawResponse.usage),
       latencyMs: Date.now() - start,
       stopReason: mapFinishReason(choice?.finish_reason),
