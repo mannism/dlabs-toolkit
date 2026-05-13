@@ -79,12 +79,15 @@ describe('runAll — basic execution', () => {
     const tasks = [makeTask('ok'), makeFailingTask('boom'), makeTask('also-ok')];
     const results = await pool.runAll(tasks);
 
-    expect(results[0]).toEqual({ status: 'fulfilled', value: 'ok' });
-    expect(results[1]).toMatchObject({ status: 'rejected', reason: expect.any(Error) });
-    if (results[1].status === 'rejected') {
-      expect((results[1].reason as Error).message).toBe('boom');
+    const r0 = results[0];
+    const r1 = results[1];
+    const r2 = results[2];
+    expect(r0).toEqual({ status: 'fulfilled', value: 'ok' });
+    expect(r1).toMatchObject({ status: 'rejected', reason: expect.any(Error) });
+    if (r1 !== undefined && r1.status === 'rejected') {
+      expect((r1.reason as Error).message).toBe('boom');
     }
-    expect(results[2]).toEqual({ status: 'fulfilled', value: 'also-ok' });
+    expect(r2).toEqual({ status: 'fulfilled', value: 'also-ok' });
   });
 
   it('returns empty array for empty task list', async () => {
