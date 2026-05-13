@@ -1,5 +1,68 @@
 # @diabolicallabs/llm-client
 
+## 1.4.0
+
+### Minor Changes
+
+- 3c8bce0: feat(llm-client): provider capability matrix — getModelCapabilities() (Wave 3a §3.2)
+
+  Adds `getModelCapabilities(provider, model): ModelCapabilities | null` — a static lookup
+  that returns capability flags for any supported provider+model combination:
+
+  - `contextWindow`, `maxOutputTokens` — token limits
+  - `streaming`, `tools`, `parallelTools` — call surface support
+  - `promptCache` — `'ephemeral'` for Anthropic; `null` for all others
+  - `structuredOutput` — `'tool-use'` | `'json-schema'` | `'response-schema'` | `null`
+  - `responseIds` — `'provider'` | `'synthesized'` (Gemini synthesizes UUID v7-style IDs)
+  - `streamStructured` — `false` for Gemini and Perplexity
+
+  Returns `null` for unknown models (never throws). Covers all five providers and all models
+  in the DEFAULT_PRICING_TABLE. Versioned at `CAPABILITIES_VERSIONED_AT: '2026-05-13'`.
+
+- 3f7c43e: feat(llm-client): linkedAbortController helper — fan-out with root signal + per-call timeouts (Wave 3a §3.3)
+
+  Adds `linkedAbortController(parentSignal, { timeoutMs? }): LinkedAbortHandle` — a consumer-facing
+  utility for parallel call patterns where a root signal cancels all in-flight calls and individual
+  calls have their own per-call timeouts.
+
+  Behaviour:
+
+  - Parent abort forwards immediately to the child, preserving the parent's abort reason.
+  - If the parent is already aborted when linkedAbortController() is called, the child aborts
+    synchronously (before any API call is made).
+  - Optional `timeoutMs` starts an independent timer that aborts the child after the elapsed time
+    with a timeout reason string. Fires independently of the parent.
+  - `dispose()` removes the parent listener and clears the timer without aborting the child.
+    Call in the `finally` block of the consuming call to prevent listener leaks.
+  - `abort()` aborts the child immediately and calls `dispose()`.
+
+  Returns `{ signal, abort, dispose }`. Pass `signal` to `client.complete()`, `client.stream()`, etc.
+
+- 29ff738: feat(llm-client): response IDs on all response types — id + idSource everywhere (Wave 3a §3.4)
+
+  Adds `id: string` and `idSource: 'provider' | 'synthesized'` to all three response types:
+  `LlmResponse`, `LlmStructuredResponse<T>`, and `LlmToolResponse`.
+
+  Previously `id` was optional and absent from `LlmResponse` entirely. Now all response paths
+  across all five providers always carry a non-undefined `id`.
+
+  **Provider sources:**
+
+  - Anthropic: `response.id` (message ID — provider-issued). `idSource: 'provider'`.
+  - OpenAI: `rawResponse.id` (Responses API response ID — provider-issued). `idSource: 'provider'`.
+  - DeepSeek: `rawResponse.id` (Chat Completions response ID — provider-issued). `idSource: 'provider'`.
+  - Perplexity: `response.id` (Chat Completions response ID — provider-issued). `idSource: 'provider'`.
+  - Gemini: synthesized UUID v7-style (time-derived prefix + random — time-sortable for trace correlation).
+    `idSource: 'synthesized'`. Gemini does not issue native response IDs on generateContent calls.
+
+  **UUID v4 vs v7 decision:** The toolkit uses a hand-rolled v7-style generator (time-derived prefix,
+  no new dep). Time-sortability is useful for trace correlation without a separate timestamp field.
+  `crypto.randomUUID()` (v4) would be fully random — no correlation by time. No `uuid` package needed.
+
+  **Migration:** `id` is now required on all three response types. TypeScript consumers that were
+  checking `if (result.id !== undefined)` may need to remove the null check. The `idSource` field
+  lets trace systems distinguish durable provider IDs from toolkit-generated correlation IDs.
+
 ## 1.3.0
 
 ### Minor Changes
