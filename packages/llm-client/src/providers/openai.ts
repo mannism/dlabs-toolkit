@@ -3,19 +3,31 @@
  *
  * Implements: complete(), stream(), structured()
  *
+ * API surface: OpenAI Responses API (`client.responses.create`) — not Chat Completions.
+ * This is a full migration from chat.completions.create (v0.4.x) to responses.create (v1.0.0).
+ * See MIGRATION.md §"Breaking change 3" for the consumer-facing migration note.
+ *
+ * Key API differences from Chat Completions (Tom §1.2, §1.3, §1.6):
+ *   - Tool shape is FLAT: { type:'function', name, description, parameters } — no nested 'function' key.
+ *   - Structured output uses `text: { format: { type:'json_schema', name, schema, strict } }` not `response_format`.
+ *   - Streaming events are `ResponseTextDeltaEvent` / `ResponseOutputItemDoneEvent` — not `choices[0].delta.content`.
+ *   - `parallel_tool_calls` is a top-level param (same as Chat Completions).
+ *   - `previous_response_id` is available for multi-turn conversations.
+ *
  * Token normalization:
- *   OpenAI: prompt_tokens / completion_tokens
+ *   Responses API: response.usage.input_tokens / output_tokens / total_tokens
  *   → LlmUsage: inputTokens / outputTokens / totalTokens
  *
  * Error mapping:
- *   APIStatusError.status → LlmError.statusCode + retryable flag
- *   APIConnectionError → retryable: true
+ *   APIConnectionTimeoutError → kind:'timeout', retryable:true
+ *   APIConnectionError → kind:'network', retryable:true
+ *   APIStatusError.status → classifyHttpStatus() → LlmError.kind + retryable flag
  *
- * Structured output (v0.4.0):
- *   Zod 4 schema detected → response_format: { type: 'json_schema', strict: true }
- *   Non-Zod schema or providerOptions.structuredMode === 'prompt' → json_object fallback.
- *   Note: openai SDK v6.36 does not export zodResponseFormat; the literal response_format
- *   shape is used directly (stable since SDK v4.55).
+ * v1.0.0 additions:
+ *   - Full Responses API migration for complete(), stream(), structured().
+ *   - LlmErrorKind taxonomy: classifyHttpStatus() applied to all status codes.
+ *   - structured_parse_failed kind on schema validation failures.
+ *   - structured() strict path uses `text.format` (Responses API) not `response_format`.
  */
 
 import OpenAI from 'openai';
@@ -42,10 +54,10 @@ import { LlmError } from '../types.js';
 
 const PROVIDER = 'openai';
 
-/** Normalize OpenAI's usage object to LlmUsage. */
-function normalizeUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUsage {
-  const inputTokens = usage?.prompt_tokens ?? 0;
-  const outputTokens = usage?.completion_tokens ?? 0;
+/** Normalize OpenAI Responses API usage object to LlmUsage. */
+function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined | null): LlmUsage {
+  const inputTokens = usage?.input_tokens ?? 0;
+  const outputTokens = usage?.output_tokens ?? 0;
   return {
     inputTokens,
     outputTokens,
@@ -53,12 +65,36 @@ function normalizeUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUs
   };
 }
 
-/** Convert LlmMessages to OpenAI's chat message format. */
-function buildOpenAIMessages(messages: LlmMessage[]): OpenAI.Chat.ChatCompletionMessageParam[] {
+/**
+ * Convert LlmMessages to OpenAI Responses API input format.
+ *
+ * The Responses API accepts a flat array of input items. System messages become
+ * a 'system' role input; user/assistant messages become 'user'/'assistant'.
+ * Unlike Chat Completions, the Responses API uses `input` not `messages`.
+ */
+function buildResponsesInput(messages: LlmMessage[]): OpenAI.Responses.EasyInputMessage[] {
   return messages.map((m) => ({
     role: m.role,
     content: m.content,
   }));
+}
+
+/**
+ * Extract text content from a Responses API response.
+ * The response content is in output[].content[].text (OutputText items).
+ */
+function extractTextContent(response: OpenAI.Responses.Response): string {
+  const parts: string[] = [];
+  for (const item of response.output) {
+    if (item.type === 'message') {
+      for (const contentItem of item.content) {
+        if (contentItem.type === 'output_text') {
+          parts.push(contentItem.text);
+        }
+      }
+    }
+  }
+  return parts.join('');
 }
 
 /**
@@ -68,7 +104,6 @@ function buildOpenAIMessages(messages: LlmMessage[]): OpenAI.Chat.ChatCompletion
 export function normalizeOpenAIError(err: unknown): LlmError {
   if (err instanceof LlmError) return err;
 
-  // OpenAI SDK v6+: uses OpenAI.APIError as the base class with a `.status` field.
   // APIConnectionTimeoutError is a subclass of APIConnectionError — check it first so the
   // timeout subtype maps to kind:'timeout' rather than falling through to the generic
   // connection-error branch (which emits no kind discriminator).
@@ -125,7 +160,7 @@ export function normalizeOpenAIError(err: unknown): LlmError {
   return normalizeThrownError(err, PROVIDER);
 }
 
-/** Create the OpenAI provider implementation. */
+/** Create the OpenAI provider implementation using the Responses API. */
 export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
   const client = new OpenAI({
     apiKey: config.apiKey,
@@ -141,7 +176,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
     const model = options?.model ?? config.model;
-    const openAIMessages = buildOpenAIMessages(messages);
+    const input = buildResponsesInput(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
@@ -149,26 +184,26 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       async () => {
         const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
         try {
-          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+          const params: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
             model,
-            messages: openAIMessages,
+            input,
             stream: false,
           };
 
           const maxTokens = options?.maxTokens ?? config.maxTokens;
-          if (maxTokens !== undefined) params.max_completion_tokens = maxTokens;
+          if (maxTokens !== undefined) params.max_output_tokens = maxTokens;
 
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline for this call,
           // ensuring the per-call budget matches the AbortController budget (Fix A, v0.4.2).
-          const response = await client.chat.completions.create(params, {
+          const response = await client.responses.create(params, {
             signal: ctl.signal,
             timeout: effectiveTimeoutMs,
           });
 
-          const content = response.choices.map((c) => c.message.content ?? '').join('');
+          const content = extractTextContent(response);
 
           return {
             content,
@@ -191,29 +226,28 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
     const model = options?.model ?? config.model;
-    const openAIMessages = buildOpenAIMessages(messages);
+    const input = buildResponsesInput(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
 
-    const params: OpenAI.Chat.ChatCompletionCreateParamsStreaming = {
+    const params: OpenAI.Responses.ResponseCreateParamsStreaming = {
       model,
-      messages: openAIMessages,
+      input,
       stream: true,
-      stream_options: { include_usage: true },
     };
 
     const maxTokens = options?.maxTokens ?? config.maxTokens;
-    if (maxTokens !== undefined) params.max_completion_tokens = maxTokens;
+    if (maxTokens !== undefined) params.max_output_tokens = maxTokens;
 
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) params.temperature = temperature;
 
     const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
-    let sdkStream: Awaited<ReturnType<typeof client.chat.completions.create>>;
+    let sdkStream: Awaited<ReturnType<typeof client.responses.create>>;
 
     try {
       // timeout: effectiveTimeoutMs overrides the SDK socket deadline for this call (Fix A, v0.4.2).
-      sdkStream = await client.chat.completions.create(params, {
+      sdkStream = await client.responses.create(params, {
         signal: ctl.signal,
         timeout: effectiveTimeoutMs,
       });
@@ -225,16 +259,24 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     let finalUsage: LlmUsage | undefined;
 
     try {
-      for await (const chunk of withStallTimeout(sdkStream, stallMs, ctl, PROVIDER)) {
-        // Token chunks arrive in choices[0].delta.content
-        const delta = chunk.choices[0]?.delta.content;
-        if (delta !== undefined && delta !== null && delta.length > 0) {
-          yield { token: delta };
-        }
-
-        // Usage arrives in the final chunk (stream_options.include_usage must be true)
-        if (chunk.usage !== undefined && chunk.usage !== null) {
-          finalUsage = normalizeUsage(chunk.usage);
+      // Responses API streaming events are ResponseStreamEvent typed objects.
+      // Text tokens arrive as 'response.output_text.delta' events.
+      // Usage arrives in the 'response.completed' event on response.usage.
+      // biome-ignore lint/complexity/useLiteralKeys: ResponseStreamEvent union — dot access triggers noPropertyAccessFromIndexSignature
+      for await (const event of withStallTimeout(
+        sdkStream as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>,
+        stallMs,
+        ctl,
+        PROVIDER
+      )) {
+        if (event.type === 'response.output_text.delta') {
+          const delta = event.delta;
+          if (delta !== undefined && delta.length > 0) {
+            yield { token: delta };
+          }
+        } else if (event.type === 'response.completed') {
+          // Usage is on the completed response object
+          finalUsage = normalizeUsage(event.response.usage);
         }
       }
     } catch (err) {
@@ -264,10 +306,13 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       return structuredPromptFallback(messages, schema, options);
     }
 
-    // ── Strict path: response_format: { type: 'json_schema', strict: true } ──
+    // ── Strict path: Responses API text.format.type = 'json_schema' ──────────
+    // On the Responses API, structured output is configured via `text.format` (not `response_format`).
+    // The `name` field is required and `strict: true` enforces schema conformance.
+    // Tom §1.3: ResponseFormatTextJSONSchemaConfig shape verified against SDK types.
     const jsonSchema = toProviderSchema(schema, 'openai');
     const model = options?.model ?? config.model;
-    const openAIMessages = buildOpenAIMessages(messages);
+    const input = buildResponsesInput(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
@@ -275,39 +320,31 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       async () => {
         const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
         try {
-          // Literal json_schema response_format shape, stable since OpenAI SDK v4.55.
-          // SDK v6.36 (our pin) does not export zodResponseFormat; we pass the literal directly.
-          // Use a type intersection to satisfy exactOptionalPropertyTypes: the property is
-          // defined as optional on the SDK params type, but we require it to be present here.
-          type StrictParams = Omit<
-            OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-            'response_format'
-          > & {
-            response_format: OpenAI.ResponseFormatJSONSchema;
-          };
-          const params: StrictParams = {
+          const params: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
             model,
-            messages: openAIMessages,
+            input,
             stream: false,
-            response_format: {
-              type: 'json_schema',
-              json_schema: { name: 'response', schema: jsonSchema, strict: true },
+            text: {
+              format: {
+                type: 'json_schema',
+                name: 'response',
+                schema: jsonSchema as Record<string, unknown>,
+                strict: true,
+              },
             },
           };
 
           const maxTokens = options?.maxTokens ?? config.maxTokens;
-          if (maxTokens !== undefined) params.max_completion_tokens = maxTokens;
+          if (maxTokens !== undefined) params.max_output_tokens = maxTokens;
 
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
-          // StrictParams is structurally compatible with ChatCompletionCreateParamsNonStreaming
-          // (it is a narrowing of that type, not a widening). Cast is safe.
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
-          return await client.chat.completions.create(
-            params as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
-            { signal: ctl.signal, timeout: effectiveTimeoutMs }
-          );
+          return await client.responses.create(params, {
+            signal: ctl.signal,
+            timeout: effectiveTimeoutMs,
+          });
         } catch (err) {
           throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
         } finally {
@@ -317,18 +354,23 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       mergeRetryOptsWithSignal(retryOpts, options?.signal)
     );
 
-    // Check for model refusal — strict mode can return a refusal instead of content
-    const choice = rawResponse.choices[0];
-    if (choice?.message.refusal !== null && choice?.message.refusal !== undefined) {
-      throw new LlmError({
-        message: `OpenAI structured output: model refused to generate. Refusal: ${choice.message.refusal.slice(0, 200)}`,
-        provider: PROVIDER,
-        retryable: false,
-        kind: 'unknown',
-      });
+    // Check for model refusal — strict mode can return a refusal output item
+    for (const item of rawResponse.output) {
+      if (item.type === 'message') {
+        for (const contentItem of item.content) {
+          if (contentItem.type === 'refusal') {
+            throw new LlmError({
+              message: `OpenAI structured output: model refused to generate. Refusal: ${contentItem.refusal.slice(0, 200)}`,
+              provider: PROVIDER,
+              kind: 'content_filter',
+              retryable: false,
+            });
+          }
+        }
+      }
     }
 
-    const rawContent = choice?.message.content ?? '';
+    const rawContent = extractTextContent(rawResponse);
 
     let parsed: unknown;
     try {
@@ -338,6 +380,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       throw new LlmError({
         message: `OpenAI structured output: response is not valid JSON. Raw: ${rawContent.slice(0, 200)}`,
         provider: PROVIDER,
+        kind: 'structured_parse_failed',
         retryable: false,
         cause: err,
       });
@@ -368,7 +411,8 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
   /**
    * Prompt-only fallback for structured() — used when schema is not Zod 4 or
-   * providerOptions.structuredMode === 'prompt'. Preserves v0.3.0 behavior exactly.
+   * providerOptions.structuredMode === 'prompt'.
+   * Uses the Responses API with no schema enforcement (plain text output + JSON parse).
    */
   async function structuredPromptFallback<T>(
     messages: LlmMessage[],
@@ -383,7 +427,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
     const augmentedMessages = [jsonSystemInstruction, ...messages];
     const model = options?.model ?? config.model;
-    const openAIMessages = buildOpenAIMessages(augmentedMessages);
+    const input = buildResponsesInput(augmentedMessages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
@@ -391,21 +435,26 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       async () => {
         const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
         try {
-          const params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming = {
+          const params: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
             model,
-            messages: openAIMessages,
+            input,
             stream: false,
-            response_format: { type: 'json_object' },
+            // Responses API text.format for JSON object mode (no schema enforcement)
+            text: {
+              format: {
+                type: 'json_object',
+              },
+            },
           };
 
           const maxTokens = options?.maxTokens ?? config.maxTokens;
-          if (maxTokens !== undefined) params.max_completion_tokens = maxTokens;
+          if (maxTokens !== undefined) params.max_output_tokens = maxTokens;
 
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
-          return await client.chat.completions.create(params, {
+          return await client.responses.create(params, {
             signal: ctl.signal,
             timeout: effectiveTimeoutMs,
           });
@@ -418,7 +467,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       mergeRetryOptsWithSignal(retryOpts, options?.signal)
     );
 
-    const rawContent = rawResponse.choices[0]?.message.content ?? '';
+    const rawContent = extractTextContent(rawResponse);
 
     // parseJsonOrThrow: tries extractJsonBlock first (handles fences, prose, no closing fence),
     // falls back to legacy strip+parse, then throws a non-retryable LlmError with a

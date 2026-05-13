@@ -160,6 +160,7 @@ export function parseJsonOrThrow(rawContent: string, provider: string): unknown 
     throw new LlmError({
       message: `${provider} structured output: response is not valid JSON. Raw: ${buildRawSlice(rawContent)}`,
       provider,
+      kind: 'structured_parse_failed',
       retryable: false,
       cause: err,
     });
