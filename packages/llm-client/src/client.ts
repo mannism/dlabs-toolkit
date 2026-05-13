@@ -222,6 +222,10 @@ function createFailoverClient(
     for (let i = 0; i < models.length; i++) {
       try {
         const response = await getProvider(i).structured(messages, schema, options);
+        // Tag with requestedModel only when a fallback actually fired.
+        if (i > 0) {
+          return { ...response, requestedModel: primaryModel };
+        }
         return response;
       } catch (err) {
         if (err instanceof LlmError && fallbackOnSet.has(err.kind) && i < models.length - 1) {
