@@ -2,7 +2,7 @@
 
 Shared platform infrastructure for the Diabolical Labs and Diana Ismail project fleet. Independently-versioned TypeScript packages consumed across multiple repos. © Diabolical Labs
 
-**`llm-client` and `agent-sdk` are at v1.0.0 (stable).** `notion` and `rate-limiter` remain pre-1.0.
+**`llm-client`, `agent-sdk`, and `llm-pricing` are stable (v1.1.0 / v1.1.0 / v0.1.0).** `notion` and `rate-limiter` remain pre-1.0.
 
 ---
 
@@ -10,8 +10,9 @@ Shared platform infrastructure for the Diabolical Labs and Diana Ismail project 
 
 | Package | Status | Description |
 |---|---|---|
-| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v1.0.0) | Unified LLM API — Anthropic, OpenAI (Responses API), Gemini, DeepSeek, Perplexity. `complete()` / `stream()` / `structured()` / **`withTools()`** (native tool calling across all 5 providers). 14-kind `LlmErrorKind` taxonomy. Native strict structured outputs (Zod 4) with Gemini empty-object schema auto-rewrite. Per-call timeouts/AbortSignal/stream stall, token normalization, web-grounded citations, `providerOptions` escape hatch. Anthropic prompt cache opt-in via `providerOptions.promptCache: 'ephemeral'`. See [`packages/llm-client/MIGRATION.md`](packages/llm-client/MIGRATION.md) for v0.x → v1.0.0 migration. |
-| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v1.0.0) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. `CallRecord.tool_calls` captures `withTools()` invocations. Peer-deps on `llm-client@^1.0.0`. |
+| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v1.1.0) | Unified LLM API — Anthropic, OpenAI (Responses API), Gemini, DeepSeek, Perplexity. `complete()` / `stream()` / `structured()` / **`withTools()`** (native tool calling across all 5 providers). 14-kind `LlmErrorKind` taxonomy. Native strict structured outputs (Zod 4) with Gemini empty-object schema auto-rewrite. Per-call timeouts/AbortSignal/stream stall, token normalization, web-grounded citations, `providerOptions` escape hatch. Anthropic prompt cache opt-in via `providerOptions.promptCache: 'ephemeral'`. Optional cost computation via `@diabolicallabs/llm-pricing` (v1.1.0+). See [`packages/llm-client/MIGRATION.md`](packages/llm-client/MIGRATION.md) for v0.x → v1.0.0 migration. |
+| [`@diabolicallabs/llm-pricing`](packages/llm-pricing/) | published (v0.1.0) | Default pricing table + `computeCost()` for all 5 providers. Verified 2026-05-13. Gemini long-context tiering, Anthropic dual cache write rates, DeepSeek deprecated alias resolution, o-series and sonar-deep-research partial-cost flags. `versionedAt` field for staleness detection. `pnpm pricing:verify` script for monthly drift checks. Optional peer dep for `llm-client` and `agent-sdk`. |
+| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v1.1.0) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. `CallRecord.tool_calls` captures `withTools()` invocations. `CallRecord.cost` propagates per-call USD cost when `llm-pricing` is installed (v1.1.0+). Optional peer-dep on `llm-pricing@^0.1.0`. |
 | [`@diabolicallabs/notion`](packages/notion/) | scaffolded (v0.0.2) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
 | [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | scaffolded (v0.0.2) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
 
@@ -66,15 +67,13 @@ Perplexity is web-grounded — `complete()` returns `response.citations` (array 
 dlabs-toolkit/
   packages/
     llm-client/     @diabolicallabs/llm-client
+    llm-pricing/    @diabolicallabs/llm-pricing
     agent-sdk/      @diabolicallabs/agent-sdk
     notion/         @diabolicallabs/notion
     rate-limiter/   @diabolicallabs/rate-limiter
   scripts/
     integration-test.ts            manual API integration tests (not in CI)
-    smoke-{anthropic,openai,gemini,perplexity}.ts
-                                   per-provider live smoke tests — pre-publish gate
-    geoaudit-use-case-validation.mjs
-                                   GEOAudit consumer call-shape validation (live)
+    smoke-*.ts / smoke-*.mjs       per-provider live smoke tests — pre-publish gate
     tsconfig.json                  strict TS config for the scripts/ directory
   .changeset/       Changesets version files
   .github/
