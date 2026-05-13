@@ -17,6 +17,7 @@ import {
   cancellableSleep,
   classifyAbort,
   createAttemptController,
+  linkedAbortController,
   withStallTimeout,
 } from './abort.js';
 import { LlmError } from './types.js';
@@ -342,5 +343,79 @@ describe('classifyAbort', () => {
     const result = classifyAbort(domErr, 'caller', 'test');
     expect(result).toBeInstanceOf(LlmError);
     expect((result as LlmError).kind).toBe('cancelled');
+  });
+});
+
+// ─── linkedAbortController ────────────────────────────────────────────────────
+
+describe('linkedAbortController', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('child aborts when parent aborts — reason is forwarded', () => {
+    const parent = new AbortController();
+    const child = linkedAbortController(parent.signal);
+
+    expect(child.signal.aborted).toBe(false);
+    const reason = new Error('parent cancelled');
+    parent.abort(reason);
+    expect(child.signal.aborted).toBe(true);
+    expect(child.signal.reason).toBe(reason);
+  });
+
+  it('child aborts immediately when parent is already aborted', () => {
+    const parent = new AbortController();
+    parent.abort(new Error('already done'));
+    // Link after parent has already fired
+    const child = linkedAbortController(parent.signal);
+    expect(child.signal.aborted).toBe(true);
+    expect((child.signal.reason as Error).message).toBe('already done');
+  });
+
+  it('timeout fires and aborts child with timeout reason', async () => {
+    const parent = new AbortController();
+    const child = linkedAbortController(parent.signal, { timeoutMs: 5_000 });
+
+    expect(child.signal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(child.signal.aborted).toBe(true);
+    expect((child.signal.reason as Error).message).toContain('timeout');
+    // Clean up
+    child.dispose();
+  });
+
+  it('timeout does NOT fire after dispose() is called — no leak', async () => {
+    const parent = new AbortController();
+    const child = linkedAbortController(parent.signal, { timeoutMs: 5_000 });
+    // Simulate call completing normally
+    child.dispose();
+    await vi.advanceTimersByTimeAsync(10_000);
+    // Child should NOT have been aborted by the timer
+    expect(child.signal.aborted).toBe(false);
+  });
+
+  it('parent aborting after child dispose() does NOT propagate', () => {
+    const parent = new AbortController();
+    const child = linkedAbortController(parent.signal);
+    // Call completed — dispose first, then parent fires
+    child.dispose();
+    parent.abort(new Error('late cancel'));
+    expect(child.signal.aborted).toBe(false);
+  });
+
+  it('manual abort() aborts child and cleans up', async () => {
+    const parent = new AbortController();
+    const child = linkedAbortController(parent.signal, { timeoutMs: 5_000 });
+    const manualReason = new Error('manual stop');
+    child.abort(manualReason);
+    expect(child.signal.aborted).toBe(true);
+    expect(child.signal.reason).toBe(manualReason);
+    // Timer should be cleared — advancing time should not throw
+    await vi.advanceTimersByTimeAsync(10_000);
   });
 });
