@@ -267,7 +267,7 @@ function geminiPostprocess(node: unknown): JsonNode {
       }
       if (Object.keys(processedProps).length === 0) {
         // Empty properties — inject sentinel property
-        processedProps['_placeholder'] = { type: 'string', description: '_placeholder sentinel' };
+        processedProps._placeholder = { type: 'string', description: '_placeholder sentinel' };
       }
       obj.properties = processedProps;
     } else {

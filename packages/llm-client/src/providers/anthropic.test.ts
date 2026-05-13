@@ -1359,11 +1359,11 @@ describe('Anthropic provider — withTools()', () => {
     const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
     // Cast via unknown to avoid TS overlap error: ToolUnion has no index signature
     const tool = callArgs.tools?.[0] as unknown as Record<string, unknown>;
-    expect(tool['name']).toBe('get_weather');
-    expect(tool['description']).toBe('Get the current weather for a city.');
-    expect(tool['input_schema']).toBeDefined();
+    expect(tool.name).toBe('get_weather');
+    expect(tool.description).toBe('Get the current weather for a city.');
+    expect(tool.input_schema).toBeDefined();
     // Must NOT have a nested 'function' key (that is the OpenAI/DeepSeek shape)
-    expect(tool['function']).toBeUndefined();
+    expect(tool.function).toBeUndefined();
   });
 
   it("maps toolChoice:'any' to { type:'any' } on Anthropic", async () => {
@@ -1385,7 +1385,7 @@ describe('Anthropic provider — withTools()', () => {
     const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
     // Cast via unknown — ToolChoice union types have no index signature
     const toolChoice = callArgs.tool_choice as unknown as Record<string, unknown>;
-    expect(toolChoice['disable_parallel_tool_use']).toBe(true);
+    expect(toolChoice.disable_parallel_tool_use).toBe(true);
   });
 
   it("maps named toolChoice to { type:'tool', name } on Anthropic", async () => {

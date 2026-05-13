@@ -746,13 +746,13 @@ describe('DeepSeek provider — withTools()', () => {
     const callParams = mockCreate.mock.calls[0]?.[0] as { tools?: unknown[] };
     const toolParam = callParams.tools?.[0] as Record<string, unknown>;
     // Chat Completions nested shape — must have 'function' key
-    expect(toolParam['type']).toBe('function');
-    expect(typeof toolParam['function']).toBe('object');
-    const fn = toolParam['function'] as Record<string, unknown>;
-    expect(fn['name']).toBe('get_weather');
-    expect(fn['description']).toBe('Get the current weather for a city.');
+    expect(toolParam.type).toBe('function');
+    expect(typeof toolParam.function).toBe('object');
+    const fn = toolParam.function as Record<string, unknown>;
+    expect(fn.name).toBe('get_weather');
+    expect(fn.description).toBe('Get the current weather for a city.');
     // Must NOT have top-level 'name' (that is the Responses API flat shape)
-    expect(toolParam['name']).toBeUndefined();
+    expect(toolParam.name).toBeUndefined();
   });
 
   it("maps toolChoice:'any' to 'required'", async () => {

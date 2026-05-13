@@ -838,10 +838,10 @@ describe('Gemini provider — withTools()', () => {
     const decls = callArgs.config?.tools?.[0]?.functionDeclarations;
     expect(Array.isArray(decls)).toBe(true);
     const decl = decls?.[0] as Record<string, unknown>;
-    expect(decl['name']).toBe('get_weather');
+    expect(decl.name).toBe('get_weather');
     // parametersJsonSchema is the plain JSON Schema field (not Gemini's Schema type 'parameters')
-    expect(decl['parametersJsonSchema']).toBeDefined();
-    expect(decl['parameters']).toBeUndefined();
+    expect(decl.parametersJsonSchema).toBeDefined();
+    expect(decl.parameters).toBeUndefined();
   });
 
   it("maps toolChoice:'none' to mode:'NONE' in toolConfig", async () => {

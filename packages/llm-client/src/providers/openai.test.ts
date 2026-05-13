@@ -1405,12 +1405,13 @@ describe('OpenAI provider — response IDs (v1.4.0)', () => {
 
   it('structured(): id is provider-issued and idSource is "provider"', async () => {
     const schema = z.object({ name: z.string() });
+    const structuredMockResponse = mockResponse(JSON.stringify({ name: 'Sable' }), {
+      id: 'resp-struct-1',
+    });
     vi.mocked(OpenAI).mockImplementation(function () {
       return {
         responses: {
-          create: vi.fn().mockResolvedValue(
-            mockResponse(JSON.stringify({ name: 'Sable' }), { id: 'resp-struct-1' })
-          ),
+          create: vi.fn().mockResolvedValue(structuredMockResponse),
         },
       };
     });
