@@ -1255,7 +1255,9 @@ describe('OpenAI provider (Responses API) — streamStructured()', () => {
 
     const client = createOpenAIProvider(TEST_CONFIG);
     const tokens: string[] = [];
-    let doneEvent: { type: 'done'; data: { name: string; score: number } } | undefined;
+    let doneEvent:
+      | { type: 'done'; data: { name: string; score: number }; usage: LlmUsage }
+      | undefined;
 
     for await (const event of client.streamStructured(
       [{ role: 'user', content: 'Give me a person object' }],

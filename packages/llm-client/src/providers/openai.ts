@@ -274,7 +274,6 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       // Responses API streaming events are ResponseStreamEvent typed objects.
       // Text tokens arrive as 'response.output_text.delta' events.
       // Usage arrives in the 'response.completed' event on response.usage.
-      // biome-ignore lint/complexity/useLiteralKeys: ResponseStreamEvent union — dot access triggers noPropertyAccessFromIndexSignature
       for await (const event of withStallTimeout(
         sdkStream as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>,
         stallMs,
@@ -485,7 +484,6 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     let finalUsage: LlmUsage | undefined;
 
     try {
-      // biome-ignore lint/complexity/useLiteralKeys: ResponseStreamEvent union — dot access triggers noPropertyAccessFromIndexSignature
       for await (const event of withStallTimeout(
         sdkStream as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>,
         stallMs,

@@ -13,7 +13,13 @@
  *   - ingestionKey used as Bearer token
  */
 
-import type { LlmClient, LlmClientConfig, LlmToolCall, LlmUsage } from '@diabolicallabs/llm-client';
+import type {
+  LlmClient,
+  LlmClientConfig,
+  LlmStreamStructuredEvent,
+  LlmToolCall,
+  LlmUsage,
+} from '@diabolicallabs/llm-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { instrumentClient } from './index.js';
 import type { AgentSdkConfig } from './types.js';
@@ -74,6 +80,7 @@ function makeMockClient(overrides?: Partial<LlmClient>): LlmClient {
       latencyMs: 120,
       stopReason: 'tool_use',
     }),
+    streamStructured: vi.fn(),
     ...overrides,
   };
 }
@@ -396,6 +403,89 @@ describe('structured()', () => {
     await new Promise<void>((r) => setTimeout(r, 0));
 
     expect(fetch).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// streamStructured()
+// ---------------------------------------------------------------------------
+
+describe('streamStructured()', () => {
+  async function* makeStructuredStream<T>(
+    tokens: string[],
+    doneData: T
+  ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    for (const token of tokens) {
+      yield { type: 'token', token };
+    }
+    yield { type: 'done', data: doneData, usage: mockUsage };
+  }
+
+  it('yields all token and done events through to the caller', async () => {
+    const schema = { parse: (d: unknown) => d as { value: number } };
+    const client = makeMockClient({
+      streamStructured: vi
+        .fn()
+        .mockReturnValue(makeStructuredStream(['{"val', 'ue":1}'], { value: 1 })),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    const events = await drainStream(instrumented.streamStructured(mockMessages, schema));
+
+    expect(events).toHaveLength(3); // 2 token + 1 done
+    expect(events[0]).toEqual({ type: 'token', token: '{"val' });
+    expect(events[1]).toEqual({ type: 'token', token: 'ue":1}' });
+    expect(events[2]).toMatchObject({ type: 'done', data: { value: 1 } });
+  });
+
+  it('dispatches exactly one CallRecord per call (not per chunk) using done event usage', async () => {
+    const schema = { parse: (d: unknown) => d };
+    const client = makeMockClient({
+      streamStructured: vi.fn().mockReturnValue(makeStructuredStream(['a', 'b', 'c'], null)),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await drainStream(instrumented.streamStructured(mockMessages, schema));
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(fetch).toHaveBeenCalledOnce();
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(body['prompt_tokens']).toBe(mockUsage.inputTokens);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(body['completion_tokens']).toBe(mockUsage.outputTokens);
+  });
+
+  it('does not dispatch when stream errors before done event', async () => {
+    async function* failingStructuredStream(): AsyncGenerator<LlmStreamStructuredEvent<unknown>> {
+      yield { type: 'token', token: 'partial' };
+      throw new Error('Stream interrupted mid-JSON');
+    }
+    const schema = { parse: (d: unknown) => d };
+    const client = makeMockClient({
+      streamStructured: vi.fn().mockReturnValue(failingStructuredStream()),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await expect(drainStream(instrumented.streamStructured(mockMessages, schema))).rejects.toThrow(
+      'Stream interrupted mid-JSON'
+    );
+    await new Promise<void>((r) => setTimeout(r, 0));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch in disabled mode', async () => {
+    const schema = { parse: (d: unknown) => d };
+    const client = makeMockClient({
+      streamStructured: vi.fn().mockReturnValue(makeStructuredStream(['token'], { answer: 'yes' })),
+    });
+    const instrumented = instrumentClient(client, { ...sdkConfig, disabled: true });
+
+    await drainStream(instrumented.streamStructured(mockMessages, schema));
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 

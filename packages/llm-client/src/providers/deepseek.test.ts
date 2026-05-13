@@ -901,7 +901,7 @@ describe('DeepSeek provider — streamStructured()', () => {
 
     const client = createDeepSeekProvider(TEST_CONFIG);
     const tokens: string[] = [];
-    let doneEvent: { type: 'done'; data: { score: number } } | undefined;
+    let doneEvent: { type: 'done'; data: { score: number }; usage: LlmUsage } | undefined;
 
     for await (const event of client.streamStructured(
       [{ role: 'user', content: 'Give me a score' }],

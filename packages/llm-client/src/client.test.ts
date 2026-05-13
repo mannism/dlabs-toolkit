@@ -44,6 +44,7 @@ vi.mock('./providers/anthropic.js', () => ({
     complete: vi.fn().mockResolvedValue(mockCompleteResponse),
     stream: vi.fn(),
     structured: vi.fn().mockResolvedValue(mockStructuredResponse),
+    streamStructured: vi.fn(),
     withTools: vi.fn().mockResolvedValue(mockToolResponse),
   })),
 }));
@@ -54,6 +55,7 @@ vi.mock('./providers/openai.js', () => ({
     complete: vi.fn().mockResolvedValue({ ...mockCompleteResponse, model: 'gpt-5.5' }),
     stream: vi.fn(),
     structured: vi.fn().mockResolvedValue({ ...mockStructuredResponse, model: 'gpt-5.5' }),
+    streamStructured: vi.fn(),
     withTools: vi.fn().mockResolvedValue({ ...mockToolResponse, model: 'gpt-5.5' }),
   })),
 }));
@@ -64,6 +66,7 @@ vi.mock('./providers/gemini.js', () => ({
     complete: vi.fn(),
     stream: vi.fn(),
     structured: vi.fn(),
+    streamStructured: vi.fn(),
     withTools: vi.fn(),
   })),
 }));
@@ -74,6 +77,7 @@ vi.mock('./providers/deepseek.js', () => ({
     complete: vi.fn(),
     stream: vi.fn(),
     structured: vi.fn(),
+    streamStructured: vi.fn(),
     withTools: vi.fn(),
   })),
 }));
@@ -384,6 +388,7 @@ describe('createClient — provider failover', () => {
         complete: primaryComplete,
         stream: vi.fn(),
         structured: vi.fn(),
+        streamStructured: vi.fn(),
         withTools: vi.fn(),
       })
       .mockReturnValueOnce({
@@ -391,6 +396,7 @@ describe('createClient — provider failover', () => {
         complete: fallbackComplete,
         stream: vi.fn(),
         structured: vi.fn(),
+        streamStructured: vi.fn(),
         withTools: vi.fn(),
       });
 
@@ -431,6 +437,7 @@ describe('createClient — provider failover', () => {
       complete: primaryComplete,
       stream: vi.fn(),
       structured: vi.fn(),
+      streamStructured: vi.fn(),
       withTools: vi.fn(),
     });
 
