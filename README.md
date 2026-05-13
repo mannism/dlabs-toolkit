@@ -2,7 +2,7 @@
 
 Shared platform infrastructure for the Diabolical Labs and Diana Ismail project fleet. Independently-versioned TypeScript packages consumed across multiple repos. © Diabolical Labs
 
-**`llm-client`, `agent-sdk`, and `llm-pricing` are stable (v1.1.0 / v1.1.0 / v0.1.0).** `notion` and `rate-limiter` remain pre-1.0.
+**`llm-client` and `agent-sdk` are at v1.2.0; `llm-pricing` at v0.1.0.** `notion` and `rate-limiter` remain pre-1.0.
 
 ---
 
@@ -10,9 +10,9 @@ Shared platform infrastructure for the Diabolical Labs and Diana Ismail project 
 
 | Package | Status | Description |
 |---|---|---|
-| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v1.1.0) | Unified LLM API — Anthropic, OpenAI (Responses API), Gemini, DeepSeek, Perplexity. `complete()` / `stream()` / `structured()` / **`withTools()`** (native tool calling across all 5 providers). 14-kind `LlmErrorKind` taxonomy. Native strict structured outputs (Zod 4) with Gemini empty-object schema auto-rewrite. Per-call timeouts/AbortSignal/stream stall, token normalization, web-grounded citations, `providerOptions` escape hatch. Anthropic prompt cache opt-in via `providerOptions.promptCache: 'ephemeral'`. Optional cost computation via `@diabolicallabs/llm-pricing` (v1.1.0+). See [`packages/llm-client/MIGRATION.md`](packages/llm-client/MIGRATION.md) for v0.x → v1.0.0 migration. |
+| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v1.2.0) | Unified LLM API — Anthropic, OpenAI (Responses API), Gemini, DeepSeek, Perplexity. `complete()` / `stream()` / `structured()` / **`withTools()`** (native tool calling across all 5 providers). 14-kind `LlmErrorKind` taxonomy. Native strict structured outputs (Zod 4) with Gemini empty-object schema auto-rewrite. Per-call timeouts/AbortSignal/stream stall, token normalization, web-grounded citations, `providerOptions` escape hatch. Anthropic prompt cache opt-in via `providerOptions.promptCache: 'ephemeral'`. Optional cost computation via `@diabolicallabs/llm-pricing` (v1.1.0+). **v1.2.0:** configurable retry (`exponential`/`linear`/`fixed`/`decorrelated` strategies, `retryOn` kind filter, `respectRetryAfter`); provider failover via `model: string[]` + `fallbackOn`; `@diabolicallabs/llm-client/pool` sub-path (`createPool`, per-provider semaphore + rpm rate limiter). See [`packages/llm-client/MIGRATION.md`](packages/llm-client/MIGRATION.md) for v0.x → v1.0.0 migration. |
 | [`@diabolicallabs/llm-pricing`](packages/llm-pricing/) | published (v0.1.0) | Default pricing table + `computeCost()` for all 5 providers. Verified 2026-05-13. Gemini long-context tiering, Anthropic dual cache write rates, DeepSeek deprecated alias resolution, o-series and sonar-deep-research partial-cost flags. `versionedAt` field for staleness detection. `pnpm pricing:verify` script for monthly drift checks. Optional peer dep for `llm-client` and `agent-sdk`. |
-| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v1.1.0) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. `CallRecord.tool_calls` captures `withTools()` invocations. `CallRecord.cost` propagates per-call USD cost when `llm-pricing` is installed (v1.1.0+). Optional peer-dep on `llm-pricing@^0.1.0`. |
+| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v1.2.0) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. `CallRecord.tool_calls` captures `withTools()` invocations. `CallRecord.cost` propagates per-call USD cost when `llm-pricing` is installed (v1.1.0+). **v1.2.0:** `CallRecord.requestedModel` propagated when llm-client provider failover fires (`model` = serving model, `requestedModel` = originally-requested primary). Optional peer-dep on `llm-pricing@^0.1.0`. |
 | [`@diabolicallabs/notion`](packages/notion/) | scaffolded (v0.0.2) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
 | [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | scaffolded (v0.0.2) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
 
@@ -43,6 +43,35 @@ console.log(response.content, response.usage);
 for await (const chunk of client.stream([{ role: 'user', content: 'Hello' }])) {
   process.stdout.write(chunk.token);
 }
+
+// Configurable retry (v1.2.0)
+const clientWithRetry = createClientFromEnv('openai', 'gpt-5.5', {
+  retry: {
+    maxAttempts: 5,
+    strategy: 'decorrelated',
+    baseDelayMs: 500,
+    respectRetryAfter: true,
+    retryOn: ['rate_limit', 'server_error', 'timeout', 'network'],
+  },
+});
+
+// Provider failover (v1.2.0)
+const clientWithFallback = createClientFromEnv('anthropic', ['claude-opus-4-99', 'claude-sonnet-4-6'], {
+  fallbackOn: ['not_found'],
+});
+
+// Parallel workloads with concurrency control (v1.2.0)
+import { createPool } from '@diabolicallabs/llm-client/pool';
+
+const pool = createPool({
+  concurrencyPerProvider: { anthropic: 4, openai: 4, gemini: 2 },
+  rateLimitPerProvider: { anthropic: { rpm: 60 } },
+});
+
+const results = await pool.runAll(
+  tasks.map(t => ({ task: () => client.complete(t.messages), provider: 'anthropic' })),
+  { signal: abortController.signal, onProgress: (done, total) => console.log(`${done}/${total}`) }
+);
 ```
 
 ---
