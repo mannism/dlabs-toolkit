@@ -34,7 +34,12 @@ import OpenAI from 'openai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { parseJsonOrThrow } from '../extract-json.js';
 import { isZodSchema, toProviderSchema } from '../json-schema.js';
-import { classifyHttpStatus, mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
+import {
+  classifyHttpStatus,
+  mergeRetryOptsWithSignal,
+  normalizeThrownError,
+  withRetry,
+} from '../retry.js';
 import type {
   LlmCallOptions,
   LlmClient,
@@ -67,9 +72,7 @@ function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined | null
  * a 'system' role input; user/assistant messages become 'user'/'assistant'.
  * Unlike Chat Completions, the Responses API uses `input` not `messages`.
  */
-function buildResponsesInput(
-  messages: LlmMessage[]
-): OpenAI.Responses.EasyInputMessage[] {
+function buildResponsesInput(messages: LlmMessage[]): OpenAI.Responses.EasyInputMessage[] {
   return messages.map((m) => ({
     role: m.role,
     content: m.content,
@@ -260,7 +263,12 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       // Text tokens arrive as 'response.output_text.delta' events.
       // Usage arrives in the 'response.completed' event on response.usage.
       // biome-ignore lint/complexity/useLiteralKeys: ResponseStreamEvent union — dot access triggers noPropertyAccessFromIndexSignature
-      for await (const event of withStallTimeout(sdkStream as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>, stallMs, ctl, PROVIDER)) {
+      for await (const event of withStallTimeout(
+        sdkStream as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>,
+        stallMs,
+        ctl,
+        PROVIDER
+      )) {
         if (event.type === 'response.output_text.delta') {
           const delta = event.delta;
           if (delta !== undefined && delta.length > 0) {

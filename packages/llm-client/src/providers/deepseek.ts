@@ -25,7 +25,12 @@
 
 import OpenAI from 'openai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
-import { classifyHttpStatus, mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
+import {
+  classifyHttpStatus,
+  mergeRetryOptsWithSignal,
+  normalizeThrownError,
+  withRetry,
+} from '../retry.js';
 import type {
   LlmCallOptions,
   LlmClient,

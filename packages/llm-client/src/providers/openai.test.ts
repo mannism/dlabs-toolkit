@@ -478,7 +478,9 @@ describe('OpenAI provider (Responses API) — structured() prompt-fallback (json
     const client = createOpenAIProvider(TEST_CONFIG);
     await client.structured([{ role: 'user', content: 'Return data' }], schema);
 
-    const callArgs = mockCreate.mock.calls[0]?.[0] as { input: Array<{ role: string; content: string }> };
+    const callArgs = mockCreate.mock.calls[0]?.[0] as {
+      input: Array<{ role: string; content: string }>;
+    };
     const systemMsg = callArgs.input.find((m) => m.role === 'system');
     expect(systemMsg?.content).toContain('valid JSON');
   });
@@ -700,7 +702,11 @@ describe('OpenAI provider (Responses API) — timeout propagation', () => {
     const zodSchema = z.object({ ok: z.boolean() });
     mockCreate.mockResolvedValue(mockResponse('{"ok":true}', { model: 'gpt-5.4-mini' }));
 
-    const client = createOpenAIProvider({ ...TEST_CONFIG, model: 'gpt-5.4-mini', timeoutMs: 30_000 });
+    const client = createOpenAIProvider({
+      ...TEST_CONFIG,
+      model: 'gpt-5.4-mini',
+      timeoutMs: 30_000,
+    });
     await client.structured([{ role: 'user', content: 'Return data' }], zodSchema, {
       timeoutMs: 240_000,
     });
