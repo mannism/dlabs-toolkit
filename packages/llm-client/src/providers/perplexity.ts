@@ -69,6 +69,7 @@ import type {
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
+  LlmStreamStructuredEvent,
   LlmStructuredResponse,
   LlmTool,
   LlmToolResponse,
@@ -476,11 +477,34 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     );
   }
 
+  /**
+   * streamStructured() — NOT supported by Perplexity (v1.3.0+).
+   *
+   * Perplexity Sonar models are search/retrieval models. They do not return
+   * tool-validated JSON and do not support structured-output streaming.
+   * Use complete() or structured() instead.
+   */
+  // biome-ignore lint/correctness/useYield: this generator throws before any yield — intentional pre-call rejection pattern
+  async function* streamStructured<T>(
+    _messages: LlmMessage[],
+    _schema: { parse: (data: unknown) => T },
+    _options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    throw new LlmError({
+      message:
+        'Perplexity provider does not support streamStructured() — search/retrieval models do not return tool-validated JSON',
+      provider: PROVIDER,
+      kind: 'bad_request',
+      retryable: false,
+    });
+  }
+
   return {
     config: resolvedConfig,
     complete,
     stream,
     structured,
+    streamStructured,
     withTools,
   };
 }

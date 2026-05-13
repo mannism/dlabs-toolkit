@@ -236,16 +236,16 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const response = await client.structured<T>(messages, schema, options);
     const latencyMs = Date.now() - start;
 
-    // Propagate cost from llm-client.
-    // response.model = actually-serving model (accounts for failover).
-    // Note: LlmStructuredResponse does not carry requestedModel — omitted here.
+    // Propagate cost and requestedModel from llm-client when pricing/failover is configured.
+    // response.requestedModel is set when provider failover fired (Wave 2b, v1.2.0+).
     const record = buildCallRecord(
       response.usage,
       response.model,
       latencyMs,
       config,
       undefined,
-      response.cost
+      response.cost,
+      response.requestedModel
     );
     void dispatchWithRetry(record, config);
 

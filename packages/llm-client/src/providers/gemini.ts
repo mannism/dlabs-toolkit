@@ -73,6 +73,7 @@ import type {
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
+  LlmStreamStructuredEvent,
   LlmStructuredResponse,
   LlmTool,
   LlmToolCall,
@@ -613,11 +614,37 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     };
   }
 
+  /**
+   * streamStructured() — NOT supported by Gemini (v1.3.0+).
+   *
+   * Gemini does not reliably support simultaneous structured-output constraints (responseSchema)
+   * and streaming — the SDK either ignores the schema in streaming mode or serializes the call
+   * internally. Attempting to use both produces undefined behavior across Gemini model versions.
+   *
+   * Use stream() for incremental tokens or structured() for Zod-validated output.
+   * A future wave can attempt streaming + schema after Gemini's API stabilizes.
+   */
+  // biome-ignore lint/correctness/useYield: this generator throws before any yield — intentional pre-call rejection pattern
+  async function* streamStructured<T>(
+    _messages: LlmMessage[],
+    _schema: { parse: (data: unknown) => T },
+    _options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    throw new LlmError({
+      message:
+        'Gemini streamStructured() not yet supported — Gemini may not reliably stream + validate simultaneously; use stream() for tokens or structured() for validation',
+      provider: PROVIDER,
+      kind: 'bad_request',
+      retryable: false,
+    });
+  }
+
   return {
     config: resolvedConfig,
     complete,
     stream,
     structured,
+    streamStructured,
     withTools,
   };
 }

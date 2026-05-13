@@ -33,6 +33,13 @@
  *   system prompt for 5 minutes; reads cost 0.10× and writes cost 1.25× normal input price.
  *   Ignored on all non-Anthropic providers.
  *
+ * v1.3.0 additions (streamStructured — token-stream + final-validated):
+ *   LlmStreamStructuredEvent — discriminated union of events emitted by streamStructured().
+ *   LlmClient.streamStructured — async generator: tokens streamed, Zod-validated at end.
+ *   Supported providers: OpenAI (Responses API), Anthropic, DeepSeek (JSON-mode accumulation).
+ *   Unsupported: Gemini (throws bad_request), Perplexity (throws bad_request).
+ *   No partial: true mode — deferred until a consumer explicitly needs it.
+ *
  * v1.2.0 additions (configurable retry strategy):
  *   LlmClientConfig.retry — optional RetryConfig (maxAttempts, strategy, baseDelayMs, maxDelayMs,
  *                           respectRetryAfter, retryOn). Default behavior unchanged when omitted.
@@ -492,6 +499,23 @@ export interface LlmCallWithToolsOptions extends LlmCallOptions {
   parallelToolCalls?: boolean;
 }
 
+/**
+ * Discriminated union of events emitted by streamStructured() (v1.3.0+).
+ *
+ * token — an incremental text token from the model (same as stream() chunks).
+ *          Useful for showing typing progress in UIs before the final object is ready.
+ * done  — emitted exactly once, at the end. Carries the Zod-validated data and
+ *          accumulated usage for the full call. Never emitted if an error is thrown.
+ *
+ * Error path: if JSON.parse() or schema.parse() fails on the accumulated text, an
+ * LlmError with kind:'structured_parse_failed' is thrown (no 'done' event emitted).
+ *
+ * No 'partial' event: partial Zod validation is deferred to a future wave.
+ */
+export type LlmStreamStructuredEvent<T> =
+  | { type: 'token'; token: string }
+  | { type: 'done'; data: T; usage: LlmUsage };
+
 // The LlmClient interface — what consumers program against
 export interface LlmClient {
   readonly config: Readonly<LlmClientConfig>;
@@ -532,6 +556,43 @@ export interface LlmClient {
     schema: { parse: (data: unknown) => T },
     options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>>;
+
+  /**
+   * Streaming structured output — combines token streaming with Zod-validated final output (v1.3.0+).
+   *
+   * Emits a series of { type: 'token', token } events for each text chunk received
+   * from the provider, followed by exactly one { type: 'done', data, usage } event
+   * when the model finishes. The accumulated text is JSON.parse()'d and validated
+   * against the schema before the 'done' event.
+   *
+   * **Supported providers:**
+   * - OpenAI (Responses API): streams output_text.delta events, validates at end.
+   * - Anthropic: streams content_block_delta text events via tool-use forced path, validates at end.
+   * - DeepSeek: streams Chat Completions deltas with json_object mode, validates at end.
+   *
+   * **Unsupported providers:**
+   * - Gemini: throws LlmError(kind:'bad_request') immediately. Gemini does not reliably
+   *   support simultaneous structured-output constraints and streaming. Use stream() for
+   *   tokens or structured() for validation.
+   * - Perplexity: throws LlmError(kind:'bad_request') immediately. Search/retrieval
+   *   models do not return tool-validated JSON.
+   *
+   * **Error path:** if JSON.parse() or schema.parse() fails on the accumulated text,
+   * throws LlmError(kind:'structured_parse_failed'). No 'done' event is emitted.
+   *
+   * **AbortSignal:** propagated to the underlying SDK stream.
+   *   options.signal mid-stream → kind:'cancelled', retryable:false.
+   *   options.streamStallTimeoutMs → stall detection (same as stream()).
+   *
+   * @param messages - conversation messages.
+   * @param schema   - any { parse } interface (Zod 4 recommended for strict mode on OpenAI).
+   * @param options  - per-call options (timeout, signal, stallTimeout, providerOptions).
+   */
+  streamStructured<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamStructuredEvent<T>>;
 
   /**
    * Native tool-calling — returns provider-issued tool invocations parsed against schemas.

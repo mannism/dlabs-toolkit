@@ -48,6 +48,7 @@ import type {
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
+  LlmStreamStructuredEvent,
   LlmStructuredResponse,
   LlmTool,
   LlmToolCall,
@@ -421,6 +422,127 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
   }
 
   /**
+   * streamStructured() — stream tokens from the Responses API and validate at end (v1.3.0+).
+   *
+   * Uses text.format json_schema (strict mode when schema is Zod 4) so the Responses API
+   * enforces the schema. Tokens arrive as response.output_text.delta events. Usage arrives
+   * in response.completed. Accumulates text, then JSON.parse() + schema.parse() at the end.
+   *
+   * AbortSignal and stall detection are wired the same as stream().
+   */
+  async function* streamStructured<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    const model = options?.model ?? resolvedConfig.model;
+    const input = buildResponsesInput(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
+
+    // Build text format: strict json_schema when Zod 4, otherwise json_object mode.
+    const useStrict = isZodSchema(schema);
+    const textFormat: OpenAI.Responses.ResponseCreateParamsStreaming['text'] = useStrict
+      ? {
+          format: {
+            type: 'json_schema',
+            name: 'response',
+            schema: toProviderSchema(schema, 'openai') as Record<string, unknown>,
+            strict: true,
+          },
+        }
+      : {
+          format: { type: 'json_object' },
+        };
+
+    const params: OpenAI.Responses.ResponseCreateParamsStreaming = {
+      model,
+      input,
+      stream: true,
+      text: textFormat,
+    };
+
+    const maxTokens = options?.maxTokens ?? config.maxTokens;
+    if (maxTokens !== undefined) params.max_output_tokens = maxTokens;
+
+    const temperature = options?.temperature ?? config.temperature;
+    if (temperature !== undefined) params.temperature = temperature;
+
+    const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+    let sdkStream: Awaited<ReturnType<typeof client.responses.create>>;
+
+    try {
+      sdkStream = await client.responses.create(params, {
+        signal: ctl.signal,
+        timeout: effectiveTimeoutMs,
+      });
+    } catch (err) {
+      ctl.dispose();
+      throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    }
+
+    let fullText = '';
+    let finalUsage: LlmUsage | undefined;
+
+    try {
+      // biome-ignore lint/complexity/useLiteralKeys: ResponseStreamEvent union — dot access triggers noPropertyAccessFromIndexSignature
+      for await (const event of withStallTimeout(
+        sdkStream as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>,
+        stallMs,
+        ctl,
+        PROVIDER
+      )) {
+        if (event.type === 'response.output_text.delta') {
+          const delta = event.delta;
+          if (delta !== undefined && delta.length > 0) {
+            fullText += delta;
+            yield { type: 'token', token: delta };
+          }
+        } else if (event.type === 'response.completed') {
+          finalUsage = normalizeUsage(event.response.usage);
+        }
+      }
+    } catch (err) {
+      throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    } finally {
+      ctl.dispose();
+    }
+
+    // Parse and validate the accumulated text — throw structured_parse_failed if invalid.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(fullText);
+    } catch (err) {
+      throw new LlmError({
+        message: `OpenAI streamStructured: accumulated text is not valid JSON. Raw: ${fullText.slice(0, 200)}`,
+        provider: PROVIDER,
+        kind: 'structured_parse_failed',
+        retryable: false,
+        cause: err,
+      });
+    }
+
+    let data: T;
+    try {
+      data = schema.parse(parsed);
+    } catch (err) {
+      throw new LlmError({
+        message: `OpenAI streamStructured: response failed schema validation. ${String(err)}`,
+        provider: PROVIDER,
+        kind: 'structured_parse_failed',
+        retryable: false,
+        cause: err,
+      });
+    }
+
+    yield {
+      type: 'done',
+      data,
+      usage: finalUsage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    };
+  }
+
+  /**
    * Prompt-only fallback for structured() — used when schema is not Zod 4 or
    * providerOptions.structuredMode === 'prompt'.
    * Uses the Responses API with no schema enforcement (plain text output + JSON parse).
@@ -676,6 +798,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     complete,
     stream,
     structured,
+    streamStructured,
     withTools,
   };
 }
