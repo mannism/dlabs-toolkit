@@ -2,7 +2,7 @@
 
 Shared platform infrastructure for the Diabolical Labs and Diana Ismail project fleet. Independently-versioned TypeScript packages consumed across multiple repos. © Diabolical Labs
 
-**Pre-1.0. APIs may change between minor versions.**
+**`llm-client` and `agent-sdk` are at v1.0.0 (stable).** `notion` and `rate-limiter` remain pre-1.0.
 
 ---
 
@@ -10,8 +10,8 @@ Shared platform infrastructure for the Diabolical Labs and Diana Ismail project 
 
 | Package | Status | Description |
 |---|---|---|
-| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v0.4.4) | Unified LLM API — Anthropic, OpenAI, Gemini, DeepSeek, Perplexity. Streaming, retry, native strict structured outputs (Zod 4), per-call timeouts/AbortSignal/stream stall, token normalization, web-grounded citations, `providerOptions` escape hatch. **OpenAI `max_completion_tokens` (gpt-5.x compat).** Per-call `timeoutMs` extends SDK socket. Anthropic prompt cache opt-in via `providerOptions.promptCache: 'ephemeral'`. Robust balanced-brace JSON extractor in `structured()` prompt-fallback. |
-| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v0.1.8) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. |
+| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v1.0.0) | Unified LLM API — Anthropic, OpenAI (Responses API), Gemini, DeepSeek, Perplexity. `complete()` / `stream()` / `structured()` / **`withTools()`** (native tool calling across all 5 providers). 14-kind `LlmErrorKind` taxonomy. Native strict structured outputs (Zod 4) with Gemini empty-object schema auto-rewrite. Per-call timeouts/AbortSignal/stream stall, token normalization, web-grounded citations, `providerOptions` escape hatch. Anthropic prompt cache opt-in via `providerOptions.promptCache: 'ephemeral'`. See [`packages/llm-client/MIGRATION.md`](packages/llm-client/MIGRATION.md) for v0.x → v1.0.0 migration. |
+| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v1.0.0) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. `CallRecord.tool_calls` captures `withTools()` invocations. Peer-deps on `llm-client@^1.0.0`. |
 | [`@diabolicallabs/notion`](packages/notion/) | scaffolded (v0.0.2) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
 | [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | scaffolded (v0.0.2) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
 
