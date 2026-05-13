@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "Read(//Users/mann/Documents/Claude/proj-plan/agent-spend-dashboard/**)",
+      "Read(//Users/mann/Documents/Claude/proj-plan/agent-spend-dashboard/briefs/**)",
+      "Bash(pnpm:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm -F:*)",
+      "Bash(pnpm -w:*)",
+      "Bash(pnpm run:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(npx tsx:*)",
+      "Bash(tsx:*)",
+      "Bash(npm show:*)",
+      "Bash(npm view:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh issue:*)",
+      "Bash(gh api:*)",
+      "Bash(gh repo:*)",
+      "Bash(set -a; source:*)",
+      "Bash(source:*)",
+      "Bash(biome:*)",
+      "Bash(npx biome:*)"
+    ],
+    "additionalDirectories": [
+      "/Users/mann/Documents/Claude/proj-plan/dlabs-toolkit"
+    ]
+  }
+}

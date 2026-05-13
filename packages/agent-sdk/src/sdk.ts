@@ -192,7 +192,11 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
   // per-call cost should use complete() or structured() instead.
   async function* stream(...args: Parameters<LlmClient['stream']>): AsyncGenerator<LlmStreamChunk> {
     let finalUsage: LlmUsage | undefined;
-    const model = client.config.model;
+    // config.model is string | string[] — for streaming, the provider already resolved it to
+    // the active model string. Use the first element (primary) for the CallRecord.
+    const model = Array.isArray(client.config.model)
+      ? (client.config.model[0] ?? 'unknown')
+      : client.config.model;
     const start = Date.now();
 
     for await (const chunk of client.stream(...args)) {
@@ -221,10 +225,12 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const response = await client.structured<T>(messages, schema, options);
     const latencyMs = Date.now() - start;
 
-    // Propagate cost from llm-client when pricing is configured on the wrapped client
+    // Propagate cost from llm-client when pricing is configured on the wrapped client.
+    // Use response.model (the actually-serving model) for the CallRecord — it accounts for
+    // provider failover where the active model may differ from the requested primary.
     const record = buildCallRecord(
       response.usage,
-      client.config.model,
+      response.model,
       latencyMs,
       config,
       undefined,
