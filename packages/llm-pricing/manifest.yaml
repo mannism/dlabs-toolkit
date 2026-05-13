@@ -1,0 +1,61 @@
+name: "@diabolicallabs/llm-pricing"
+purpose: >
+  Default pricing table (all five providers: Anthropic, OpenAI, Gemini, DeepSeek, Perplexity)
+  and computeCost() function for @diabolicallabs/llm-client. Converts LlmUsage token counts
+  to USD cost breakdowns. Ships a curated default table (versionedAt field for staleness detection)
+  with consumer override support. Maintained via monthly Perplexity drift check + quarterly
+  baseline refresh (Option D — see brief-pricing-maintenance.md).
+owner: Sable
+status: active
+
+depends_on:
+  - name: "Provider pricing pages (Anthropic, OpenAI, Google, Perplexity, DeepSeek)"
+    why: "Default pricing table data sourced from first-party documentation. OpenAI cross-referenced from third parties due to 403 on primary page."
+
+depended_on_by:
+  - name: "@diabolicallabs/llm-client"
+    how: "Optional peer dep — when pricing is configured at createClient(), cost is computed per response via computeCost()"
+  - name: "@diabolicallabs/agent-sdk"
+    how: "Imports LlmCost type for CallRecord.cost field; pricing computed by llm-client layer"
+  - name: "Agent Spend Dashboard"
+    how: "Consumes CallRecord.cost to display per-call and aggregated cost in the UI"
+
+exports:
+  - "computeCost(input: ComputeCostInput): LlmCost"
+  - "DEFAULT_PRICING_TABLE: PricingTable — versionedAt field for staleness detection"
+  - "Types: LlmCost, ModelPricing, PricingTable, ComputeCostInput, Provider, LlmUsage"
+
+contracts:
+  pricing_table:
+    versionedAt: "ISO 8601 date the table was last verified. Consumers check staleness against Date.now()."
+    maintenance: "Monthly Perplexity drift check (sonar) + quarterly baseline refresh. See routines/llm-pricing-drift-check.md"
+    override: "Consumers pass pricingTable to computeCost() or pricingTable option in createClient() to override defaults."
+  cost_computation:
+    anthropic_cache: "cacheCreationTokens billed at cacheWritePer1M (5-min ephemeral). 1-hr tier (cacheWrite1hPer1M) is reserved for future LlmUsage field."
+    gemini_tiering: "inputTokens > longContextThreshold selects the elevated rate tier (200k threshold for gemini-3.1-pro-preview and gemini-2.5-pro)."
+    deprecated_aliases: "deepseek-chat and deepseek-reasoner emit console.warn on resolution, return deepseek-v4-flash rates."
+    isPartial: "True when cost components exist that cannot be computed from LlmUsage: o-series invisible reasoning tokens, sonar-deep-research citation/search fees."
+
+failure_modes:
+  - trigger: "Model not in pricing table"
+    impact: "computeCost() returns zero cost with isPartial=true. Emits console.warn."
+    propagation: "silent — caller receives a result, not an exception"
+  - trigger: "Perplexity drift check fails (API error, key missing)"
+    impact: "pricing:verify exits non-zero with clear error message. Table is NOT modified."
+    propagation: "propagated to CLI exit code"
+  - trigger: "Pricing table becomes stale (>30 days since versionedAt)"
+    impact: "Cost estimates drift from reality. No runtime error."
+    propagation: "silent — consumers must check versionedAt themselves or rely on the monthly drift check"
+
+performance:
+  expected_latency: "computeCost() is synchronous, pure arithmetic — sub-millisecond."
+  notes: "pricing:verify makes one Perplexity API call per provider (5 calls total). ~10-30s runtime."
+
+notes: |
+  DeepSeek v4-pro has a 75% promotional discount active through 2026-05-31.
+  Post-discount rates will be ~4× current table values. Monitor via the monthly drift check.
+
+  OpenAI pricing sourced from third-party cross-references (primary page 403'd as of 2026-05-13).
+  Verify against official OpenAI page at next quarterly refresh.
+
+  pnpm pricing:verify requires PERPLEXITY_API_KEY. Run before merging any pricing table PR.
