@@ -17,6 +17,7 @@ export { classifyHttpStatus } from './retry.js';
 // Core message format shared across all providers
 // Client config, usage, response, streaming, error types
 // Error kind type — consumers use this to branch without parsing message strings
+// RetryConfig / RetryStrategy — configurable retry (v1.2.0+)
 export type {
   LlmCallOptions,
   LlmCallWithToolsOptions,
@@ -31,6 +32,8 @@ export type {
   LlmToolCall,
   LlmToolResponse,
   LlmUsage,
+  RetryConfig,
+  RetryStrategy,
 } from './types.js';
 // Error class and kind discriminator — exported as value, not just type
 export { LlmError } from './types.js';

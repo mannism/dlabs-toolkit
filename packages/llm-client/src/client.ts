@@ -16,6 +16,18 @@
  *   complete(), structured(), and withTools() response. Requires the optional peer dep
  *   @diabolicallabs/llm-pricing to be installed. If not installed, cost remains undefined
  *   and a warning is emitted once at createClient() time.
+ *
+ * v1.2.0 — provider failover:
+ *   When config.model is a string array, the first element is the primary model.
+ *   On errors whose kind appears in config.fallbackOn (default: ['not_found']), after
+ *   exhausting retries on the primary, the call is retried from scratch with the next
+ *   model in the array. LlmResponse.requestedModel is populated on fallback responses.
+ *   Providers always receive a config copy with model: string (single-element, resolved).
+ *
+ * Internal model contract:
+ *   Providers receive a config with model: string (never an array). The array-to-string
+ *   normalization and failover loop live entirely in this file. Providers are unaware of
+ *   failover — they just see a config with a resolved model string per attempt.
  */
 
 import { createAnthropicProvider } from './providers/anthropic.js';
@@ -28,6 +40,7 @@ import type {
   LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
+  LlmErrorKind,
   LlmMessage,
   LlmResponse,
   LlmStructuredResponse,
@@ -36,41 +49,56 @@ import type {
 } from './types.js';
 import { LlmError } from './types.js';
 
-/**
- * Create an LlmClient for the given provider and config.
- * Dispatches to the provider-specific implementation.
- * All five providers are fully implemented.
- *
- * When config.pricing is set, cost computation is applied to every
- * complete(), structured(), and withTools() response.
- */
-export function createClient(config: LlmClientConfig): LlmClient {
-  let baseClient: LlmClient;
+// Default error kinds that trigger failover to the next model in the array.
+const DEFAULT_FALLBACK_ON: ReadonlySet<LlmErrorKind> = new Set<LlmErrorKind>(['not_found']);
 
+// ─── Internal helpers ────────────────────────────────────────────────────────
+
+/**
+ * Normalize config.model to string[]. Always returns at least one element.
+ * A single string is coerced to [string]. This is the single point of normalization.
+ */
+function resolveModelArray(model: string | string[]): [string, ...string[]] {
+  if (Array.isArray(model)) {
+    if (model.length === 0) {
+      throw new LlmError({
+        message: '[llm-client] config.model array must not be empty',
+        provider: 'unknown',
+        retryable: false,
+        kind: 'bad_request',
+      });
+    }
+    return model as [string, ...string[]];
+  }
+  return [model];
+}
+
+/**
+ * Create a provider-facing config copy with model coerced to a single string.
+ * Providers must always see `model: string` — they pass it directly to SDK calls.
+ */
+function configForModel(base: LlmClientConfig, model: string): LlmClientConfig & { model: string } {
+  return { ...base, model };
+}
+
+/**
+ * Instantiate the correct provider implementation for a config with model: string.
+ * This is the low-level dispatch — no failover, no cost wrapping.
+ */
+function createProviderClient(config: LlmClientConfig & { model: string }): LlmClient {
   switch (config.provider) {
     case 'anthropic':
-      baseClient = createAnthropicProvider(config);
-      break;
-
+      return createAnthropicProvider(config);
     case 'openai':
-      baseClient = createOpenAIProvider(config);
-      break;
-
+      return createOpenAIProvider(config);
     case 'gemini':
-      baseClient = createGeminiProvider(config);
-      break;
-
+      return createGeminiProvider(config);
     case 'deepseek':
-      baseClient = createDeepSeekProvider(config);
-      break;
-
+      return createDeepSeekProvider(config);
     case 'perplexity':
-      baseClient = createPerplexityProvider(config);
-      break;
-
+      return createPerplexityProvider(config);
     default: {
-      // TypeScript exhaustiveness check — if a new provider is added to the union
-      // without a case here, this will be a compile-time error.
+      // TypeScript exhaustiveness check
       const _exhaustive: never = config.provider;
       throw new LlmError({
         message: `[dlabs-toolkit] Unknown provider: ${String(_exhaustive)}`,
@@ -79,15 +107,203 @@ export function createClient(config: LlmClientConfig): LlmClient {
       });
     }
   }
+}
 
-  // If pricing is not configured, return the bare provider client.
-  if (config.pricing === undefined) {
-    return baseClient;
+// ─── createClient ────────────────────────────────────────────────────────────
+
+/**
+ * Create an LlmClient for the given provider and config.
+ *
+ * When config.model is a single string: behaves identically to all previous versions.
+ * When config.model is a string[]: enables provider failover. The client tries each
+ * model in order, moving to the next on errors whose kind matches config.fallbackOn.
+ *
+ * When config.pricing is set, cost computation is applied to every
+ * complete(), structured(), and withTools() response.
+ */
+export function createClient(config: LlmClientConfig): LlmClient {
+  const models = resolveModelArray(config.model);
+  const fallbackOnSet: ReadonlySet<LlmErrorKind> =
+    config.fallbackOn !== undefined
+      ? new Set(config.fallbackOn)
+      : DEFAULT_FALLBACK_ON;
+
+  // Single-model fast path — no failover wrapping overhead.
+  if (models.length === 1) {
+    const singleConfig = configForModel(config, models[0]);
+    const provider = createProviderClient(singleConfig);
+    if (config.pricing === undefined) return provider;
+    return wrapWithPricing(provider, config);
   }
 
-  // Pricing is configured — wrap the client with cost computation.
-  return wrapWithPricing(baseClient, config);
+  // Multi-model path — wrap with failover logic.
+  const failoverClient = createFailoverClient(config, models, fallbackOnSet);
+  if (config.pricing === undefined) return failoverClient;
+  return wrapWithPricing(failoverClient, config);
 }
+
+// ─── createFailoverClient ────────────────────────────────────────────────────
+
+/**
+ * Returns an LlmClient that attempts the primary model first, then falls through
+ * to subsequent models on errors whose kind is in the fallbackOn set.
+ *
+ * Each model in the array creates its own provider client, cached lazily after first use.
+ * The outer client exposes config.model as the original array (as-is) for introspection.
+ * Per-call responses carry requestedModel (the primary/originally-requested model) when
+ * the actual call was served by a fallback.
+ */
+function createFailoverClient(
+  config: LlmClientConfig,
+  models: [string, ...string[]],
+  fallbackOnSet: ReadonlySet<LlmErrorKind>
+): LlmClient {
+  // Lazily-created provider clients, one per model index.
+  const providerCache: Map<number, LlmClient> = new Map();
+
+  function getProvider(index: number): LlmClient {
+    const cached = providerCache.get(index);
+    if (cached !== undefined) return cached;
+    const model = models[index];
+    if (model === undefined) {
+      throw new LlmError({
+        message: `[llm-client] failover: model index ${index} out of range`,
+        provider: config.provider,
+        retryable: false,
+        kind: 'bad_request',
+      });
+    }
+    const provider = createProviderClient(configForModel(config, model));
+    providerCache.set(index, provider);
+    return provider;
+  }
+
+  const primaryModel = models[0];
+
+  /** Try complete() on each model in order, emitting a structured log on fallback. */
+  async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
+    for (let i = 0; i < models.length; i++) {
+      try {
+        const response = await getProvider(i).complete(messages, options);
+        // Tag with requestedModel only when a fallback actually fired.
+        if (i > 0) {
+          return { ...response, requestedModel: primaryModel };
+        }
+        return response;
+      } catch (err) {
+        if (
+          err instanceof LlmError &&
+          fallbackOnSet.has(err.kind) &&
+          i < models.length - 1
+        ) {
+          // Log the fallback event before moving to the next model.
+          emitFallbackLog(models[i] ?? primaryModel, models[i + 1] ?? primaryModel, err.kind);
+          continue;
+        }
+        throw err;
+      }
+    }
+    // Unreachable — loop always returns or throws.
+    throw new LlmError({
+      message: '[llm-client] failover: all models exhausted',
+      provider: config.provider,
+      retryable: false,
+    });
+  }
+
+  /** stream() does not support failover — streams are stateful and cannot be replayed. */
+  async function* stream(
+    messages: LlmMessage[],
+    options?: LlmCallOptions
+  ): AsyncGenerator<import('./types.js').LlmStreamChunk> {
+    // Always use primary model for streaming — mid-stream failover is unsafe.
+    yield* getProvider(0).stream(messages, options);
+  }
+
+  async function structured<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): Promise<LlmStructuredResponse<T>> {
+    for (let i = 0; i < models.length; i++) {
+      try {
+        const response = await getProvider(i).structured(messages, schema, options);
+        return response;
+      } catch (err) {
+        if (
+          err instanceof LlmError &&
+          fallbackOnSet.has(err.kind) &&
+          i < models.length - 1
+        ) {
+          emitFallbackLog(models[i] ?? primaryModel, models[i + 1] ?? primaryModel, err.kind);
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new LlmError({
+      message: '[llm-client] failover: all models exhausted',
+      provider: config.provider,
+      retryable: false,
+    });
+  }
+
+  async function withTools(
+    messages: LlmMessage[],
+    tools: LlmTool[],
+    options?: LlmCallWithToolsOptions
+  ): Promise<LlmToolResponse> {
+    for (let i = 0; i < models.length; i++) {
+      try {
+        const response = await getProvider(i).withTools(messages, tools, options);
+        if (i > 0) {
+          return { ...response, requestedModel: primaryModel };
+        }
+        return response;
+      } catch (err) {
+        if (
+          err instanceof LlmError &&
+          fallbackOnSet.has(err.kind) &&
+          i < models.length - 1
+        ) {
+          emitFallbackLog(models[i] ?? primaryModel, models[i + 1] ?? primaryModel, err.kind);
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new LlmError({
+      message: '[llm-client] failover: all models exhausted',
+      provider: config.provider,
+      retryable: false,
+    });
+  }
+
+  return {
+    // Expose the original config (with array model) for introspection.
+    config: Object.freeze({ ...config }),
+    complete,
+    stream,
+    structured,
+    withTools,
+  };
+}
+
+/** Emit a structured log line on each model_fallback event. */
+function emitFallbackLog(from: string, to: string, reason: LlmErrorKind): void {
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      pkg: '@diabolicallabs/llm-client',
+      event: 'model_fallback',
+      from,
+      to,
+      reason,
+    })
+  );
+}
+
+// ─── wrapWithPricing ─────────────────────────────────────────────────────────
 
 /**
  * Wrap an LlmClient to attach cost?: LlmCost on every response.
@@ -213,6 +429,8 @@ function wrapWithPricing(base: LlmClient, config: LlmClientConfig): LlmClient {
     withTools,
   };
 }
+
+// ─── createClientFromEnv ─────────────────────────────────────────────────────
 
 /**
  * Convenience: create an LlmClient from environment variables.

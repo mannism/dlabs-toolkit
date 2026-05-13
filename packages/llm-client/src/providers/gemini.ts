@@ -173,6 +173,12 @@ function makeAbortRacePromise(signal: AbortSignal): Promise<never> {
 
 /** Create the Gemini provider implementation. */
 export function createGeminiProvider(config: LlmClientConfig): LlmClient {
+  // Providers always receive model as a string (client.ts resolves arrays before dispatch).
+  const resolvedModel = Array.isArray(config.model) ? config.model[0]! : config.model;
+  const resolvedConfig = { ...config, model: resolvedModel } as LlmClientConfig & {
+    model: string;
+  };
+
   const configTimeoutMs = config.timeoutMs ?? 30_000;
 
   // GoogleGenAI instance — httpOptions.timeout is the per-call SDK-level backstop.
@@ -191,10 +197,11 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     maxRetries: config.maxRetries ?? 3,
     baseDelayMs: config.baseDelayMs ?? 1_000,
     provider: PROVIDER,
+    ...(config.retry !== undefined && { retryConfig: config.retry }),
   };
 
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const { system, contents } = buildGeminiContents(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
     const start = Date.now();
@@ -240,7 +247,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     messages: LlmMessage[],
     options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const { system, contents } = buildGeminiContents(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
     const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
@@ -308,7 +315,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
 
     // ── Strict path: responseSchema populated from Zod 4 schema ─────────────
     const responseSchemaObj = toProviderSchema(schema, 'gemini');
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const { system, contents } = buildGeminiContents(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
     const start = Date.now();
@@ -408,7 +415,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
       ...messages,
     ];
 
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const { system, contents } = buildGeminiContents(augmentedMessages);
     const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
     const start = Date.now();
@@ -489,7 +496,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     tools: LlmTool[],
     options?: LlmCallWithToolsOptions
   ): Promise<LlmToolResponse> {
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const { system, contents } = buildGeminiContents(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? configTimeoutMs;
     const start = Date.now();
@@ -607,7 +614,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
   }
 
   return {
-    config,
+    config: resolvedConfig,
     complete,
     stream,
     structured,

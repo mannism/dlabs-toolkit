@@ -166,6 +166,12 @@ export function normalizeOpenAIError(err: unknown): LlmError {
 
 /** Create the OpenAI provider implementation using the Responses API. */
 export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
+  // Providers always receive model as a string (client.ts resolves arrays before dispatch).
+  const resolvedModel = Array.isArray(config.model) ? config.model[0]! : config.model;
+  const resolvedConfig = { ...config, model: resolvedModel } as LlmClientConfig & {
+    model: string;
+  };
+
   const client = new OpenAI({
     apiKey: config.apiKey,
     timeout: config.timeoutMs ?? 30_000,
@@ -176,10 +182,11 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     maxRetries: config.maxRetries ?? 3,
     baseDelayMs: config.baseDelayMs ?? 1_000,
     provider: PROVIDER,
+    ...(config.retry !== undefined && { retryConfig: config.retry }),
   };
 
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const input = buildResponsesInput(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
@@ -229,7 +236,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     messages: LlmMessage[],
     options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const input = buildResponsesInput(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
@@ -315,7 +322,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     // The `name` field is required and `strict: true` enforces schema conformance.
     // Tom §1.3: ResponseFormatTextJSONSchemaConfig shape verified against SDK types.
     const jsonSchema = toProviderSchema(schema, 'openai');
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const input = buildResponsesInput(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
@@ -430,7 +437,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     };
 
     const augmentedMessages = [jsonSystemInstruction, ...messages];
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const input = buildResponsesInput(augmentedMessages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
@@ -516,7 +523,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     tools: LlmTool[],
     options?: LlmCallWithToolsOptions
   ): Promise<LlmToolResponse> {
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const input = buildResponsesInput(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
@@ -665,7 +672,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
   }
 
   return {
-    config,
+    config: resolvedConfig,
     complete,
     stream,
     structured,

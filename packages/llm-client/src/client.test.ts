@@ -319,3 +319,142 @@ describe('createClient — pricing integration', () => {
     expect(response.cost?.total).toBeCloseTo(0.00105, 6);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Provider failover — createClient with model array (v1.2.0)
+// ---------------------------------------------------------------------------
+
+describe('createClient — provider failover', () => {
+  // We test the failover logic via createClient directly. The anthropic mock is already wired.
+  // We need a client that fails on the first call then succeeds on the second.
+
+  it('single-model string: no failover wrapper, config.model is preserved as string', () => {
+    const client = createClient({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+    });
+    // Single-model fast path: config.model remains a string
+    expect(client.config.model).toBe('claude-sonnet-4-6');
+  });
+
+  it('model array with one element: treated as single-model (fast path)', () => {
+    const client = createClient({
+      provider: 'anthropic',
+      model: ['claude-sonnet-4-6'],
+      apiKey: 'test',
+    });
+    expect(typeof client.complete).toBe('function');
+  });
+
+  it('empty model array: throws LlmError with kind bad_request', () => {
+    expect(() =>
+      createClient({
+        provider: 'anthropic',
+        model: [] as unknown as string[],
+        apiKey: 'test',
+      })
+    ).toThrow(LlmError);
+  });
+
+  it('model array: falls back to second model on not_found error from primary', async () => {
+    // Import the mocked provider factory to control its behavior per test
+    const { createAnthropicProvider } = await import('./providers/anthropic.js');
+    const mockFactory = vi.mocked(createAnthropicProvider);
+
+    // First provider (primary) throws not_found; second provider returns success
+    const primaryComplete = vi.fn().mockRejectedValue(
+      new LlmError({
+        message: 'model not found',
+        provider: 'anthropic',
+        kind: 'not_found',
+        retryable: false,
+      })
+    );
+    const fallbackComplete = vi.fn().mockResolvedValue({
+      content: 'fallback response',
+      model: 'claude-3-haiku-20240307',
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      latencyMs: 50,
+    });
+
+    mockFactory
+      .mockReturnValueOnce({
+        config: { provider: 'anthropic', model: 'claude-opus-4-99', apiKey: 'test' },
+        complete: primaryComplete,
+        stream: vi.fn(),
+        structured: vi.fn(),
+        withTools: vi.fn(),
+      })
+      .mockReturnValueOnce({
+        config: { provider: 'anthropic', model: 'claude-3-haiku-20240307', apiKey: 'test' },
+        complete: fallbackComplete,
+        stream: vi.fn(),
+        structured: vi.fn(),
+        withTools: vi.fn(),
+      });
+
+    const client = createClient({
+      provider: 'anthropic',
+      model: ['claude-opus-4-99', 'claude-3-haiku-20240307'],
+      apiKey: 'test',
+      fallbackOn: ['not_found'],
+    });
+
+    const response = await client.complete([{ role: 'user', content: 'hi' }]);
+
+    // Fallback model served the response
+    expect(response.content).toBe('fallback response');
+    expect(response.model).toBe('claude-3-haiku-20240307');
+    // requestedModel is set to the primary model when failover fired
+    expect(response.requestedModel).toBe('claude-opus-4-99');
+    // Primary was attempted, fallback was attempted
+    expect(primaryComplete).toHaveBeenCalledTimes(1);
+    expect(fallbackComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('model array: does not fall back on errors not in fallbackOn', async () => {
+    const { createAnthropicProvider } = await import('./providers/anthropic.js');
+    const mockFactory = vi.mocked(createAnthropicProvider);
+
+    const primaryComplete = vi.fn().mockRejectedValue(
+      new LlmError({
+        message: 'rate limited',
+        provider: 'anthropic',
+        kind: 'rate_limit',
+        retryable: true,
+      })
+    );
+
+    mockFactory.mockReturnValueOnce({
+      config: { provider: 'anthropic', model: 'claude-sonnet-4-6', apiKey: 'test' },
+      complete: primaryComplete,
+      stream: vi.fn(),
+      structured: vi.fn(),
+      withTools: vi.fn(),
+    });
+
+    const client = createClient({
+      provider: 'anthropic',
+      model: ['claude-sonnet-4-6', 'claude-3-haiku-20240307'],
+      apiKey: 'test',
+      fallbackOn: ['not_found'], // rate_limit not included
+    });
+
+    // Should throw rate_limit — no failover
+    await expect(client.complete([{ role: 'user', content: 'hi' }])).rejects.toMatchObject({
+      kind: 'rate_limit',
+    });
+  });
+
+  it('model array: requestedModel is undefined when primary succeeds (no failover)', async () => {
+    const client = createClient({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6', // single string, not array
+      apiKey: 'test',
+    });
+
+    const response = await client.complete([{ role: 'user', content: 'hi' }]);
+    expect(response.requestedModel).toBeUndefined();
+  });
+});
