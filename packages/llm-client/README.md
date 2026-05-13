@@ -517,6 +517,60 @@ const client = createClientFromEnv('deepseek', 'deepseek-v4-flash');
 const client = createClientFromEnv('deepseek', 'deepseek-v4-pro');
 ```
 
+## Per-response cost computation (v1.1.0)
+
+Attach `cost?: LlmCost` to every response by configuring pricing at client creation time. Requires `@diabolicallabs/llm-pricing` as an optional peer dep.
+
+```bash
+pnpm add @diabolicallabs/llm-pricing
+```
+
+```typescript
+import { createClient } from '@diabolicallabs/llm-client';
+
+const client = createClient({
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  pricing: { computeOnEveryCall: true },
+});
+
+const response = await client.complete(messages);
+console.log(response.cost);
+// {
+//   input:     0.0003,   // USD
+//   output:    0.00075,  // USD
+//   cacheRead: 0,
+//   cacheWrite: 0,
+//   total:     0.00105,  // USD
+//   currency:  'USD',
+//   isPartial: false,    // true for o-series (invisible reasoning tokens) or sonar-deep-research
+// }
+```
+
+The `pricing.table` option accepts a custom `PricingTable` from `@diabolicallabs/llm-pricing` to override default rates:
+
+```typescript
+import { DEFAULT_PRICING_TABLE } from '@diabolicallabs/llm-pricing';
+
+const client = createClient({
+  provider: 'openai',
+  model: 'gpt-5.5',
+  apiKey: process.env.OPENAI_API_KEY!,
+  pricing: {
+    computeOnEveryCall: true,
+    table: {
+      ...DEFAULT_PRICING_TABLE,
+      openai: {
+        'gpt-5.5': { inputPer1M: 4.5, outputPer1M: 28.0, verifiedAt: '2026-05-14', sourceUrl: 'internal' },
+      },
+    },
+  },
+});
+```
+
+`stream()` does not attach cost — cost requires final token counts from a complete response. Use `complete()` if you need cost tracking. See [`@diabolicallabs/llm-pricing`](../llm-pricing/README.md) for the full pricing table, maintenance plan, and `pnpm pricing:verify` diagnostic script.
+
 ## Token normalization
 
 All providers return `LlmUsage` in a consistent shape regardless of the underlying API's field names:
