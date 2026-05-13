@@ -557,7 +557,9 @@ describe('withTools()', () => {
     const [, init] = getFirstFetchCall(mockFetch);
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
 
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(Array.isArray(body['tool_calls'])).toBe(true);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     const toolCalls = body['tool_calls'] as LlmToolCall[];
     expect(toolCalls[0]?.toolName).toBe('get_weather');
     expect(toolCalls[0]?.id).toBe('call_test_123');
@@ -584,6 +586,7 @@ describe('withTools()', () => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
 
     // tool_calls should be absent (not present at all) when no tools were called
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['tool_calls']).toBeUndefined();
   });
 
@@ -609,9 +612,13 @@ describe('withTools()', () => {
     const [, init] = getFirstFetchCall(vi.mocked(fetch));
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
 
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['model']).toBe('claude-sonnet-4-6');
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['prompt_tokens']).toBe(mockUsage.inputTokens);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['completion_tokens']).toBe(mockUsage.outputTokens);
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['agent_id']).toBe(sdkConfig.identity.agentId);
   });
 
@@ -623,5 +630,134 @@ describe('withTools()', () => {
     await new Promise<void>((r) => setTimeout(r, 20));
 
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cost propagation (v1.1.0)
+// ---------------------------------------------------------------------------
+
+describe('cost propagation', () => {
+  const mockCost = {
+    input: 0.001,
+    output: 0.002,
+    cacheRead: 0,
+    cacheWrite: 0,
+    total: 0.003,
+    currency: 'USD' as const,
+    isPartial: false,
+  };
+
+  it('includes cost in CallRecord when complete() response carries cost', async () => {
+    const client = makeMockClient({
+      complete: vi.fn().mockResolvedValue({
+        content: 'Hello',
+        model: 'claude-sonnet-4-6',
+        usage: mockUsage,
+        latencyMs: 100,
+        cost: mockCost,
+      }),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(body['cost']).toEqual(mockCost);
+  });
+
+  it('omits cost from CallRecord when complete() response has no cost', async () => {
+    // Default makeMockClient() does not include cost on the response
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(body['cost']).toBeUndefined();
+  });
+
+  it('includes cost in CallRecord when structured() response carries cost', async () => {
+    const schema = { parse: (d: unknown) => d as { answer: string } };
+    const client = makeMockClient({
+      structured: vi.fn().mockResolvedValue({
+        data: { answer: '42' },
+        usage: mockUsage,
+        latencyMs: 200,
+        cost: mockCost,
+      }),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.structured(mockMessages, schema);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(body['cost']).toEqual(mockCost);
+  });
+
+  it('includes cost in CallRecord when withTools() response carries cost', async () => {
+    const mockTool = {
+      name: 'get_weather',
+      description: 'Get weather.',
+      inputSchema: { parse: (d: unknown) => d as { city: string } },
+    };
+    const client = makeMockClient({
+      withTools: vi.fn().mockResolvedValue({
+        content: '',
+        toolCalls: [mockToolCall],
+        model: 'claude-sonnet-4-6',
+        usage: mockUsage,
+        latencyMs: 150,
+        stopReason: 'tool_use',
+        cost: mockCost,
+      }),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.withTools(mockMessages, [mockTool]);
+    await new Promise<void>((r) => setTimeout(r, 20));
+
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(body['cost']).toEqual(mockCost);
+  });
+
+  it('propagates isPartial: true on the cost object correctly', async () => {
+    const partialCost = { ...mockCost, isPartial: true, total: 0.001 };
+    const client = makeMockClient({
+      complete: vi.fn().mockResolvedValue({
+        content: 'Hello',
+        model: 'claude-sonnet-4-6',
+        usage: mockUsage,
+        latencyMs: 100,
+        cost: partialCost,
+      }),
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    const recordedCost = body['cost'] as typeof partialCost;
+
+    expect(recordedCost.isPartial).toBe(true);
+    expect(recordedCost.total).toBe(0.001);
   });
 });
