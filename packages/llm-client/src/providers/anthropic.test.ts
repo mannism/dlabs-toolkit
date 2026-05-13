@@ -1283,3 +1283,161 @@ describe('Anthropic provider — prompt cache (v0.4.3): structuredPromptFallback
     expect(typeof callArgs.system).toBe('string');
   });
 });
+
+// ─── withTools() ──────────────────────────────────────────────────────────────
+
+/** Build a mock Anthropic message response containing a tool_use block. */
+function mockToolUseResponse(
+  toolName: string,
+  input: Record<string, unknown>,
+  id = 'toolu_abc123'
+): Anthropic.Message {
+  return mockMessageResponse({
+    content: [
+      {
+        type: 'tool_use',
+        id,
+        name: toolName,
+        input,
+      } as unknown as Anthropic.ContentBlock,
+    ],
+    stop_reason: 'tool_use',
+  });
+}
+
+describe('Anthropic provider — withTools()', () => {
+  let mockCreate: MockInstance;
+
+  const weatherTool = {
+    name: 'get_weather',
+    description: 'Get the current weather for a city.',
+    inputSchema: {
+      parse: (d: unknown) => d as { city: string },
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockToolUseResponse('get_weather', { city: 'Paris' }));
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return { messages: { create: mockCreate } };
+    });
+  });
+
+  it('returns toolCalls with preserved tool_use_id when model calls a tool', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.withTools(
+      [{ role: 'user', content: 'What is the weather in Paris?' }],
+      [weatherTool]
+    );
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0]?.toolName).toBe('get_weather');
+    expect(result.toolCalls[0]?.arguments).toEqual({ city: 'Paris' });
+    expect(result.toolCalls[0]?.id).toBe('toolu_abc123');
+    expect(result.stopReason).toBe('tool_use');
+    expect(result.model).toBe('claude-3-haiku-20240307');
+    expect(result.usage.inputTokens).toBe(10);
+    expect(result.usage.outputTokens).toBe(5);
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns empty toolCalls and stopReason end_turn when model responds with text', async () => {
+    mockCreate.mockResolvedValue(mockMessageResponse({ stop_reason: 'end_turn' }));
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.withTools([{ role: 'user', content: 'Hello' }], [weatherTool]);
+
+    expect(result.toolCalls).toHaveLength(0);
+    expect(result.content).toBe('Hello, world!');
+    expect(result.stopReason).toBe('end_turn');
+  });
+
+  it('sends { name, description, input_schema } tool shape (Anthropic format)', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    // Cast via unknown to avoid TS overlap error: ToolUnion has no index signature
+    const tool = callArgs.tools?.[0] as unknown as Record<string, unknown>;
+    expect(tool['name']).toBe('get_weather');
+    expect(tool['description']).toBe('Get the current weather for a city.');
+    expect(tool['input_schema']).toBeDefined();
+    // Must NOT have a nested 'function' key (that is the OpenAI/DeepSeek shape)
+    expect(tool['function']).toBeUndefined();
+  });
+
+  it("maps toolChoice:'any' to { type:'any' } on Anthropic", async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      toolChoice: 'any',
+    });
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    expect(callArgs.tool_choice).toEqual({ type: 'any' });
+  });
+
+  it('sets disable_parallel_tool_use:true on tool_choice when parallelToolCalls is false', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      parallelToolCalls: false,
+    });
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    // Cast via unknown — ToolChoice union types have no index signature
+    const toolChoice = callArgs.tool_choice as unknown as Record<string, unknown>;
+    expect(toolChoice['disable_parallel_tool_use']).toBe(true);
+  });
+
+  it("maps named toolChoice to { type:'tool', name } on Anthropic", async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      toolChoice: { name: 'get_weather' },
+    });
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    expect(callArgs.tool_choice).toEqual({ type: 'tool', name: 'get_weather' });
+  });
+
+  it('throws kind:tool_arguments_invalid when schema validation fails', async () => {
+    const strictTool = {
+      name: 'strict_tool',
+      description: 'Strict.',
+      inputSchema: {
+        parse: (d: unknown) => {
+          if (typeof (d as { value?: unknown }).value !== 'number') {
+            throw new Error('Expected number');
+          }
+          return d as { value: number };
+        },
+      },
+    };
+
+    mockCreate.mockResolvedValue(
+      mockToolUseResponse('strict_tool', { value: 'wrong' }, 'toolu_strict')
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const thrown = await client
+      .withTools([{ role: 'user', content: 'Hi' }], [strictTool])
+      .catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('tool_arguments_invalid');
+      expect(thrown.retryable).toBe(false);
+    }
+  });
+
+  it('maps pause_turn stop_reason to stopReason pause_turn', async () => {
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({
+        content: [{ type: 'text', text: 'Paused.', citations: null }],
+        stop_reason: 'pause_turn' as Anthropic.Message['stop_reason'],
+      })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
+    expect(result.stopReason).toBe('pause_turn');
+  });
+});

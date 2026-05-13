@@ -230,6 +230,11 @@ function anthropicPostprocess(node: JsonNode): JsonNode {
  *   4. Recursive — nested objects and arrays must be cleaned too
  *   5. No $ref — Zod 4 with cycles:'throw' prevents cycles, so $ref should not appear
  *
+ * Gemini-specific constraint (Item 1.3):
+ *   OBJECT schemas with empty `properties: {}` are rejected by the Gemini API.
+ *   When detected, a sentinel property `_placeholder` is injected. The sentinel
+ *   must be stripped from the response before Zod parse — see stripGeminiSentinel().
+ *
  * Reference: https://ai.google.dev/api/generate-content#v1beta.GenerationConfig.response_schema
  */
 function geminiPostprocess(node: unknown): JsonNode {
@@ -250,8 +255,29 @@ function geminiPostprocess(node: unknown): JsonNode {
   delete obj.default;
   delete obj.examples;
 
-  // Recurse into object properties
-  if (obj.properties !== undefined) {
+  // Recurse into object properties, then inject sentinel for empty OBJECT schemas.
+  // Gemini rejects OBJECT type with empty properties:{} — inject _placeholder so the
+  // API accepts the schema, then strip it from the response before Zod parse.
+  if (obj.type === 'object') {
+    if (obj.properties !== undefined) {
+      const props = obj.properties;
+      const processedProps: Record<string, JsonNode> = {};
+      for (const key of Object.keys(props)) {
+        processedProps[key] = geminiPostprocess(props[key]);
+      }
+      if (Object.keys(processedProps).length === 0) {
+        // Empty properties — inject sentinel property
+        processedProps['_placeholder'] = { type: 'string', description: '_placeholder sentinel' };
+      }
+      obj.properties = processedProps;
+    } else {
+      // No properties at all — add empty object and then inject sentinel
+      obj.properties = {
+        _placeholder: { type: 'string', description: '_placeholder sentinel' },
+      };
+    }
+  } else if (obj.properties !== undefined) {
+    // Non-object node with properties (shouldn't happen but recurse defensively)
     const props = obj.properties;
     const processedProps: Record<string, JsonNode> = {};
     for (const key of Object.keys(props)) {
@@ -277,4 +303,27 @@ function geminiPostprocess(node: unknown): JsonNode {
   }
 
   return obj;
+}
+
+/**
+ * Strip `_placeholder` sentinel properties injected by geminiPostprocess to satisfy
+ * Gemini's empty-object constraint. Call this on parsed JSON before Zod parse.
+ *
+ * The sentinel may appear at any depth — recurse. No-op for non-object/array values.
+ * Exported for use in gemini.ts structured() and withTools() paths.
+ */
+export function stripGeminiSentinel(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) return value;
+
+  if (Array.isArray(value)) {
+    return value.map(stripGeminiSentinel);
+  }
+
+  const obj = value as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    if (key === '_placeholder') continue;
+    result[key] = stripGeminiSentinel(obj[key]);
+  }
+  return result;
 }

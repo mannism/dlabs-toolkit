@@ -28,16 +28,25 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { parseJsonOrThrow } from '../extract-json.js';
-import { isZodSchema, toProviderSchema } from '../json-schema.js';
-import { classifyHttpStatus, mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
+import { isZodSchema, type JsonNode, toProviderSchema } from '../json-schema.js';
+import {
+  classifyHttpStatus,
+  mergeRetryOptsWithSignal,
+  normalizeThrownError,
+  withRetry,
+} from '../retry.js';
 import type {
   LlmCallOptions,
+  LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
   LlmStructuredResponse,
+  LlmTool,
+  LlmToolCall,
+  LlmToolResponse,
   LlmUsage,
 } from '../types.js';
 import { LlmError } from '../types.js';
@@ -493,10 +502,166 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     };
   }
 
+  /**
+   * withTools() — native tool calling via Anthropic messages.create.
+   *
+   * Tool shape (Tom §2.1): { name, description, input_schema }
+   * parallelToolCalls === false → disable_parallel_tool_use: true on tool_choice (inverse semantics,
+   * Tom §2.3). Anthropic does not have a parallel_tool_calls top-level param.
+   *
+   * toolChoice mapping:
+   *   'auto'      → { type: 'auto' }
+   *   'any'       → { type: 'any' }  (Anthropic: model must call at least one tool)
+   *   'none'      → { type: 'none' }
+   *   { name: X } → { type: 'tool', name: X }
+   * When parallelToolCalls === false, disable_parallel_tool_use: true is added to the
+   * toolChoice object (not a top-level param).
+   */
+  async function withTools(
+    messages: LlmMessage[],
+    tools: LlmTool[],
+    options?: LlmCallWithToolsOptions
+  ): Promise<LlmToolResponse> {
+    const { system, messages: anthropicMessages } = buildAnthropicMessages(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const start = Date.now();
+
+    // Build Anthropic tool definitions
+    const anthropicTools: Anthropic.Tool[] = tools.map((t) => {
+      const inputSchema = isZodSchema(t.inputSchema)
+        ? (toProviderSchema(t.inputSchema as import('zod').ZodType, 'anthropic') as JsonNode)
+        : (t.inputSchema as unknown as JsonNode);
+      return {
+        name: t.name,
+        description: t.description,
+        input_schema: inputSchema as Anthropic.Tool['input_schema'],
+      };
+    });
+
+    const disableParallel = options?.parallelToolCalls === false;
+
+    // Build typed ToolChoice — use typed interfaces, not bare strings (Tom §2.2)
+    function buildToolChoice(tc: LlmCallWithToolsOptions['toolChoice']): Anthropic.ToolChoice {
+      if (tc === undefined || tc === 'auto') {
+        return disableParallel
+          ? { type: 'auto', disable_parallel_tool_use: true }
+          : { type: 'auto' };
+      }
+      if (tc === 'any') {
+        return disableParallel ? { type: 'any', disable_parallel_tool_use: true } : { type: 'any' };
+      }
+      if (tc === 'none') {
+        // ToolChoiceNone does not support disable_parallel_tool_use
+        return { type: 'none' };
+      }
+      // Named tool
+      return disableParallel
+        ? { type: 'tool', name: tc.name, disable_parallel_tool_use: true }
+        : { type: 'tool', name: tc.name };
+    }
+
+    const response = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: Anthropic.MessageCreateParamsNonStreaming = {
+            model: options?.model ?? config.model,
+            messages: anthropicMessages,
+            max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
+            tools: anthropicTools,
+            tool_choice: buildToolChoice(options?.toolChoice),
+          };
+
+          if (system !== undefined) params.system = system;
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
+
+          return await client.messages.create(params, {
+            signal: ctl.signal,
+            timeout: effectiveTimeoutMs,
+          });
+        } catch (err) {
+          throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
+
+    // Extract text content and tool_use blocks from response
+    const textParts: string[] = [];
+    const toolCalls: LlmToolCall[] = [];
+
+    for (const block of response.content) {
+      if (block.type === 'text') {
+        textParts.push(block.text);
+      } else if (block.type === 'tool_use') {
+        const rawArgs = JSON.stringify(block.input);
+        let parsedArgs: unknown = block.input; // already parsed by Anthropic SDK
+
+        // Validate against the tool's inputSchema
+        const tool = tools.find((t) => t.name === block.name);
+        if (tool !== undefined) {
+          try {
+            parsedArgs = tool.inputSchema.parse(block.input);
+          } catch (err) {
+            throw new LlmError({
+              message: `Anthropic withTools: arguments for tool '${block.name}' failed schema validation. ${String(err)}`,
+              provider: PROVIDER,
+              kind: 'tool_arguments_invalid',
+              retryable: false,
+              cause: err,
+            });
+          }
+        }
+
+        // Preserve tool_use_id as LlmToolCall.id (Tom §2.4)
+        toolCalls.push({
+          id: block.id,
+          toolName: block.name,
+          arguments: parsedArgs,
+          rawArguments: rawArgs,
+        });
+      }
+    }
+
+    // Map Anthropic stop_reason to LlmToolResponse.stopReason
+    function mapStopReason(reason: string | null): LlmToolResponse['stopReason'] {
+      switch (reason) {
+        case 'tool_use':
+          return 'tool_use';
+        case 'end_turn':
+          return 'end_turn';
+        case 'max_tokens':
+          return 'max_tokens';
+        case 'stop_sequence':
+          return 'stop_sequence';
+        case 'pause_turn':
+          return 'pause_turn';
+        case 'refusal':
+          return 'refusal';
+        default:
+          return 'end_turn';
+      }
+    }
+
+    return {
+      content: textParts.join(''),
+      toolCalls,
+      model: response.model,
+      id: response.id,
+      usage: normalizeUsage(response.usage),
+      latencyMs: Date.now() - start,
+      stopReason: mapStopReason(response.stop_reason),
+    };
+  }
+
   return {
     config,
     complete,
     stream,
     structured,
+    withTools,
   };
 }

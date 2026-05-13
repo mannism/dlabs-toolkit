@@ -478,7 +478,9 @@ describe('OpenAI provider (Responses API) — structured() prompt-fallback (json
     const client = createOpenAIProvider(TEST_CONFIG);
     await client.structured([{ role: 'user', content: 'Return data' }], schema);
 
-    const callArgs = mockCreate.mock.calls[0]?.[0] as { input: Array<{ role: string; content: string }> };
+    const callArgs = mockCreate.mock.calls[0]?.[0] as {
+      input: Array<{ role: string; content: string }>;
+    };
     const systemMsg = callArgs.input.find((m) => m.role === 'system');
     expect(systemMsg?.content).toContain('valid JSON');
   });
@@ -700,7 +702,11 @@ describe('OpenAI provider (Responses API) — timeout propagation', () => {
     const zodSchema = z.object({ ok: z.boolean() });
     mockCreate.mockResolvedValue(mockResponse('{"ok":true}', { model: 'gpt-5.4-mini' }));
 
-    const client = createOpenAIProvider({ ...TEST_CONFIG, model: 'gpt-5.4-mini', timeoutMs: 30_000 });
+    const client = createOpenAIProvider({
+      ...TEST_CONFIG,
+      model: 'gpt-5.4-mini',
+      timeoutMs: 30_000,
+    });
     await client.structured([{ role: 'user', content: 'Return data' }], zodSchema, {
       timeoutMs: 240_000,
     });
@@ -923,4 +929,276 @@ describe('OpenAI provider (Responses API) — LlmErrorKind taxonomy', () => {
       }
     });
   }
+});
+
+// ─── withTools() ──────────────────────────────────────────────────────────────
+
+/**
+ * Build a Responses API response that contains a function_call output item.
+ * Mirrors the real shape: output array with type:'function_call' items.
+ */
+function mockResponseWithToolCall(
+  toolName: string,
+  args: Record<string, unknown>,
+  callId = 'call_abc123'
+): OpenAI.Responses.Response {
+  return {
+    id: 'resp-tool-1',
+    object: 'response',
+    model: 'gpt-4o-mini',
+    output: [
+      {
+        type: 'function_call',
+        call_id: callId,
+        name: toolName,
+        arguments: JSON.stringify(args),
+      },
+    ],
+    usage: { input_tokens: 20, output_tokens: 10, total_tokens: 30 },
+    status: 'completed',
+    error: null,
+    incomplete_details: null,
+    instructions: null,
+    metadata: {},
+    parallel_tool_calls: true,
+    temperature: 1,
+    tool_choice: 'auto',
+    tools: [],
+    top_p: 1,
+    truncation: 'disabled',
+    text: { format: { type: 'text' } },
+    created_at: 0,
+    background: false,
+    max_output_tokens: null,
+    previous_response_id: null,
+    store: false,
+    reasoning: { effort: null, generate_summary: null, summary: null },
+    service_tier: 'default',
+    user: null,
+  } as unknown as OpenAI.Responses.Response;
+}
+
+/** Build a Responses API response with a text message only (no tool calls). */
+function mockResponseTextOnly(text: string): OpenAI.Responses.Response {
+  return {
+    id: 'resp-text-1',
+    object: 'response',
+    model: 'gpt-4o-mini',
+    output: [
+      {
+        type: 'message',
+        id: 'msg-1',
+        role: 'assistant',
+        status: 'completed',
+        content: [{ type: 'output_text', text, annotations: [] }],
+      },
+    ],
+    usage: { input_tokens: 15, output_tokens: 8, total_tokens: 23 },
+    status: 'completed',
+    error: null,
+    incomplete_details: null,
+    instructions: null,
+    metadata: {},
+    parallel_tool_calls: true,
+    temperature: 1,
+    tool_choice: 'auto',
+    tools: [],
+    top_p: 1,
+    truncation: 'disabled',
+    text: { format: { type: 'text' } },
+    created_at: 0,
+    background: false,
+    max_output_tokens: null,
+    previous_response_id: null,
+    store: false,
+    reasoning: { effort: null, generate_summary: null, summary: null },
+    service_tier: 'default',
+    user: null,
+  } as unknown as OpenAI.Responses.Response;
+}
+
+describe('OpenAI provider (Responses API) — withTools()', () => {
+  const weatherTool = {
+    name: 'get_weather',
+    description: 'Get the current weather for a city.',
+    inputSchema: {
+      parse: (d: unknown) => d as { city: string },
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns toolCalls when model emits a function_call output item', async () => {
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(mockResponseWithToolCall('get_weather', { city: 'London' }));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.withTools(
+      [{ role: 'user', content: 'What is the weather in London?' }],
+      [weatherTool]
+    );
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0]?.toolName).toBe('get_weather');
+    expect(result.toolCalls[0]?.arguments).toEqual({ city: 'London' });
+    expect(result.toolCalls[0]?.rawArguments).toBe(JSON.stringify({ city: 'London' }));
+    expect(result.toolCalls[0]?.id).toBe('call_abc123');
+    expect(result.stopReason).toBe('tool_use');
+    expect(result.model).toBe('gpt-4o-mini');
+    expect(result.usage.inputTokens).toBe(20);
+    expect(result.usage.outputTokens).toBe(10);
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns empty toolCalls and stopReason end_turn when model responds with text', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockResponseTextOnly('The weather is sunny.'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.withTools(
+      [{ role: 'user', content: 'What is the weather?' }],
+      [weatherTool]
+    );
+
+    expect(result.toolCalls).toHaveLength(0);
+    expect(result.content).toBe('The weather is sunny.');
+    expect(result.stopReason).toBe('end_turn');
+  });
+
+  it('sends flat FunctionTool shape (no nested function key) to the Responses API', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockResponseTextOnly('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
+
+    const callParams = mockCreate.mock.calls[0]?.[0] as { tools?: unknown[] };
+    const toolParam = callParams.tools?.[0] as Record<string, unknown>;
+    // Flat shape: top-level name, description, parameters — no nested 'function' key
+    expect(toolParam['name']).toBe('get_weather');
+    expect(toolParam['description']).toBe('Get the current weather for a city.');
+    expect(toolParam['type']).toBe('function');
+    expect(toolParam['function']).toBeUndefined();
+  });
+
+  it("maps toolChoice:'any' to 'required' on the Responses API", async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockResponseTextOnly('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      toolChoice: 'any',
+    });
+
+    const callParams = mockCreate.mock.calls[0]?.[0] as { tool_choice?: unknown };
+    expect(callParams.tool_choice).toBe('required');
+  });
+
+  it("maps named toolChoice to { type:'function', name } on the Responses API", async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockResponseTextOnly('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      toolChoice: { name: 'get_weather' },
+    });
+
+    const callParams = mockCreate.mock.calls[0]?.[0] as { tool_choice?: unknown };
+    expect(callParams.tool_choice).toEqual({ type: 'function', name: 'get_weather' });
+  });
+
+  it('sets parallel_tool_calls: false when parallelToolCalls is false', async () => {
+    const mockCreate = vi.fn().mockResolvedValue(mockResponseTextOnly('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      parallelToolCalls: false,
+    });
+
+    const callParams = mockCreate.mock.calls[0]?.[0] as { parallel_tool_calls?: unknown };
+    expect(callParams.parallel_tool_calls).toBe(false);
+  });
+
+  it('throws kind:tool_arguments_invalid when schema validation fails', async () => {
+    const strictTool = {
+      name: 'strict_tool',
+      description: 'Strict input required.',
+      inputSchema: {
+        parse: (d: unknown) => {
+          if (typeof (d as { value?: unknown }).value !== 'number') {
+            throw new Error('Expected number');
+          }
+          return d as { value: number };
+        },
+      },
+    };
+
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(mockResponseWithToolCall('strict_tool', { value: 'not-a-number' }));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const thrown = await client
+      .withTools([{ role: 'user', content: 'Hi' }], [strictTool])
+      .catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('tool_arguments_invalid');
+      expect(thrown.retryable).toBe(false);
+    }
+  });
+
+  it('marks stopReason as refusal when output contains a refusal item', async () => {
+    const refusalResponse = {
+      id: 'resp-refusal-1',
+      object: 'response',
+      model: 'gpt-4o-mini',
+      output: [
+        {
+          type: 'message',
+          id: 'msg-1',
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'refusal', refusal: 'I cannot do that.' }],
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      status: 'completed',
+      error: null,
+    } as unknown as OpenAI.Responses.Response;
+
+    const mockCreate = vi.fn().mockResolvedValue(refusalResponse);
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.withTools(
+      [{ role: 'user', content: 'Do something bad' }],
+      [weatherTool]
+    );
+
+    expect(result.stopReason).toBe('refusal');
+  });
 });

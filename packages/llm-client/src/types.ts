@@ -230,6 +230,91 @@ export type LlmStructuredResponse<T> = {
   citations?: Array<{ url: string; title?: string }>;
 };
 
+/**
+ * Tool declaration — passed to withTools() to describe a callable function.
+ *
+ * inputSchema is a Zod-compatible schema (must have a `parse` function).
+ * The toolkit calls inputSchema.parse(arguments) on the model's returned arguments
+ * before putting them in LlmToolCall.arguments. If parse throws, the toolkit
+ * throws LlmError with kind:'tool_arguments_invalid'.
+ */
+export interface LlmTool {
+  name: string;
+  description: string;
+  /** Zod-compatible schema. Same narrow interface as structured()'s schema param. */
+  inputSchema: { parse(d: unknown): unknown };
+}
+
+/**
+ * A single tool call returned by the model.
+ *
+ * id: provider-issued call ID where available; UUID v7 synthesized for Gemini
+ *   (which does not issue call IDs natively).
+ * toolName: the function name the model chose to call.
+ * arguments: parsed against the tool's inputSchema before return.
+ * rawArguments: the pre-parse string for debugging.
+ */
+export interface LlmToolCall {
+  id: string;
+  toolName: string;
+  arguments: unknown;
+  rawArguments: string;
+}
+
+/**
+ * Response from withTools().
+ *
+ * content: any text the model returned alongside tool calls (often empty when tool_use fires).
+ * toolCalls: array of parsed tool invocations. Empty if the model declined to call tools.
+ * stopReason: normalized stop reason across all providers.
+ *   'tool_use'       — model called one or more tools.
+ *   'end_turn'       — model finished without calling tools.
+ *   'max_tokens'     — output was cut by token limit.
+ *   'stop_sequence'  — custom stop sequence hit.
+ *   'content_filter' — safety refusal (also covers Gemini SAFETY finish reason).
+ *   'pause_turn'     — Anthropic-specific: extended thinking pause.
+ *   'refusal'        — Anthropic-specific: model refusal without content_filter.
+ */
+export interface LlmToolResponse {
+  content: string;
+  toolCalls: LlmToolCall[];
+  model: string;
+  usage: LlmUsage;
+  latencyMs: number;
+  id?: string;
+  stopReason:
+    | 'tool_use'
+    | 'end_turn'
+    | 'max_tokens'
+    | 'stop_sequence'
+    | 'content_filter'
+    | 'pause_turn'
+    | 'refusal';
+}
+
+/**
+ * Options for withTools() — extends LlmCallOptions with tool-calling knobs.
+ *
+ * toolChoice: how the model should choose tools.
+ *   'auto'         — model decides (default).
+ *   'any'          — model must call at least one tool (Anthropic-specific; maps to 'required' on OpenAI).
+ *   'none'         — model must not call any tool.
+ *   { name: X }   — model must call the named tool.
+ *
+ * parallelToolCalls: whether the model may call multiple tools in a single turn.
+ *   true  — parallel calls allowed (default).
+ *   false — force sequential (one tool call per turn).
+ *   Provider mapping:
+ *     OpenAI Responses API: parallel_tool_calls (direct flag, default true).
+ *     Anthropic: disable_parallel_tool_use: true on tool_choice (inverse semantics).
+ *     Gemini: ignored — no equivalent flag.
+ *     DeepSeek: parallel_tool_calls on Chat Completions.
+ */
+export interface LlmCallWithToolsOptions extends LlmCallOptions {
+  toolChoice?: 'auto' | 'any' | 'none' | { name: string };
+  parallelToolCalls?: boolean;
+}
+
 // The LlmClient interface — what consumers program against
 export interface LlmClient {
   readonly config: Readonly<LlmClientConfig>;
@@ -246,7 +331,7 @@ export interface LlmClient {
    * **Strict native mode (v0.4.0+):**
    * Pass a Zod 4 schema to automatically opt into the provider's strictest native
    * structured-output path:
-   *   - OpenAI: `response_format: { type: 'json_schema', strict: true }` (gpt-5.x family)
+   *   - OpenAI: `text.format: { type: 'json_schema', strict: true }` (Responses API)
    *   - Anthropic: forced tool-use with `tool_choice: { type: 'tool', name: 'extract' }`
    *   - Gemini: `responseSchema` populated in GenerateContentConfig
    *
@@ -270,4 +355,24 @@ export interface LlmClient {
     schema: { parse: (data: unknown) => T },
     options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>>;
+
+  /**
+   * Native tool-calling — returns provider-issued tool invocations parsed against schemas.
+   *
+   * **Supported providers:** OpenAI (Responses API), Anthropic, Gemini, DeepSeek.
+   * **Perplexity:** throws LlmError(kind:'bad_request') immediately — Perplexity models
+   *   do not support tool calling.
+   *
+   * Tool arguments are validated against each tool's inputSchema before return.
+   * Validation failure throws LlmError(kind:'tool_arguments_invalid').
+   *
+   * @param messages - conversation messages.
+   * @param tools    - tool declarations (name, description, inputSchema).
+   * @param options  - optional: toolChoice, parallelToolCalls, plus all LlmCallOptions.
+   */
+  withTools(
+    messages: LlmMessage[],
+    tools: LlmTool[],
+    options?: LlmCallWithToolsOptions
+  ): Promise<LlmToolResponse>;
 }

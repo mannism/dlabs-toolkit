@@ -34,15 +34,24 @@ import OpenAI from 'openai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { parseJsonOrThrow } from '../extract-json.js';
 import { isZodSchema, toProviderSchema } from '../json-schema.js';
-import { classifyHttpStatus, mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
+import {
+  classifyHttpStatus,
+  mergeRetryOptsWithSignal,
+  normalizeThrownError,
+  withRetry,
+} from '../retry.js';
 import type {
   LlmCallOptions,
+  LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
   LlmStructuredResponse,
+  LlmTool,
+  LlmToolCall,
+  LlmToolResponse,
   LlmUsage,
 } from '../types.js';
 import { LlmError } from '../types.js';
@@ -67,9 +76,7 @@ function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined | null
  * a 'system' role input; user/assistant messages become 'user'/'assistant'.
  * Unlike Chat Completions, the Responses API uses `input` not `messages`.
  */
-function buildResponsesInput(
-  messages: LlmMessage[]
-): OpenAI.Responses.EasyInputMessage[] {
+function buildResponsesInput(messages: LlmMessage[]): OpenAI.Responses.EasyInputMessage[] {
   return messages.map((m) => ({
     role: m.role,
     content: m.content,
@@ -260,7 +267,12 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       // Text tokens arrive as 'response.output_text.delta' events.
       // Usage arrives in the 'response.completed' event on response.usage.
       // biome-ignore lint/complexity/useLiteralKeys: ResponseStreamEvent union — dot access triggers noPropertyAccessFromIndexSignature
-      for await (const event of withStallTimeout(sdkStream as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>, stallMs, ctl, PROVIDER)) {
+      for await (const event of withStallTimeout(
+        sdkStream as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>,
+        stallMs,
+        ctl,
+        PROVIDER
+      )) {
         if (event.type === 'response.output_text.delta') {
           const delta = event.delta;
           if (delta !== undefined && delta.length > 0) {
@@ -488,10 +500,175 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     };
   }
 
+  /**
+   * withTools() — native tool calling via the Responses API.
+   *
+   * Tool shape: flat FunctionTool (Tom §1.2):
+   *   { type: 'function', name, description, parameters, strict: null }
+   * NOT the Chat Completions nested shape { type:'function', function:{ name,... } }.
+   *
+   * parallelToolCalls → top-level parallel_tool_calls param on Responses API.
+   * toolChoice 'any' → 'required' (Responses API doesn't have 'any'; 'required' is the equivalent).
+   * Named tool → { type:'function', name: X } (Responses API ToolChoice).
+   */
+  async function withTools(
+    messages: LlmMessage[],
+    tools: LlmTool[],
+    options?: LlmCallWithToolsOptions
+  ): Promise<LlmToolResponse> {
+    const model = options?.model ?? config.model;
+    const input = buildResponsesInput(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const start = Date.now();
+
+    // Build Responses API FunctionTool array — flat shape (no nested function key)
+    const responseApiTools: OpenAI.Responses.FunctionTool[] = tools.map((t) => {
+      // Use openai profile for schema — strips incompatible keywords and enforces required[]
+      const parameters = isZodSchema(t.inputSchema)
+        ? (toProviderSchema(t.inputSchema as import('zod').ZodType, 'openai') as Record<
+            string,
+            unknown
+          >)
+        : (t.inputSchema as unknown as Record<string, unknown>);
+      return {
+        type: 'function',
+        name: t.name,
+        description: t.description,
+        parameters: parameters as { [key: string]: unknown } | null,
+        strict: null,
+      };
+    });
+
+    // Map toolkit toolChoice to Responses API tool_choice.
+    // Return type is the concrete union (not the optional param type) so that
+    // exactOptionalPropertyTypes accepts the value inside the params object literal.
+    function buildToolChoice(
+      tc: LlmCallWithToolsOptions['toolChoice']
+    ): OpenAI.Responses.ToolChoiceOptions | OpenAI.Responses.ToolChoiceFunction {
+      if (tc === undefined || tc === 'auto') return 'auto';
+      if (tc === 'none') return 'none';
+      // 'any' → 'required' on Responses API (no 'any' equivalent)
+      if (tc === 'any') return 'required';
+      // Named tool
+      return { type: 'function', name: tc.name };
+    }
+
+    const rawResponse = await withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          const params: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
+            model,
+            input,
+            stream: false,
+            tools: responseApiTools,
+            tool_choice: buildToolChoice(options?.toolChoice),
+          };
+
+          const maxTokens = options?.maxTokens ?? config.maxTokens;
+          if (maxTokens !== undefined) params.max_output_tokens = maxTokens;
+
+          const temperature = options?.temperature ?? config.temperature;
+          if (temperature !== undefined) params.temperature = temperature;
+
+          // parallelToolCalls: false → parallel_tool_calls: false
+          // undefined / true → omit (default is parallel-enabled)
+          if (options?.parallelToolCalls === false) {
+            params.parallel_tool_calls = false;
+          }
+
+          return await client.responses.create(params, {
+            signal: ctl.signal,
+            timeout: effectiveTimeoutMs,
+          });
+        } catch (err) {
+          throw normalizeOpenAIError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
+
+    // Extract text content and tool calls from the response output
+    const textParts: string[] = [];
+    const toolCalls: LlmToolCall[] = [];
+
+    for (const item of rawResponse.output) {
+      if (item.type === 'message') {
+        for (const contentItem of item.content) {
+          if (contentItem.type === 'output_text') {
+            textParts.push(contentItem.text);
+          }
+        }
+      } else if (item.type === 'function_call') {
+        // Responses API function_call output item: { type:'function_call', call_id, name, arguments }
+        const rawArgs = item.arguments ?? '';
+        let parsedArgs: unknown;
+        try {
+          parsedArgs = JSON.parse(rawArgs);
+        } catch {
+          parsedArgs = rawArgs; // leave as string if not valid JSON
+        }
+
+        // Validate against the tool's inputSchema
+        const tool = tools.find((t) => t.name === item.name);
+        if (tool !== undefined) {
+          try {
+            parsedArgs = tool.inputSchema.parse(parsedArgs);
+          } catch (err) {
+            throw new LlmError({
+              message: `OpenAI withTools: arguments for tool '${item.name}' failed schema validation. ${String(err)}`,
+              provider: PROVIDER,
+              kind: 'tool_arguments_invalid',
+              retryable: false,
+              cause: err,
+            });
+          }
+        }
+
+        toolCalls.push({
+          id: item.call_id ?? `synth-${Date.now()}`,
+          toolName: item.name ?? '',
+          arguments: parsedArgs,
+          rawArguments: rawArgs,
+        });
+      }
+    }
+
+    // Map Responses API status to LlmToolResponse.stopReason
+    // Responses API stop reason lives on the response.status field or can be inferred
+    // from the output content. If the last output is a function_call, stopReason is 'tool_use'.
+    const hasToolCalls = toolCalls.length > 0;
+    let stopReason: LlmToolResponse['stopReason'] = hasToolCalls ? 'tool_use' : 'end_turn';
+
+    // Check for refusal in the output items
+    for (const item of rawResponse.output) {
+      if (item.type === 'message') {
+        for (const contentItem of item.content) {
+          if (contentItem.type === 'refusal') {
+            stopReason = 'refusal';
+          }
+        }
+      }
+    }
+
+    return {
+      content: textParts.join(''),
+      toolCalls,
+      model: rawResponse.model,
+      id: rawResponse.id,
+      usage: normalizeUsage(rawResponse.usage),
+      latencyMs: Date.now() - start,
+      stopReason,
+    };
+  }
+
   return {
     config,
     complete,
     stream,
     structured,
+    withTools,
   };
 }

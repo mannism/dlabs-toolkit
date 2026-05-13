@@ -718,3 +718,198 @@ describe('Gemini provider — structured() prompt-fallback: robust JSON extracti
     }
   });
 });
+
+// ─── withTools() ──────────────────────────────────────────────────────────────
+
+/**
+ * Build a Gemini response shape with a functionCall part in the first candidate.
+ * Gemini does not issue call IDs — the provider synthesizes them.
+ */
+function mockGeminiToolCallResponse(
+  toolName: string,
+  args: Record<string, unknown>,
+  finishReason = 'STOP'
+) {
+  return {
+    candidates: [
+      {
+        content: {
+          role: 'model',
+          parts: [{ functionCall: { name: toolName, args } }],
+        },
+        finishReason,
+      },
+    ],
+    usageMetadata: {
+      promptTokenCount: 20,
+      candidatesTokenCount: 10,
+      totalTokenCount: 30,
+    },
+    modelVersion: 'gemini-2.0-flash',
+  };
+}
+
+/** Gemini response with a text part only (no function calls). */
+function mockGeminiTextResponse(text: string, finishReason = 'STOP') {
+  return {
+    candidates: [
+      {
+        content: {
+          role: 'model',
+          parts: [{ text }],
+        },
+        finishReason,
+      },
+    ],
+    usageMetadata: {
+      promptTokenCount: 15,
+      candidatesTokenCount: 8,
+      totalTokenCount: 23,
+    },
+    modelVersion: 'gemini-2.0-flash',
+  };
+}
+
+describe('Gemini provider — withTools()', () => {
+  let mockGenerateContent: MockInstance;
+
+  const weatherTool = {
+    name: 'get_weather',
+    description: 'Get the current weather for a city.',
+    inputSchema: {
+      parse: (d: unknown) => d as { city: string },
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateContent = vi
+      .fn()
+      .mockResolvedValue(mockGeminiToolCallResponse('get_weather', { city: 'Tokyo' }));
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: vi.fn(),
+        },
+      };
+    });
+  });
+
+  it('returns toolCalls with synthesized IDs when model emits a functionCall part', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.withTools(
+      [{ role: 'user', content: 'What is the weather in Tokyo?' }],
+      [weatherTool]
+    );
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0]?.toolName).toBe('get_weather');
+    expect(result.toolCalls[0]?.arguments).toEqual({ city: 'Tokyo' });
+    // Synthesized ID — just check it is a non-empty string
+    expect(typeof result.toolCalls[0]?.id).toBe('string');
+    expect(result.toolCalls[0]?.id.length).toBeGreaterThan(0);
+    expect(result.stopReason).toBe('tool_use');
+    expect(result.model).toBe('gemini-2.0-flash');
+    expect(result.usage.inputTokens).toBe(20);
+    expect(result.usage.outputTokens).toBe(10);
+  });
+
+  it('returns empty toolCalls and stopReason end_turn when model responds with text', async () => {
+    mockGenerateContent.mockResolvedValue(mockGeminiTextResponse('It is sunny.'));
+
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.withTools([{ role: 'user', content: 'Hello' }], [weatherTool]);
+
+    expect(result.toolCalls).toHaveLength(0);
+    expect(result.content).toBe('It is sunny.');
+    expect(result.stopReason).toBe('end_turn');
+  });
+
+  it('sends functionDeclarations with parametersJsonSchema field (not parameters)', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      config?: {
+        tools?: Array<{ functionDeclarations?: unknown[] }>;
+      };
+    };
+    const decls = callArgs.config?.tools?.[0]?.functionDeclarations;
+    expect(Array.isArray(decls)).toBe(true);
+    const decl = decls?.[0] as Record<string, unknown>;
+    expect(decl['name']).toBe('get_weather');
+    // parametersJsonSchema is the plain JSON Schema field (not Gemini's Schema type 'parameters')
+    expect(decl['parametersJsonSchema']).toBeDefined();
+    expect(decl['parameters']).toBeUndefined();
+  });
+
+  it("maps toolChoice:'none' to mode:'NONE' in toolConfig", async () => {
+    mockGenerateContent.mockResolvedValue(mockGeminiTextResponse('ok'));
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      toolChoice: 'none',
+    });
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      config?: { toolConfig?: { function_calling_config?: { mode?: string } } };
+    };
+    expect(callArgs.config?.toolConfig?.function_calling_config?.mode).toBe('NONE');
+  });
+
+  it("maps toolChoice:'any' to mode:'ANY' in toolConfig", async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool], {
+      toolChoice: 'any',
+    });
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      config?: { toolConfig?: { function_calling_config?: { mode?: string } } };
+    };
+    expect(callArgs.config?.toolConfig?.function_calling_config?.mode).toBe('ANY');
+  });
+
+  it('maps SAFETY finishReason to stopReason content_filter', async () => {
+    mockGenerateContent.mockResolvedValue(mockGeminiTextResponse('', 'SAFETY'));
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
+    expect(result.stopReason).toBe('content_filter');
+  });
+
+  it('maps MAX_TOKENS finishReason to stopReason max_tokens', async () => {
+    mockGenerateContent.mockResolvedValue(mockGeminiTextResponse('partial', 'MAX_TOKENS'));
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
+    expect(result.stopReason).toBe('max_tokens');
+  });
+
+  it('throws kind:tool_arguments_invalid when schema validation fails', async () => {
+    const strictTool = {
+      name: 'strict_tool',
+      description: 'Strict.',
+      inputSchema: {
+        parse: (d: unknown) => {
+          if (typeof (d as { count?: unknown }).count !== 'number') {
+            throw new Error('Expected number');
+          }
+          return d as { count: number };
+        },
+      },
+    };
+
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiToolCallResponse('strict_tool', { count: 'wrong' })
+    );
+
+    const client = createGeminiProvider(TEST_CONFIG);
+    const thrown = await client
+      .withTools([{ role: 'user', content: 'Hi' }], [strictTool])
+      .catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('tool_arguments_invalid');
+      expect(thrown.retryable).toBe(false);
+    }
+  });
+});
