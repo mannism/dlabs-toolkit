@@ -25,13 +25,19 @@ export { classifyHttpStatus } from './retry.js';
 // Error kind type — consumers use this to branch without parsing message strings
 // RetryConfig / RetryStrategy — configurable retry (v1.2.0+)
 export type {
+  LlmAfterCallContext,
+  LlmBeforeCallResult,
+  LlmCallContext,
   LlmCallOptions,
+  LlmCallType,
   LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
   LlmErrorKind,
+  LlmHooks,
   LlmMessage,
   LlmResponse,
+  LlmSkipResult,
   LlmStreamChunk,
   LlmStreamStructuredEvent,
   LlmStructuredResponse,

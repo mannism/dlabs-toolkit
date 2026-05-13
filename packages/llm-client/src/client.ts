@@ -30,12 +30,15 @@
  *   failover — they just see a config with a resolved model string per attempt.
  */
 
+import { runAfterCall, runBeforeCall } from './hooks.js';
 import { createAnthropicProvider } from './providers/anthropic.js';
 import { createDeepSeekProvider } from './providers/deepseek.js';
 import { createGeminiProvider } from './providers/gemini.js';
 import { createOpenAIProvider } from './providers/openai.js';
 import { createPerplexityProvider } from './providers/perplexity.js';
 import type {
+  LlmAfterCallContext,
+  LlmCallContext,
   LlmCallOptions,
   LlmCallWithToolsOptions,
   LlmClient,
@@ -43,6 +46,8 @@ import type {
   LlmErrorKind,
   LlmMessage,
   LlmResponse,
+  LlmSkipResult,
+  LlmStreamChunk,
   LlmStreamStructuredEvent,
   LlmStructuredResponse,
   LlmTool,
@@ -127,18 +132,23 @@ export function createClient(config: LlmClientConfig): LlmClient {
   const fallbackOnSet: ReadonlySet<LlmErrorKind> =
     config.fallbackOn !== undefined ? new Set(config.fallbackOn) : DEFAULT_FALLBACK_ON;
 
-  // Single-model fast path — no failover wrapping overhead.
+  // Build the inner client (provider + optional failover + optional pricing).
+  // wrapWithHooks is applied last so it is the outermost layer — hooks see the
+  // final cost-annotated response and wrap the full retry + failover stack.
+  let inner: LlmClient;
   if (models.length === 1) {
     const singleConfig = configForModel(config, models[0]);
-    const provider = createProviderClient(singleConfig);
-    if (config.pricing === undefined) return provider;
-    return wrapWithPricing(provider, config);
+    inner = createProviderClient(singleConfig);
+  } else {
+    inner = createFailoverClient(config, models, fallbackOnSet);
   }
 
-  // Multi-model path — wrap with failover logic.
-  const failoverClient = createFailoverClient(config, models, fallbackOnSet);
-  if (config.pricing === undefined) return failoverClient;
-  return wrapWithPricing(failoverClient, config);
+  if (config.pricing !== undefined) {
+    inner = wrapWithPricing(inner, config);
+  }
+
+  // Hooks are outermost — wrapWithHooks is a no-op when config.hooks is undefined.
+  return wrapWithHooks(inner, config);
 }
 
 // ─── createFailoverClient ────────────────────────────────────────────────────
@@ -438,6 +448,247 @@ function wrapWithPricing(base: LlmClient, config: LlmClientConfig): LlmClient {
       options?: LlmCallOptions
     ) => base.streamStructured(messages, schema, options),
     structured,
+    withTools,
+  };
+}
+
+// ─── wrapWithHooks ───────────────────────────────────────────────────────────
+
+/**
+ * Wrap an LlmClient to fire beforeCall/afterCall hooks on every method invocation.
+ *
+ * Hooks fire once per public method invocation — NOT per retry attempt.
+ * The retry layer is inside the provider; hooks are the outermost layer.
+ *
+ * Wrapping order (outermost → innermost):
+ *   wrapWithHooks → wrapWithPricing → createFailoverClient → createProviderClient
+ *
+ * This ensures hooks see the final cost-annotated response from wrapWithPricing,
+ * and that beforeCall mutation reaches the provider before any retry or failover logic.
+ */
+function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
+  const { hooks } = config;
+  if (hooks === undefined) return base;
+
+  /** Resolve the primary model string from config for LlmCallContext. */
+  const primaryModel = Array.isArray(config.model) ? (config.model[0] ?? 'unknown') : config.model;
+
+  /** Build a base LlmCallContext for a given call type and arguments. */
+  function makeCtx(
+    callType: LlmCallContext['callType'],
+    messages: LlmMessage[],
+    options: LlmCallOptions | undefined
+  ): LlmCallContext {
+    return { messages, options, provider: config.provider, model: primaryModel, callType };
+  }
+
+  /**
+   * Normalize any caught value to an LlmError.
+   * Ensures the afterCall hook always receives a typed LlmError.
+   */
+  function asLlmError(err: unknown): LlmError {
+    if (err instanceof LlmError) return err;
+    return new LlmError({ message: String(err), provider: config.provider, retryable: false });
+  }
+
+  /**
+   * Helper: assert that a skip result matches the expected response type for non-streaming calls.
+   * A skip returning an AsyncGenerator for a non-streaming call type is a consumer bug.
+   */
+  function assertNonStreamingSkip(
+    skip: LlmSkipResult,
+    callType: LlmCallContext['callType'],
+    provider: string
+  ): asserts skip is LlmResponse | LlmStructuredResponse<unknown> | LlmToolResponse {
+    if (
+      skip !== null &&
+      typeof skip === 'object' &&
+      typeof (skip as AsyncGenerator<unknown>)[Symbol.asyncIterator] === 'function'
+    ) {
+      throw new LlmError({
+        message: `[llm-client] beforeCall hook returned an AsyncGenerator as skip for non-streaming call type '${callType}'. Return a plain response object instead.`,
+        provider,
+        retryable: false,
+        kind: 'bad_request',
+      });
+    }
+  }
+
+  // ── complete() ──────────────────────────────────────────────────────────────
+  async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
+    const ctx = makeCtx('complete', messages, options);
+    const beforeResult = await runBeforeCall(hooks, ctx);
+
+    if (beforeResult.kind === 'skip') {
+      assertNonStreamingSkip(beforeResult.response, 'complete', config.provider);
+      return beforeResult.response as LlmResponse;
+    }
+
+    const start = Date.now();
+    let error: LlmError | undefined;
+    let response: LlmResponse | undefined;
+    try {
+      response = await base.complete(beforeResult.messages, beforeResult.options);
+      return response;
+    } catch (err) {
+      error = asLlmError(err);
+      throw err;
+    } finally {
+      const afterCtx: LlmAfterCallContext = {
+        request: ctx,
+        response,
+        error,
+        latencyMs: Date.now() - start,
+      };
+      await runAfterCall(hooks, afterCtx);
+    }
+  }
+
+  // ── stream() ─────────────────────────────────────────────────────────────────
+  async function* stream(
+    messages: LlmMessage[],
+    options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamChunk> {
+    const ctx = makeCtx('stream', messages, options);
+    const beforeResult = await runBeforeCall(hooks, ctx);
+
+    if (beforeResult.kind === 'skip') {
+      // skip for a streaming call must be an AsyncGenerator<LlmStreamChunk>
+      const gen = beforeResult.response as AsyncGenerator<LlmStreamChunk>;
+      yield* gen;
+      return;
+    }
+
+    const start = Date.now();
+    let error: LlmError | undefined;
+    try {
+      yield* base.stream(beforeResult.messages, beforeResult.options);
+    } catch (err) {
+      error = asLlmError(err);
+      throw err;
+    } finally {
+      // response is undefined for streaming paths in v1.5.0 — usage not surfaced here.
+      const afterCtx: LlmAfterCallContext = {
+        request: ctx,
+        response: undefined,
+        error,
+        latencyMs: Date.now() - start,
+      };
+      await runAfterCall(hooks, afterCtx);
+    }
+  }
+
+  // ── structured() ─────────────────────────────────────────────────────────────
+  async function structured<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): Promise<LlmStructuredResponse<T>> {
+    const ctx = makeCtx('structured', messages, options);
+    const beforeResult = await runBeforeCall(hooks, ctx);
+
+    if (beforeResult.kind === 'skip') {
+      assertNonStreamingSkip(beforeResult.response, 'structured', config.provider);
+      return beforeResult.response as LlmStructuredResponse<T>;
+    }
+
+    const start = Date.now();
+    let error: LlmError | undefined;
+    let response: LlmStructuredResponse<T> | undefined;
+    try {
+      response = await base.structured(beforeResult.messages, schema, beforeResult.options);
+      return response;
+    } catch (err) {
+      error = asLlmError(err);
+      throw err;
+    } finally {
+      const afterCtx: LlmAfterCallContext = {
+        request: ctx,
+        response,
+        error,
+        latencyMs: Date.now() - start,
+      };
+      await runAfterCall(hooks, afterCtx);
+    }
+  }
+
+  // ── streamStructured() ────────────────────────────────────────────────────────
+  async function* streamStructured<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    const ctx = makeCtx('streamStructured', messages, options);
+    const beforeResult = await runBeforeCall(hooks, ctx);
+
+    if (beforeResult.kind === 'skip') {
+      const gen = beforeResult.response as AsyncGenerator<LlmStreamStructuredEvent<T>>;
+      yield* gen;
+      return;
+    }
+
+    const start = Date.now();
+    let error: LlmError | undefined;
+    try {
+      yield* base.streamStructured(beforeResult.messages, schema, beforeResult.options);
+    } catch (err) {
+      error = asLlmError(err);
+      throw err;
+    } finally {
+      const afterCtx: LlmAfterCallContext = {
+        request: ctx,
+        response: undefined,
+        error,
+        latencyMs: Date.now() - start,
+      };
+      await runAfterCall(hooks, afterCtx);
+    }
+  }
+
+  // ── withTools() ──────────────────────────────────────────────────────────────
+  async function withTools(
+    messages: LlmMessage[],
+    tools: LlmTool[],
+    options?: LlmCallWithToolsOptions
+  ): Promise<LlmToolResponse> {
+    const ctx = makeCtx('withTools', messages, options);
+    const beforeResult = await runBeforeCall(hooks, ctx);
+
+    if (beforeResult.kind === 'skip') {
+      assertNonStreamingSkip(beforeResult.response, 'withTools', config.provider);
+      return beforeResult.response as LlmToolResponse;
+    }
+
+    const start = Date.now();
+    let error: LlmError | undefined;
+    let response: LlmToolResponse | undefined;
+    try {
+      response = await base.withTools(
+        beforeResult.messages,
+        tools,
+        beforeResult.options as LlmCallWithToolsOptions | undefined
+      );
+      return response;
+    } catch (err) {
+      error = asLlmError(err);
+      throw err;
+    } finally {
+      const afterCtx: LlmAfterCallContext = {
+        request: ctx,
+        response,
+        error,
+        latencyMs: Date.now() - start,
+      };
+      await runAfterCall(hooks, afterCtx);
+    }
+  }
+
+  return {
+    config: base.config,
+    complete,
+    stream,
+    structured,
+    streamStructured,
     withTools,
   };
 }

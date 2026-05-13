@@ -33,6 +33,27 @@
  *   system prompt for 5 minutes; reads cost 0.10× and writes cost 1.25× normal input price.
  *   Ignored on all non-Anthropic providers.
  *
+ * v1.5.0 additions (pre-call hooks API):
+ *   LlmCallType          — union of the five call-type discriminators.
+ *   LlmCallContext       — context object passed to beforeCall hooks.
+ *   LlmBeforeCallResult  — return shape from beforeCall; mutation or short-circuit.
+ *   LlmSkipResult        — named union for the skip field (all valid response shapes).
+ *   LlmAfterCallContext  — context object passed to afterCall hooks.
+ *   LlmHooks             — { beforeCall?, afterCall? } interface.
+ *   LlmClientConfig.hooks — optional LlmHooks; wires hooks into every call type.
+ *
+ * Hook semantics:
+ *   - beforeCall fires once per public method invocation, NOT per retry attempt.
+ *   - Returning { messages, options } from beforeCall replaces the originals for that call.
+ *   - Returning { skip: response } short-circuits the provider call entirely.
+ *   - beforeCall errors propagate as LlmError({ kind: 'bad_request' }).
+ *   - afterCall errors are logged (structured warn) and dropped — never crash the caller.
+ *   - For streaming paths (stream(), streamStructured()), afterCall fires after generator
+ *     exhaustion. response is undefined for streaming paths in v1.5.0; usage is not
+ *     surfaced in afterCall on streaming paths — deferred to v1.6.0.
+ *   - LlmCallContext.model reflects the primary model at beforeCall time; if failover fires,
+ *     afterCall receives the actual serving model via response.model.
+ *
  * v1.3.0 additions (streamStructured — token-stream + final-validated):
  *   LlmStreamStructuredEvent — discriminated union of events emitted by streamStructured().
  *   LlmClient.streamStructured — async generator: tokens streamed, Zod-validated at end.
@@ -164,6 +185,18 @@ export interface LlmClientConfig {
    * fallbackOn: ['not_found', 'auth']
    */
   fallbackOn?: LlmErrorKind[];
+  /**
+   * Optional hooks configuration (v1.5.0+).
+   * Fires for all five call types: complete, stream, structured, withTools, streamStructured.
+   *
+   * beforeCall fires once per public method invocation, NOT per retry attempt.
+   * afterCall fires after the call completes (or after generator exhaustion for streams).
+   * For streaming paths, afterCall receives response: undefined — usage is not surfaced in
+   * v1.5.0 and is a candidate for v1.6.0.
+   *
+   * @see LlmHooks for the full hook interface and examples.
+   */
+  hooks?: LlmHooks;
   /**
    * Optional pricing configuration (v1.1.0+).
    * Requires @diabolicallabs/llm-pricing to be installed as an optional peer dependency.
@@ -563,6 +596,166 @@ export interface LlmCallWithToolsOptions extends LlmCallOptions {
 export type LlmStreamStructuredEvent<T> =
   | { type: 'token'; token: string }
   | { type: 'done'; data: T; usage: LlmUsage };
+
+// ─── Hooks API (v1.5.0) ──────────────────────────────────────────────────────
+
+/**
+ * Discriminates which LlmClient method was invoked.
+ * Passed in LlmCallContext so beforeCall/afterCall hooks can branch per call type.
+ */
+export type LlmCallType = 'complete' | 'stream' | 'structured' | 'withTools' | 'streamStructured';
+
+/**
+ * Context object passed to beforeCall hooks before the provider call executes.
+ *
+ * model reflects the primary (first) model in the config array at beforeCall time.
+ * If provider failover fires after beforeCall returns, afterCall will receive the
+ * actual serving model via response.model — a small asymmetry; see LlmAfterCallContext.
+ *
+ * Hooks fire once per public method invocation, NOT per retry attempt.
+ * If complete() retries 3 times internally, beforeCall fires once (before attempt 1)
+ * and afterCall fires once (after the final successful response). The retry layer is
+ * below the hook layer — hooks are a consumer-facing interception point, not retry observers.
+ */
+export interface LlmCallContext {
+  messages: LlmMessage[];
+  options: LlmCallOptions | undefined;
+  /** Provider name, e.g. 'anthropic', 'openai'. */
+  provider: string;
+  /**
+   * Resolved primary model string (the first element when config.model is an array).
+   * May differ from response.model when provider failover occurs.
+   */
+  model: string;
+  /** Which LlmClient method was invoked. */
+  callType: LlmCallType;
+}
+
+/**
+ * Named union for the skip field in LlmBeforeCallResult.
+ *
+ * For non-streaming call types (complete, structured, withTools): use the matching
+ * response shape. For streaming call types (stream, streamStructured): use the matching
+ * AsyncGenerator shape. The dispatcher validates shape against callType at runtime.
+ */
+export type LlmSkipResult =
+  | LlmResponse
+  | LlmStructuredResponse<unknown>
+  | LlmToolResponse
+  | AsyncGenerator<LlmStreamChunk>
+  | AsyncGenerator<LlmStreamStructuredEvent<unknown>>;
+
+/**
+ * Return shape for beforeCall hooks.
+ *
+ * To mutate the request: return { messages?, options? } — the provided values replace
+ * the originals for this call only. Subsequent calls use the original config values.
+ *
+ * To short-circuit: return { skip: response } — the dispatcher returns skip to the
+ * caller immediately, without executing the provider call or the retry/failover layers.
+ * The type of skip must match callType (e.g. LlmResponse for 'complete'). Mismatches
+ * are caught at runtime and thrown as LlmError({ kind: 'bad_request' }).
+ *
+ * Returning undefined or void passes through with no mutation.
+ */
+export interface LlmBeforeCallResult {
+  messages?: LlmMessage[];
+  options?: LlmCallOptions;
+  skip?: LlmSkipResult;
+}
+
+/**
+ * Context object passed to afterCall hooks after the provider call completes.
+ *
+ * For non-streaming paths (complete, structured, withTools):
+ *   response is the full response object; error is undefined on success.
+ *
+ * For streaming paths (stream, streamStructured):
+ *   response is undefined — no accumulated response object exists.
+ *   latencyMs measures call-to-generator-exhaustion time.
+ *   Usage data from streaming paths is not surfaced in afterCall in v1.5.0; this is
+ *   a known limitation and a candidate for v1.6.0. Retain stream()/streamStructured()
+ *   wrappers in agent-sdk until usage lands in LlmAfterCallContext.
+ *
+ * afterCall fires after any successful call or after an error. When error is defined,
+ * response is undefined. afterCall exceptions are logged (structured warn) and dropped —
+ * they must never crash a call that already returned.
+ */
+export interface LlmAfterCallContext {
+  request: LlmCallContext;
+  /**
+   * The response object, when available.
+   * Undefined for streaming paths (stream, streamStructured) in v1.5.0 — no accumulated
+   * response object exists. Also undefined when error is defined (call failed).
+   * Usage surfacing for streaming paths is deferred to v1.6.0.
+   */
+  response: LlmResponse | LlmStructuredResponse<unknown> | LlmToolResponse | undefined;
+  /**
+   * The error, when the call failed. Undefined on success.
+   * afterCall fires on both success and error paths.
+   */
+  error: LlmError | undefined;
+  /** Milliseconds from call initiation to completion (or to generator exhaustion for streams). */
+  latencyMs: number;
+}
+
+/**
+ * Hook registration interface. Pass as hooks? on LlmClientConfig.
+ *
+ * Both hooks are optional and async-only. Sync work is expressible inside an async function.
+ *
+ * @example PII redaction before call
+ * ```ts
+ * const client = createClient({
+ *   provider: 'openai', model: 'gpt-5.5', apiKey: '...',
+ *   hooks: {
+ *     beforeCall: async (ctx) => ({
+ *       messages: ctx.messages.map(m => ({
+ *         ...m,
+ *         content: redactPii(m.content),
+ *       })),
+ *     }),
+ *   },
+ * });
+ * ```
+ *
+ * @example Short-circuit cache
+ * ```ts
+ * hooks: {
+ *   beforeCall: async (ctx) => {
+ *     const cached = await cache.get(cacheKey(ctx.messages));
+ *     if (cached) return { skip: cached };
+ *   },
+ * }
+ * ```
+ *
+ * @example Custom logging
+ * ```ts
+ * hooks: {
+ *   afterCall: async (ctx) => {
+ *     logger.info({ callType: ctx.request.callType, latencyMs: ctx.latencyMs });
+ *   },
+ * }
+ * ```
+ */
+export interface LlmHooks {
+  /**
+   * Fires before the provider call executes.
+   * Return { messages, options } to mutate the request.
+   * Return { skip } to short-circuit and return a pre-built response.
+   * Return void to pass through unchanged.
+   * Errors propagate as LlmError({ kind: 'bad_request' }) to the caller.
+   */
+  beforeCall?: (ctx: LlmCallContext) => Promise<LlmBeforeCallResult | undefined>;
+  /**
+   * Fires after the provider call completes (or after generator exhaustion for streams).
+   * Informational only — errors are logged (structured warn) and dropped.
+   * Never use afterCall for logic that must not fail silently.
+   */
+  afterCall?: (ctx: LlmAfterCallContext) => Promise<void>;
+}
+
+// ─── LlmClient interface ──────────────────────────────────────────────────────
 
 // The LlmClient interface — what consumers program against
 export interface LlmClient {
