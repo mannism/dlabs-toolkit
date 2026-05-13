@@ -6,7 +6,9 @@ Cost-tracking middleware for `@diabolicallabs/llm-client`. Drop-in wrapper that 
 
 ## Status
 
-**Published — v1.2.0.** `instrumentClient()` wraps all five `LlmClient` methods: `complete()`, `stream()`, `structured()`, `streamStructured()`, `withTools()`. Cost propagation (v1.1.0) and failover `requestedModel` tracking (v1.2.0) are included. `streamStructured()` wrapper ships in v1.3.0.
+**Published — v1.4.0.** `instrumentClient()` wraps all five `LlmClient` methods: `complete()`, `stream()`, `structured()`, `streamStructured()`, `withTools()`. Cost propagation (v1.1.0), failover `requestedModel` tracking (v1.2.0), and `streamStructured()` (v1.3.0) are included.
+
+**v1.4.0 internal refactor:** non-streaming paths (`complete`, `structured`, `withTools`) now use the `@diabolicallabs/llm-client` hooks infrastructure internally instead of bespoke per-method closures. The public API is unchanged. `stream()` and `streamStructured()` retain their own wrapper pattern for usage capture until `LlmAfterCallContext.usage` lands in v1.6.0.
 
 ## Install
 
@@ -92,6 +94,34 @@ interface CallRecord {
   tool_calls?: LlmToolCall[]; // withTools() only, omitted when array is empty
   cost?: LlmCost;     // Present when LlmClient has pricing configured (v1.1.0+)
 }
+```
+
+## When to use `instrumentClient` vs raw `createClient({ hooks })`
+
+`@diabolicallabs/llm-client` v1.5.0 ships a native hooks API (`beforeCall`/`afterCall`) on `createClient()`. Use it directly when you want request-level interception: PII redaction, cache short-circuit, custom logging.
+
+Use `instrumentClient()` when you want structured `CallRecord` ingestion to the Agent Spend Dashboard. It owns the `CallRecord` schema and the ingestion retry/backoff contract. Internally it wires an `afterCall` hook into the llm-client config — but the public entry point is always `instrumentClient(client, config)`.
+
+**Composition:** if you set `hooks` on a `LlmClient` config and then pass that client to `instrumentClient()`, both hooks run. The consumer's `afterCall` fires first; the ingestion dispatch fires second.
+
+```typescript
+const base = createClient({
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  hooks: {
+    beforeCall: async (ctx) => ({
+      messages: redactPii(ctx.messages),
+    }),
+  },
+});
+
+// Both the PII hook and ingestion dispatch run on every call
+const client = instrumentClient(base, {
+  identity: { agentId: process.env.AGENT_ID! },
+  ingestionUrl: process.env.SPEND_INGESTION_URL!,
+  ingestionKey: process.env.SPEND_INGESTION_KEY!,
+});
 ```
 
 ## Failure behavior

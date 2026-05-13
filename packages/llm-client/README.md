@@ -4,9 +4,10 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**v1.4.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
+**v1.5.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
 
 Highlights:
+- **v1.5.0** — Pre-call hooks API (`hooks?: LlmHooks` on `createClient`). `beforeCall` for request mutation and short-circuit caching; `afterCall` for custom logging and observability. Fires on all 5 call types. Cross-reference: [`@diabolicallabs/agent-sdk`](../agent-sdk/README.md) uses hooks internally.
 - **v1.4.0** — Provider capability matrix (`getModelCapabilities()`), linked AbortController helper (`linkedAbortController()`), response IDs on all response types (`id` + `idSource`).
 - **v1.3.0** — Streaming structured output (`streamStructured()`) — token streaming + Zod-validated final object. OpenAI, Anthropic, DeepSeek supported; Gemini and Perplexity throw pre-call.
 - **v1.2.0** — Configurable retry strategy (exponential/linear/fixed/decorrelated), provider failover via `model: string[]`, `Retry-After` header support.
@@ -748,6 +749,93 @@ const client = createClient({
 ```
 
 `stream()` does not attach cost — cost requires final token counts from a complete response. Use `complete()` if you need cost tracking. See [`@diabolicallabs/llm-pricing`](../llm-pricing/README.md) for the full pricing table, maintenance plan, and `pnpm pricing:verify` diagnostic script.
+
+## Hooks (v1.5.0)
+
+Attach `beforeCall` and `afterCall` hooks to any `createClient()` config. Hooks fire for all five call types: `complete`, `stream`, `structured`, `withTools`, `streamStructured`.
+
+```typescript
+const client = createClient({
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  hooks: {
+    beforeCall: async (ctx) => {
+      // ctx.callType, ctx.provider, ctx.model, ctx.messages, ctx.options
+    },
+    afterCall: async (ctx) => {
+      // ctx.request, ctx.response, ctx.error, ctx.latencyMs
+    },
+  },
+});
+```
+
+### `beforeCall` — request mutation
+
+Return `{ messages, options }` to replace the originals for that call. Subsequent calls use the original config values.
+
+```typescript
+hooks: {
+  // PII redaction before the request leaves the process
+  beforeCall: async (ctx) => ({
+    messages: ctx.messages.map((m) => ({
+      ...m,
+      content: redactPii(m.content),
+    })),
+  }),
+}
+```
+
+### `beforeCall` — short-circuit caching
+
+Return `{ skip: cachedResponse }` to return a pre-built response without executing the provider call. The retry and failover layers do not fire.
+
+```typescript
+hooks: {
+  beforeCall: async (ctx) => {
+    const cached = await cache.get(cacheKey(ctx.messages));
+    if (cached) return { skip: cached };
+  },
+}
+```
+
+For streaming call types (`stream`, `streamStructured`), `skip` must be an `AsyncGenerator` matching the call's event shape.
+
+### `afterCall` — observability
+
+Fires after the call completes (or after generator exhaustion for streams). Errors in `afterCall` are caught, logged as a structured warning, and dropped — they never crash the call that already returned.
+
+```typescript
+hooks: {
+  afterCall: async (ctx) => {
+    logger.info({
+      callType: ctx.request.callType,
+      model: ctx.request.model,
+      latencyMs: ctx.latencyMs,
+      error: ctx.error?.message,
+    });
+  },
+}
+```
+
+**Streaming paths:** `ctx.response` is `undefined` for `stream()` and `streamStructured()` in v1.5.0 — no accumulated response object is available. Usage surfacing for streaming `afterCall` context is planned for v1.6.0.
+
+### Hook contract
+
+| Property | Value |
+|---|---|
+| Firing frequency | Once per public method invocation — NOT per retry attempt |
+| `beforeCall` error | Propagates as `LlmError({ kind: 'bad_request' })` |
+| `afterCall` error | Logged as structured warn, dropped — never propagates |
+| `ctx.model` at `beforeCall` | Primary (first) model in config array. May differ from `response.model` if failover fires. |
+
+### When to use hooks vs `instrumentClient`
+
+Use **hooks** when you want request-level interception: PII redaction, system prompt injection, cache short-circuit, custom logging. Hooks are configured directly on `createClient()`.
+
+Use **[`@diabolicallabs/agent-sdk`](../agent-sdk/README.md)** when you want ingestion of `CallRecord` objects to the Agent Spend Dashboard. `instrumentClient()` internally uses the hooks infrastructure since v1.4.0, but the public API (`instrumentClient`, `CallRecord`, `AgentSdkConfig`) stays the SDK's entry point.
+
+Both compose: `instrumentClient()` merges its `afterCall` handler with any hooks already set on the client config.
 
 ## Token normalization
 
