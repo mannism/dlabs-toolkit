@@ -1,8 +1,8 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  // Entry point — all exports flow through src/index.ts
-  entry: ['src/index.ts'],
+  // Entry points — main public API + pool sub-path (v1.2.0)
+  entry: ['src/index.ts', 'src/pool/index.ts'],
 
   // ESM only — no CJS dual-publish (Node ≥20 across all consumers)
   format: ['esm'],
