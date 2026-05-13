@@ -124,9 +124,7 @@ function createProviderClient(config: LlmClientConfig & { model: string }): LlmC
 export function createClient(config: LlmClientConfig): LlmClient {
   const models = resolveModelArray(config.model);
   const fallbackOnSet: ReadonlySet<LlmErrorKind> =
-    config.fallbackOn !== undefined
-      ? new Set(config.fallbackOn)
-      : DEFAULT_FALLBACK_ON;
+    config.fallbackOn !== undefined ? new Set(config.fallbackOn) : DEFAULT_FALLBACK_ON;
 
   // Single-model fast path — no failover wrapping overhead.
   if (models.length === 1) {
@@ -191,11 +189,7 @@ function createFailoverClient(
         }
         return response;
       } catch (err) {
-        if (
-          err instanceof LlmError &&
-          fallbackOnSet.has(err.kind) &&
-          i < models.length - 1
-        ) {
+        if (err instanceof LlmError && fallbackOnSet.has(err.kind) && i < models.length - 1) {
           // Log the fallback event before moving to the next model.
           emitFallbackLog(models[i] ?? primaryModel, models[i + 1] ?? primaryModel, err.kind);
           continue;
@@ -230,11 +224,7 @@ function createFailoverClient(
         const response = await getProvider(i).structured(messages, schema, options);
         return response;
       } catch (err) {
-        if (
-          err instanceof LlmError &&
-          fallbackOnSet.has(err.kind) &&
-          i < models.length - 1
-        ) {
+        if (err instanceof LlmError && fallbackOnSet.has(err.kind) && i < models.length - 1) {
           emitFallbackLog(models[i] ?? primaryModel, models[i + 1] ?? primaryModel, err.kind);
           continue;
         }
@@ -261,11 +251,7 @@ function createFailoverClient(
         }
         return response;
       } catch (err) {
-        if (
-          err instanceof LlmError &&
-          fallbackOnSet.has(err.kind) &&
-          i < models.length - 1
-        ) {
+        if (err instanceof LlmError && fallbackOnSet.has(err.kind) && i < models.length - 1) {
           emitFallbackLog(models[i] ?? primaryModel, models[i + 1] ?? primaryModel, err.kind);
           continue;
         }
