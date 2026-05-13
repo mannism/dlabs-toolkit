@@ -53,6 +53,7 @@ import {
 } from '@google/genai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { parseJsonOrThrow } from '../extract-json.js';
+import { synthesizeId } from '../id-helpers.js';
 import {
   isZodSchema,
   type JsonNode,
@@ -231,6 +232,9 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           return {
             content: response.text ?? '',
             model,
+            // Gemini does not issue native response IDs — synthesize a time-sortable v7-style UUID.
+            id: synthesizeId(),
+            idSource: 'synthesized' as const,
             usage: normalizeUsage(response.usageMetadata),
             latencyMs: Date.now() - start,
           };
@@ -391,8 +395,11 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
 
     return {
       data,
-      // Gemini does not return a request ID; model comes from response.modelVersion if available
+      // Gemini does not return a request ID; model comes from response.modelVersion if available.
+      // Synthesize a time-sortable v7-style UUID for trace correlation.
       model: rawResponse.modelVersion ?? model,
+      id: synthesizeId(),
+      idSource: 'synthesized' as const,
       usage: normalizeUsage(rawResponse.usageMetadata),
       latencyMs: Date.now() - start,
     };
@@ -471,6 +478,8 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     return {
       data,
       model,
+      id: synthesizeId(),
+      idSource: 'synthesized' as const,
       usage: normalizeUsage(rawResponse.usageMetadata),
       latencyMs: Date.now() - start,
     };
@@ -608,6 +617,8 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
       content: textParts.join(''),
       toolCalls,
       model: rawResponse.modelVersion ?? model,
+      id: synthesizeId(),
+      idSource: 'synthesized' as const,
       usage: normalizeUsage(rawResponse.usageMetadata),
       latencyMs: Date.now() - start,
       stopReason,
@@ -647,20 +658,4 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     streamStructured,
     withTools,
   };
-}
-
-/**
- * Synthesize a UUID v7-style ID for providers that do not issue tool call IDs.
- * Format: 8-4-4-4-12 hex, first 12 hex chars are time-derived (ms precision).
- * Not cryptographically secure — for tracing/correlation only.
- */
-function synthesizeId(): string {
-  const now = Date.now();
-  const timeHex = now.toString(16).padStart(12, '0');
-  const rand = () =>
-    Math.floor(Math.random() * 0x10000)
-      .toString(16)
-      .padStart(4, '0');
-  // UUID v7-style: time-high-and-version | time-mid | time-low | clock-seq | node
-  return `${timeHex.slice(0, 8)}-${timeHex.slice(8, 12)}-7${rand().slice(1)}-${rand()}-${rand()}${rand()}${rand()}`;
 }

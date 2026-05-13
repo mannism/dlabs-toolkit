@@ -1357,13 +1357,19 @@ describe('Anthropic provider — withTools()', () => {
     await client.withTools([{ role: 'user', content: 'Hi' }], [weatherTool]);
 
     const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
-    // Cast via unknown to avoid TS overlap error: ToolUnion has no index signature
-    const tool = callArgs.tools?.[0] as unknown as Record<string, unknown>;
-    expect(tool['name']).toBe('get_weather');
-    expect(tool['description']).toBe('Get the current weather for a city.');
-    expect(tool['input_schema']).toBeDefined();
+    // Cast to concrete shape — avoids TS4111 (noPropertyAccessFromIndexSignature on Record types)
+    type AnthropicToolShape = {
+      name: string;
+      description: string;
+      input_schema: unknown;
+      function: unknown;
+    };
+    const tool = callArgs.tools?.[0] as unknown as AnthropicToolShape;
+    expect(tool.name).toBe('get_weather');
+    expect(tool.description).toBe('Get the current weather for a city.');
+    expect(tool.input_schema).toBeDefined();
     // Must NOT have a nested 'function' key (that is the OpenAI/DeepSeek shape)
-    expect(tool['function']).toBeUndefined();
+    expect(tool.function).toBeUndefined();
   });
 
   it("maps toolChoice:'any' to { type:'any' } on Anthropic", async () => {
@@ -1383,9 +1389,10 @@ describe('Anthropic provider — withTools()', () => {
     });
 
     const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
-    // Cast via unknown — ToolChoice union types have no index signature
-    const toolChoice = callArgs.tool_choice as unknown as Record<string, unknown>;
-    expect(toolChoice['disable_parallel_tool_use']).toBe(true);
+    // Cast to concrete shape — avoids TS4111 (noPropertyAccessFromIndexSignature on Record types)
+    type ToolChoiceShape = { type: string; disable_parallel_tool_use?: boolean };
+    const toolChoice = callArgs.tool_choice as unknown as ToolChoiceShape;
+    expect(toolChoice.disable_parallel_tool_use).toBe(true);
   });
 
   it("maps named toolChoice to { type:'tool', name } on Anthropic", async () => {
@@ -1613,5 +1620,57 @@ describe('Anthropic provider — streamStructured()', () => {
     if (thrown instanceof LlmError) {
       expect(thrown.kind).toBe('structured_parse_failed');
     }
+  });
+});
+
+// ─── Response IDs (Wave 3a §3.4) ─────────────────────────────────────────────
+
+describe('Anthropic provider — response IDs (v1.4.0)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn().mockResolvedValue(mockMessageResponse()),
+          stream: vi.fn(),
+        },
+      };
+    });
+  });
+
+  it('complete(): id is provider-issued (msg_123) and idSource is "provider"', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }]);
+    expect(result.id).toBe('msg_123');
+    expect(result.idSource).toBe('provider');
+  });
+
+  it('structured(): id is provider-issued and idSource is "provider"', async () => {
+    const schema = z.object({ name: z.string() });
+    // Strict-mode structured() uses tool-use — mock a tool_use response.
+    const toolUseResponse = mockMessageResponse({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'tool_id_test',
+          name: 'extract',
+          input: { name: 'Sable' },
+        } as unknown as Anthropic.TextBlock,
+      ],
+      stop_reason: 'tool_use',
+    });
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn().mockResolvedValue(toolUseResponse),
+          stream: vi.fn(),
+        },
+      };
+    });
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'name?' }], schema);
+    expect(typeof result.id).toBe('string');
+    expect(result.id.length).toBeGreaterThan(0);
+    expect(result.idSource).toBe('provider');
   });
 });
