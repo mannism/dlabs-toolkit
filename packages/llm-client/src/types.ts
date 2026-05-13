@@ -33,6 +33,16 @@
  *   system prompt for 5 minutes; reads cost 0.10× and writes cost 1.25× normal input price.
  *   Ignored on all non-Anthropic providers.
  *
+ * v1.2.0 additions (configurable retry strategy):
+ *   LlmClientConfig.retry — optional RetryConfig (maxAttempts, strategy, baseDelayMs, maxDelayMs,
+ *                           respectRetryAfter, retryOn). Default behavior unchanged when omitted.
+ *   LlmError.headers      — optional Record<string, string> carrying provider response headers.
+ *                           Used by respectRetryAfter to read the 429 Retry-After header value.
+ *   LlmClientConfig.model accepts string | string[] for provider failover (v1.2.0+).
+ *   LlmClientConfig.fallbackOn — optional LlmErrorKind[] controlling when failover triggers.
+ *   LlmResponse.requestedModel — the originally-requested primary model when failover occurred.
+ *   LlmToolResponse.requestedModel — same.
+ *
  * v1.1.0 additions (cost computation):
  *   LlmClientConfig.pricing — optional pricing config. When set, each response carries cost?.
  *   LlmResponse.cost        — optional USD cost breakdown (LlmCost from @diabolicallabs/llm-pricing).
@@ -42,6 +52,52 @@
  */
 
 import type { LlmCost, PricingTable } from '@diabolicallabs/llm-pricing';
+
+// ─── RetryConfig ─────────────────────────────────────────────────────────────
+
+/**
+ * Retry strategy selector.
+ *
+ * exponential  — full jitter: delay = random(0, base * 2^attempt). Default.
+ * linear       — delay grows linearly: delay = base * (attempt + 1). No jitter.
+ * fixed        — constant delay: delay = base. Ignores attempt number.
+ * decorrelated — AWS decorrelated jitter: sleep = min(cap, random_between(base, prev * 3)).
+ *                Breaks correlation between concurrent callers retrying after the same error.
+ */
+export type RetryStrategy = 'exponential' | 'linear' | 'fixed' | 'decorrelated';
+
+/**
+ * Full retry configuration. Accepted by LlmClientConfig.retry (v1.2.0+).
+ * When omitted from LlmClientConfig, existing default behavior is preserved
+ * (exponential + full jitter, 3 retries, 1000ms base, 30s cap).
+ */
+export interface RetryConfig {
+  /**
+   * Maximum number of attempts total (initial call + retries).
+   * e.g. maxAttempts: 4 means 1 initial + 3 retries.
+   * Minimum: 1 (no retries). Default: 4 (3 retries).
+   */
+  maxAttempts?: number;
+  /** Retry backoff strategy. Default: 'exponential'. */
+  strategy?: RetryStrategy;
+  /** Base delay in ms. Default: 1000. */
+  baseDelayMs?: number;
+  /** Maximum delay cap in ms. Applied to all strategies. Default: 30000. */
+  maxDelayMs?: number;
+  /**
+   * When true, a 429 response with a Retry-After header uses the header value
+   * (parsed as integer seconds) as the sleep duration instead of the computed delay.
+   * HTTP-date format is not currently parsed (TODO: add RFC 7231 date parsing if needed).
+   * Default: false.
+   */
+  respectRetryAfter?: boolean;
+  /**
+   * Error kinds that trigger a retry. Errors with kinds not in this list are thrown
+   * immediately regardless of the error's retryable flag.
+   * Default: ['rate_limit', 'server_error', 'timeout', 'network'].
+   */
+  retryOn?: LlmErrorKind[];
+}
 
 // The canonical message format shared across all providers
 export interface LlmMessage {
@@ -53,7 +109,14 @@ export interface LlmMessage {
 export interface LlmClientConfig {
   // Full 5-provider union — gemini, deepseek, perplexity are type-only stubs in Week 2
   provider: 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'perplexity';
-  model: string; // e.g. 'claude-sonnet-4-6', 'gpt-4o', 'gemini-2.5-flash'
+  /**
+   * Model identifier. Accepts a string or an array of strings for provider failover (v1.2.0+).
+   * When an array is passed, the first element is the primary model. On errors matching
+   * fallbackOn, the retry layer falls through to the next model in the array.
+   * Backwards-compatible: a single string is coerced to a one-element array internally.
+   * e.g. ['gpt-5.5', 'gpt-4.1'] — attempts gpt-5.5 first, falls back to gpt-4.1 on not_found.
+   */
+  model: string | string[];
   apiKey: string;
   maxRetries?: number; // default: 3
   baseDelayMs?: number; // default: 1000 — exponential backoff base
@@ -66,6 +129,33 @@ export interface LlmClientConfig {
    * Default: 30000.
    */
   streamStallTimeoutMs?: number;
+  /**
+   * Configurable retry strategy (v1.2.0+).
+   * When omitted, defaults to exponential + full jitter, 3 retries, 1000ms base, 30s cap.
+   * When set, overrides maxRetries, baseDelayMs, and retry behavior per the RetryConfig spec.
+   *
+   * @example
+   * retry: {
+   *   maxAttempts: 5,
+   *   strategy: 'decorrelated',
+   *   baseDelayMs: 500,
+   *   maxDelayMs: 30_000,
+   *   respectRetryAfter: true,
+   *   retryOn: ['rate_limit', 'server_error', 'timeout', 'network'],
+   * }
+   */
+  retry?: RetryConfig;
+  /**
+   * Error kinds that trigger provider failover to the next model in the model array (v1.2.0+).
+   * Only meaningful when model is a string array. When retries on the primary model are
+   * exhausted and the last error's kind is in this list, the call is retried from scratch
+   * with the next model in the array.
+   * Default: ['not_found']
+   *
+   * @example
+   * fallbackOn: ['not_found', 'auth']
+   */
+  fallbackOn?: LlmErrorKind[];
   /**
    * Optional pricing configuration (v1.1.0+).
    * Requires @diabolicallabs/llm-pricing to be installed as an optional peer dependency.
@@ -107,6 +197,12 @@ export interface LlmUsage {
 export interface LlmResponse {
   content: string;
   model: string; // model ID actually used (may differ from requested)
+  /**
+   * The originally-requested primary model (v1.2.0+).
+   * Populated only when provider failover occurred (model[] config with >1 element)
+   * and the call was served by a fallback model. Undefined when no failover happened.
+   */
+  requestedModel?: string;
   usage: LlmUsage;
   latencyMs: number;
   /**
@@ -142,7 +238,12 @@ export interface LlmResponse {
  *                         Unknown fields are passed through unchanged.
  */
 export interface LlmCallOptions
-  extends Partial<Pick<LlmClientConfig, 'model' | 'maxTokens' | 'temperature' | 'timeoutMs'>> {
+  extends Partial<Pick<LlmClientConfig, 'maxTokens' | 'temperature' | 'timeoutMs'>> {
+  /**
+   * Per-call model override. Must be a single string (unlike LlmClientConfig.model which
+   * accepts an array for failover). Overrides the config-level model for this call only.
+   */
+  model?: string;
   /** Caller-supplied AbortSignal. Cancels the in-flight call. Never retried. */
   signal?: AbortSignal;
   /**
@@ -230,6 +331,12 @@ export class LlmError extends Error {
    * See the LlmErrorKind table above for the full taxonomy and default retryability.
    */
   readonly kind: LlmErrorKind;
+  /**
+   * Response headers from the provider, when available (v1.2.0+).
+   * Used by respectRetryAfter to read the Retry-After header value on 429 responses.
+   * Undefined when the error did not originate from an HTTP response.
+   */
+  readonly headers: Record<string, string> | undefined;
   // `cause` is declared on Error in lib.es2022.error.d.ts as `cause?: unknown`
   // We override it here to make it always present (not optional) after construction.
   override readonly cause: unknown;
@@ -241,6 +348,8 @@ export class LlmError extends Error {
     retryable: boolean;
     /** Default: 'unknown'. All provider normalizers must supply an explicit kind. */
     kind?: LlmErrorKind;
+    /** Response headers — used for Retry-After parsing on rate_limit errors. */
+    headers?: Record<string, string>;
     cause?: unknown;
   }) {
     super(opts.message, { cause: opts.cause });
@@ -248,6 +357,7 @@ export class LlmError extends Error {
     this.statusCode = opts.statusCode;
     this.retryable = opts.retryable;
     this.kind = opts.kind ?? 'unknown';
+    this.headers = opts.headers;
     this.cause = opts.cause;
   }
 }
@@ -326,6 +436,12 @@ export interface LlmToolResponse {
   content: string;
   toolCalls: LlmToolCall[];
   model: string;
+  /**
+   * The originally-requested primary model (v1.2.0+).
+   * Populated only when provider failover occurred and the call was served by a fallback.
+   * Undefined when no failover happened.
+   */
+  requestedModel?: string;
   usage: LlmUsage;
   latencyMs: number;
   id?: string;

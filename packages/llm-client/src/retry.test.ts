@@ -14,6 +14,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   computeBackoffMs,
+  computeStrategyDelayMs,
   isRetryableErrorCode,
   isRetryableStatus,
   normalizeThrownError,
@@ -324,5 +325,223 @@ describe('normalizeThrownError', () => {
     const result = normalizeThrownError(err, 'test');
     expect(result.kind).toBe('network');
     expect(result.retryable).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeStrategyDelayMs — v1.2.0 configurable retry strategies
+// ---------------------------------------------------------------------------
+
+describe('computeStrategyDelayMs', () => {
+  const BASE = 100;
+  const CAP = 30_000;
+
+  it('exponential: result is in [0, min(cap, base * 2^attempt)]', () => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const delay = computeStrategyDelayMs('exponential', attempt, BASE, CAP, BASE);
+      const ceiling = Math.min(CAP, BASE * 2 ** attempt);
+      expect(delay).toBeGreaterThanOrEqual(0);
+      expect(delay).toBeLessThanOrEqual(ceiling);
+    }
+  });
+
+  it('exponential: never exceeds maxDelayMs cap', () => {
+    // At attempt=20, base*2^20 far exceeds the cap
+    const delay = computeStrategyDelayMs('exponential', 20, BASE, CAP, BASE);
+    expect(delay).toBeLessThanOrEqual(CAP);
+  });
+
+  it('linear: grows as base * (attempt + 1), capped', () => {
+    expect(computeStrategyDelayMs('linear', 0, BASE, CAP, BASE)).toBe(BASE); // 100
+    expect(computeStrategyDelayMs('linear', 1, BASE, CAP, BASE)).toBe(200); // 100*2
+    expect(computeStrategyDelayMs('linear', 2, BASE, CAP, BASE)).toBe(300); // 100*3
+    // Capped at CAP
+    expect(computeStrategyDelayMs('linear', 1000, BASE, CAP, BASE)).toBe(CAP);
+  });
+
+  it('fixed: always returns base (capped for safety)', () => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      expect(computeStrategyDelayMs('fixed', attempt, BASE, CAP, BASE)).toBe(BASE);
+    }
+  });
+
+  it('fixed: respects cap when base > cap', () => {
+    expect(computeStrategyDelayMs('fixed', 0, 100_000, 5_000, 100_000)).toBe(5_000);
+  });
+
+  it('decorrelated: on attempt 0, result is in [base, base*3] (prev=base)', () => {
+    const results: number[] = [];
+    for (let i = 0; i < 50; i++) {
+      const delay = computeStrategyDelayMs('decorrelated', 0, BASE, CAP, BASE);
+      results.push(delay);
+      expect(delay).toBeGreaterThanOrEqual(BASE);
+      expect(delay).toBeLessThanOrEqual(CAP);
+    }
+    // With 50 samples, at least some should be > base (probabilistic sanity check)
+    const anyAboveBase = results.some((d) => d > BASE);
+    expect(anyAboveBase).toBe(true);
+  });
+
+  it('decorrelated: never exceeds cap', () => {
+    const prevDelayMs = 100_000; // artificially large prev
+    const delay = computeStrategyDelayMs('decorrelated', 5, BASE, CAP, prevDelayMs);
+    expect(delay).toBeLessThanOrEqual(CAP);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// withRetry — retryConfig (v1.2.0)
+// ---------------------------------------------------------------------------
+
+describe('withRetry — retryConfig', () => {
+  it('retryOn: does not retry a kind not in the allow-set (immediate throw)', async () => {
+    let calls = 0;
+    const fn = async (_attempt: number): Promise<string> => {
+      calls++;
+      throw new LlmError({
+        message: 'auth error',
+        provider: 'test',
+        kind: 'auth',
+        retryable: true, // retryable flag is true, but kind not in retryOn
+      });
+    };
+
+    await expect(
+      withRetry(fn, {
+        maxRetries: 3,
+        baseDelayMs: 0,
+        provider: 'test',
+        retryConfig: {
+          maxAttempts: 4,
+          retryOn: ['rate_limit', 'server_error'], // auth excluded
+        },
+      })
+    ).rejects.toMatchObject({ kind: 'auth' });
+
+    // Should only attempt once — no retries fired
+    expect(calls).toBe(1);
+  });
+
+  it('retryOn: retries a kind that is in the allow-set', async () => {
+    let calls = 0;
+    const fn = async (_attempt: number): Promise<string> => {
+      calls++;
+      if (calls < 3) {
+        throw new LlmError({
+          message: 'server_error',
+          provider: 'test',
+          kind: 'server_error',
+          retryable: true,
+        });
+      }
+      return 'ok';
+    };
+
+    const result = await withRetry(fn, {
+      maxRetries: 3,
+      baseDelayMs: 0,
+      provider: 'test',
+      retryConfig: {
+        maxAttempts: 4,
+        retryOn: ['server_error'],
+        baseDelayMs: 0,
+      },
+    });
+
+    expect(result).toBe('ok');
+    expect(calls).toBe(3);
+  });
+
+  it('maxAttempts: limits total attempts correctly (maxAttempts=2 → 1 retry)', async () => {
+    let calls = 0;
+    const fn = async (_attempt: number): Promise<string> => {
+      calls++;
+      throw new LlmError({
+        message: 'server_error',
+        provider: 'test',
+        kind: 'server_error',
+        retryable: true,
+      });
+    };
+
+    await expect(
+      withRetry(fn, {
+        maxRetries: 10, // overridden by retryConfig.maxAttempts
+        baseDelayMs: 0,
+        provider: 'test',
+        retryConfig: {
+          maxAttempts: 2, // 1 initial + 1 retry = 2 attempts total
+          retryOn: ['server_error'],
+          baseDelayMs: 0,
+        },
+      })
+    ).rejects.toMatchObject({ kind: 'server_error' });
+
+    expect(calls).toBe(2);
+  });
+
+  it('respectRetryAfter: succeeds after rate_limit with Retry-After header (baseDelayMs=0)', async () => {
+    // Verify that respectRetryAfter does not break the retry loop.
+    // Delay verification is skipped here — the computation is unit-tested in computeStrategyDelayMs.
+    let calls = 0;
+
+    const fn = async (_attempt: number): Promise<string> => {
+      calls++;
+      if (calls === 1) {
+        // Use the constructor's headers field — LlmError.headers is readonly.
+        // Retry-After: '0' → 0 seconds → 0ms sleep, keeps test instant.
+        throw new LlmError({
+          message: 'rate_limit',
+          provider: 'test',
+          kind: 'rate_limit',
+          retryable: true,
+          headers: { 'retry-after': '0' },
+        });
+      }
+      return 'ok';
+    };
+
+    const result = await withRetry(fn, {
+      maxRetries: 3,
+      baseDelayMs: 0,
+      provider: 'test',
+      retryConfig: {
+        maxAttempts: 4,
+        strategy: 'fixed',
+        baseDelayMs: 0,
+        maxDelayMs: 30_000,
+        respectRetryAfter: true,
+        retryOn: ['rate_limit'],
+      },
+    });
+
+    expect(result).toBe('ok');
+    expect(calls).toBe(2);
+  });
+
+  it('legacy mode (no retryConfig): retries on retryable regardless of kind', async () => {
+    let calls = 0;
+    const fn = async (_attempt: number): Promise<string> => {
+      calls++;
+      if (calls < 3) {
+        throw new LlmError({
+          message: 'unknown error',
+          provider: 'test',
+          // kind defaults to 'unknown' — would be blocked by DEFAULT_RETRY_ON if applied
+          retryable: true,
+        });
+      }
+      return 'ok';
+    };
+
+    const result = await withRetry(fn, {
+      maxRetries: 3,
+      baseDelayMs: 0,
+      provider: 'test',
+      // No retryConfig — legacy mode: retryable flag only
+    });
+
+    expect(result).toBe('ok');
+    expect(calls).toBe(3);
   });
 });

@@ -187,6 +187,13 @@ export function normalizeAnthropicError(err: unknown): LlmError {
 
 /** Create the Anthropic provider implementation. */
 export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
+  // Providers always receive model as a string (client.ts resolves arrays before dispatch).
+  // This narrowing handles the type-level string | string[] without changing runtime behavior.
+  const resolvedModel = Array.isArray(config.model) ? config.model[0]! : config.model;
+  const resolvedConfig = { ...config, model: resolvedModel } as LlmClientConfig & {
+    model: string;
+  };
+
   // SDK client uses config-level timeout as the backstop. Per-call overrides are
   // enforced by createAttemptController which aborts the SDK call via signal.
   const client = new Anthropic({
@@ -199,10 +206,12 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     maxRetries: config.maxRetries ?? 3,
     baseDelayMs: config.baseDelayMs ?? 1_000,
     provider: PROVIDER,
+    // Thread config.retry through to withRetry for strategy selection and retryOn filtering.
+    ...(config.retry !== undefined && { retryConfig: config.retry }),
   };
 
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages);
     // Per-call timeout overrides config default; falls back to config then hard default.
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
@@ -266,7 +275,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     messages: LlmMessage[],
     options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const { system, messages: anthropicMessages } = buildAnthropicMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
@@ -388,7 +397,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
                 };
 
           const params: Anthropic.MessageCreateParamsNonStreaming = {
-            model: options?.model ?? config.model,
+            model: options?.model ?? resolvedConfig.model,
             messages: anthropicMessages,
             max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
             tools: [extractTool],
@@ -565,7 +574,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
         const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
         try {
           const params: Anthropic.MessageCreateParamsNonStreaming = {
-            model: options?.model ?? config.model,
+            model: options?.model ?? resolvedConfig.model,
             messages: anthropicMessages,
             max_tokens: options?.maxTokens ?? config.maxTokens ?? 1024,
             tools: anthropicTools,
@@ -658,7 +667,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
   }
 
   return {
-    config,
+    config: resolvedConfig,
     complete,
     stream,
     structured,

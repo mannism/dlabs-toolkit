@@ -217,6 +217,12 @@ export function normalizePerplexityError(err: unknown): LlmError {
 
 /** Create the Perplexity provider implementation. */
 export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
+  // Providers always receive model as a string (client.ts resolves arrays before dispatch).
+  const resolvedModel = Array.isArray(config.model) ? config.model[0]! : config.model;
+  const resolvedConfig = { ...config, model: resolvedModel } as LlmClientConfig & {
+    model: string;
+  };
+
   // OpenAI SDK pointed at Perplexity's OpenAI-compatible endpoint
   const client = new OpenAI({
     apiKey: config.apiKey,
@@ -229,10 +235,11 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     maxRetries: config.maxRetries ?? 3,
     baseDelayMs: config.baseDelayMs ?? 1_000,
     provider: PROVIDER,
+    ...(config.retry !== undefined && { retryConfig: config.retry }),
   };
 
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const chatMessages = buildMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
@@ -293,7 +300,7 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     messages: LlmMessage[],
     options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const chatMessages = buildMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
@@ -370,7 +377,7 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     };
 
     const augmentedMessages = [jsonSystemInstruction, ...messages];
-    const model = options?.model ?? config.model;
+    const model = options?.model ?? resolvedConfig.model;
     const chatMessages = buildMessages(augmentedMessages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
@@ -470,7 +477,7 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
   }
 
   return {
-    config,
+    config: resolvedConfig,
     complete,
     stream,
     structured,
