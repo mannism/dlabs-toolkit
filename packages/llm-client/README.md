@@ -1,12 +1,15 @@
 # @diabolicallabs/llm-client
 
-Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexity. Single interface for completion, streaming, and structured output. All provider errors are normalized into a consistent `LlmError` shape. © Diabolical Labs
-
-**Pre-1.0. APIs may change between minor versions.**
+Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexity. Single interface for completion, streaming, structured output, and native tool calling. All provider errors are normalized into a consistent `LlmError` shape. © Diabolical Labs
 
 ## Status
 
-**Published — v0.4.2.** All five providers implemented. v0.4.0 adds native strict structured outputs (OpenAI json_schema, Anthropic tool-use, Gemini responseSchema) triggered automatically when a Zod 4 schema is passed. v0.4.3 adds opt-in Anthropic prompt caching via `providerOptions.promptCache`.
+**v1.0.0 (pending publish).** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
+
+Highlights:
+- **v1.0.0** — Native tool calling (`withTools()`), expanded `LlmErrorKind` taxonomy, OpenAI Responses API migration.
+- **v0.4.3** — Opt-in Anthropic prompt caching via `providerOptions.promptCache`.
+- **v0.4.0** — Native strict structured outputs (Zod 4 schema → OpenAI json_schema, Anthropic tool-use, Gemini responseSchema).
 
 ## Install
 
@@ -76,9 +79,9 @@ The toolkit checks for Zod 4's internal `_zod` marker at runtime. If the schema 
 
 | Provider | Native mode | What's enforced | Known limits |
 |---|---|---|---|
-| OpenAI (`gpt-4o`, `gpt-4o-mini`) | `response_format: { type: 'json_schema', strict: true }` | Schema structure guaranteed; model cannot produce off-schema output | No `format`, `pattern`, or recursive schemas (`z.lazy()`). Throws at conversion time with clear message. |
+| OpenAI (`gpt-4o`, `gpt-4o-mini`) | `text.format: { type: 'json_schema', strict: true }` (Responses API, v1.0.0) | Schema structure guaranteed; model cannot produce off-schema output | No `format`, `pattern`, or recursive schemas (`z.lazy()`). Throws at conversion time with clear message. |
 | Anthropic | Tool-use with forced `tool_choice: { type: 'tool', name: 'extract' }` | Model must call the tool; `input` is pre-parsed JSON | Defense-in-depth `schema.parse()` still runs |
-| Gemini | `responseSchema` (OpenAPI 3.0) + `responseMimeType: 'application/json'` | Schema communicated to the model; belt-and-braces fence-strip retained | Tested via mocks only — file an issue if Gemini's API rejects the schema shape |
+| Gemini | `responseSchema` (OpenAPI 3.0) + `responseMimeType: 'application/json'` | Schema communicated to the model; belt-and-braces fence-strip retained | OBJECT schemas with empty `properties: {}` auto-receive a `_placeholder` sentinel (v1.0.0); stripped before Zod parse. |
 | DeepSeek | None (prompt-only, API limitation) | System-prompt nudge + schema.parse() | Same as v0.3.0 |
 | Perplexity | None (prompt-only, API limitation) | System-prompt nudge + `<think>` strip + schema.parse() | Same as v0.3.0; `citations` propagated to structured response |
 
@@ -283,6 +286,7 @@ Reads the API key from the environment automatically:
 | `complete(messages, options?)` | Non-streaming completion. Returns `LlmResponse` (includes `citations` for Perplexity). |
 | `stream(messages, options?)` | Streaming — async generator of `LlmStreamChunk`. Final chunk includes `usage`. Citations unavailable. |
 | `structured(messages, schema, options?)` | Structured output validated against a Zod schema. Returns `LlmStructuredResponse<T>`. |
+| `withTools(messages, tools, options?)` | Native tool calling. Returns `LlmToolResponse`. See [Tool calling](#tool-calling-v100). |
 
 All methods accept `LlmCallOptions` as the options parameter:
 
@@ -297,6 +301,77 @@ interface LlmCallOptions {
   providerOptions?: Record<string, unknown>;  // Perplexity search filters, etc.
 }
 ```
+
+## Tool calling (v1.0.0)
+
+`withTools()` enables native function calling across all supported providers. The toolkit handles provider-specific tool shapes, stop-reason mapping, and argument validation internally.
+
+```typescript
+import { z } from 'zod';
+import { createClientFromEnv } from '@diabolicallabs/llm-client';
+
+const client = createClientFromEnv('anthropic', 'claude-sonnet-4-6');
+
+const weatherTool = {
+  name: 'get_weather',
+  description: 'Get the current weather for a city.',
+  inputSchema: z.object({ city: z.string() }),
+};
+
+const result = await client.withTools(
+  [{ role: 'user', content: 'What is the weather in London?' }],
+  [weatherTool]
+);
+
+// result.stopReason — 'tool_use' | 'end_turn' | 'max_tokens' | 'content_filter' | ...
+// result.toolCalls — array of LlmToolCall (may be empty if model responded with text)
+// result.content   — any text the model produced alongside tool calls
+// result.model     — model ID used
+// result.usage     — normalized token usage
+
+if (result.stopReason === 'tool_use') {
+  for (const call of result.toolCalls) {
+    console.log(call.toolName, call.arguments); // arguments is validated by inputSchema
+    console.log(call.id);         // use as tool_call_id in the follow-up message
+    console.log(call.rawArguments); // original JSON string from the model
+  }
+}
+```
+
+### Tool options
+
+```typescript
+interface LlmCallWithToolsOptions extends LlmCallOptions {
+  toolChoice?: 'auto' | 'any' | 'none' | { name: string };
+  parallelToolCalls?: boolean; // default: true (parallel-enabled)
+}
+```
+
+`toolChoice`:
+- `'auto'` (default) — model decides whether and which tools to call.
+- `'any'` — model must call at least one tool. Maps to `'required'` on OpenAI Responses API; `{ type: 'any' }` on Anthropic.
+- `'none'` — model must not call any tool.
+- `{ name: 'tool_name' }` — model must call the named tool.
+
+`parallelToolCalls: false` — disable parallel tool invocations. Maps to `parallel_tool_calls: false` on OpenAI and DeepSeek; `disable_parallel_tool_use: true` on Anthropic `tool_choice`; ignored on Gemini (no equivalent).
+
+### Provider tool support matrix
+
+| Provider | Tool calling | `parallelToolCalls` | Named `toolChoice` | Stop reasons |
+|---|---|---|---|---|
+| OpenAI | Native (Responses API flat shape) | Supported | Supported | `tool_use`, `end_turn`, `max_tokens`, `refusal` |
+| Anthropic | Native (`{ name, description, input_schema }`) | Supported (inverse: `disable_parallel_tool_use`) | Supported | `tool_use`, `end_turn`, `max_tokens`, `stop_sequence`, `pause_turn`, `refusal` |
+| Gemini | Native (`parametersJsonSchema`) | Not applicable (no Gemini equivalent) | Falls back to AUTO | `tool_use`, `end_turn`, `max_tokens`, `content_filter`, `stop_sequence` |
+| DeepSeek | Native (Chat Completions nested shape) | Supported | Supported | `tool_use`, `end_turn`, `max_tokens`, `content_filter` |
+| Perplexity | Not supported | N/A | N/A | Throws `kind:'bad_request'` immediately |
+
+### Argument validation
+
+Each `LlmTool.inputSchema` must expose a `.parse(data: unknown)` method. If the model returns arguments that fail validation, `withTools()` throws `LlmError` with `kind: 'tool_arguments_invalid'`, `retryable: false`. A Zod 4 schema satisfies this interface automatically.
+
+### Gemini ID synthesis
+
+Gemini does not issue tool call IDs. The toolkit synthesizes UUID v7-style IDs (time-based + random) for every `LlmToolCall.id` on the Gemini path. These IDs are unique within a request but not cryptographically random.
 
 ## Cancellation, timeouts, stall detection
 
@@ -363,18 +438,36 @@ try {
 - The stall timer resets after each chunk arrives, so slow-but-not-stalled streams complete normally.
 - Stall errors are **not retried** — partial output is unsafe to re-issue. The error surfaces to the caller.
 
-### `LlmError.kind` discriminator
+### `LlmError.kind` discriminator (v1.0.0)
 
 ```typescript
-type LlmErrorKind = 'cancelled' | 'timeout' | 'stream_stall' | 'http' | 'network' | 'unknown';
+// Full taxonomy — all providers emit one of these kinds
+type LlmErrorKind =
+  | 'rate_limit'           // 429
+  | 'server_error'         // 5xx
+  | 'auth'                 // 401, 403
+  | 'not_found'            // 404
+  | 'bad_request'          // 400
+  | 'content_filter'       // model refused, safety block
+  | 'context_length'       // prompt too long
+  | 'tool_arguments_invalid' // withTools() schema validation failure
+  | 'structured_parse_failed' // structured() JSON parse or Zod validation failure
+  | 'network'              // ECONNRESET, ETIMEDOUT, etc.
+  | 'timeout'              // per-call timeout
+  | 'stream_stall'         // stream silence exceeded streamStallTimeoutMs
+  | 'cancelled'            // AbortSignal fired
+  | 'http'                 // residual unclassified 4xx
+  | 'unknown';             // catch-all
 
 class LlmError extends Error {
   readonly provider: string;
   readonly statusCode?: number;
   readonly retryable: boolean;
-  readonly kind: LlmErrorKind | undefined; // undefined on errors from older paths
+  readonly kind: LlmErrorKind; // always defined in v1.0.0
 }
 ```
+
+See [MIGRATION.md](./MIGRATION.md) for the full migration table from `err.kind === 'http'` checks to the new specific kinds.
 
 ### Gemini cancellation caveat
 
