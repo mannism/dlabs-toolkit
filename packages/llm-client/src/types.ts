@@ -32,7 +32,16 @@
  *   cache_control: { type: 'ephemeral' } on the system message block. Anthropic caches the
  *   system prompt for 5 minutes; reads cost 0.10× and writes cost 1.25× normal input price.
  *   Ignored on all non-Anthropic providers.
+ *
+ * v1.1.0 additions (cost computation):
+ *   LlmClientConfig.pricing — optional pricing config. When set, each response carries cost?.
+ *   LlmResponse.cost        — optional USD cost breakdown (LlmCost from @diabolicallabs/llm-pricing).
+ *   LlmStructuredResponse.cost — same.
+ *   LlmToolResponse.cost    — same.
+ *   Requires @diabolicallabs/llm-pricing to be installed (optional peer dep).
  */
+
+import type { LlmCost, PricingTable } from '@diabolicallabs/llm-pricing';
 
 // The canonical message format shared across all providers
 export interface LlmMessage {
@@ -57,6 +66,32 @@ export interface LlmClientConfig {
    * Default: 30000.
    */
   streamStallTimeoutMs?: number;
+  /**
+   * Optional pricing configuration (v1.1.0+).
+   * Requires @diabolicallabs/llm-pricing to be installed as an optional peer dependency.
+   *
+   * When set, every response from complete(), structured(), and withTools() will carry
+   * a cost?: LlmCost field with the per-component USD cost breakdown.
+   *
+   * @example
+   * const client = createClient({
+   *   provider: 'anthropic',
+   *   model: 'claude-sonnet-4-6',
+   *   apiKey: process.env.ANTHROPIC_API_KEY!,
+   *   pricing: { computeOnEveryCall: true },
+   * });
+   * const response = await client.complete(messages);
+   * console.log(response.cost?.total); // e.g. 0.0045 (USD)
+   */
+  pricing?: {
+    /** Custom pricing table. Merged over the default table at the provider level. */
+    table?: PricingTable;
+    /**
+     * When true, cost is computed on every call and attached to the response.
+     * Default: true when pricing config is present.
+     */
+    computeOnEveryCall?: boolean;
+  };
 }
 
 // Normalized token usage — same shape regardless of provider
@@ -84,6 +119,13 @@ export interface LlmResponse {
     url: string;
     title?: string;
   }>;
+  /**
+   * USD cost breakdown for this call (v1.1.0+).
+   * Populated when LlmClientConfig.pricing is set.
+   * Requires @diabolicallabs/llm-pricing peer dep.
+   * isPartial: true when billing components exist that cannot be computed from usage alone.
+   */
+  cost?: LlmCost;
 }
 
 /**
@@ -228,6 +270,11 @@ export type LlmStructuredResponse<T> = {
   usage: LlmUsage;
   latencyMs: number;
   citations?: Array<{ url: string; title?: string }>;
+  /**
+   * USD cost breakdown for this call (v1.1.0+).
+   * Populated when LlmClientConfig.pricing is set.
+   */
+  cost?: LlmCost;
 };
 
 /**
@@ -290,6 +337,11 @@ export interface LlmToolResponse {
     | 'content_filter'
     | 'pause_turn'
     | 'refusal';
+  /**
+   * USD cost breakdown for this call (v1.1.0+).
+   * Populated when LlmClientConfig.pricing is set.
+   */
+  cost?: LlmCost;
 }
 
 /**

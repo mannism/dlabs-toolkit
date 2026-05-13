@@ -37,6 +37,7 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@diabolicallabs/llm-pricing": "workspace:*",
     "@types/node": "^25.6.2",
     "@vitest/coverage-v8": "^4.1.5",
     "tsup": "^8.3.5",
@@ -47,5 +48,13 @@
     "@google/genai": "^2.2.0",
     "openai": "^6.37.0",
     "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@diabolicallabs/llm-pricing": "^0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@diabolicallabs/llm-pricing": {
+      "optional": true
+    }
   }
 }

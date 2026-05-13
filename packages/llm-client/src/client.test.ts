@@ -14,21 +14,47 @@ import { LlmError } from './types.js';
 
 // Mock all four implemented provider modules to avoid real SDK initialisation.
 // vi.mock is hoisted to the top of the file — factories cannot reference local variables.
+
+const mockCompleteResponse = {
+  content: 'hello',
+  model: 'claude-sonnet-4-6',
+  usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+  latencyMs: 100,
+};
+
+const mockStructuredResponse = {
+  data: { answer: 42 },
+  model: 'claude-sonnet-4-6',
+  usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+  latencyMs: 100,
+};
+
+const mockToolResponse = {
+  content: '',
+  toolCalls: [],
+  model: 'claude-sonnet-4-6',
+  usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+  latencyMs: 100,
+  stopReason: 'end_turn' as const,
+};
+
 vi.mock('./providers/anthropic.js', () => ({
   createAnthropicProvider: vi.fn(() => ({
-    config: {},
-    complete: vi.fn(),
+    config: { provider: 'anthropic', model: 'claude-sonnet-4-6', apiKey: 'test' },
+    complete: vi.fn().mockResolvedValue(mockCompleteResponse),
     stream: vi.fn(),
-    structured: vi.fn(),
+    structured: vi.fn().mockResolvedValue(mockStructuredResponse),
+    withTools: vi.fn().mockResolvedValue(mockToolResponse),
   })),
 }));
 
 vi.mock('./providers/openai.js', () => ({
   createOpenAIProvider: vi.fn(() => ({
-    config: {},
-    complete: vi.fn(),
+    config: { provider: 'openai', model: 'gpt-5.5', apiKey: 'test' },
+    complete: vi.fn().mockResolvedValue({ ...mockCompleteResponse, model: 'gpt-5.5' }),
     stream: vi.fn(),
-    structured: vi.fn(),
+    structured: vi.fn().mockResolvedValue({ ...mockStructuredResponse, model: 'gpt-5.5' }),
+    withTools: vi.fn().mockResolvedValue({ ...mockToolResponse, model: 'gpt-5.5' }),
   })),
 }));
 
@@ -38,6 +64,7 @@ vi.mock('./providers/gemini.js', () => ({
     complete: vi.fn(),
     stream: vi.fn(),
     structured: vi.fn(),
+    withTools: vi.fn(),
   })),
 }));
 
@@ -47,7 +74,33 @@ vi.mock('./providers/deepseek.js', () => ({
     complete: vi.fn(),
     stream: vi.fn(),
     structured: vi.fn(),
+    withTools: vi.fn(),
   })),
+}));
+
+// Mock @diabolicallabs/llm-pricing for the pricing integration tests.
+vi.mock('@diabolicallabs/llm-pricing', () => ({
+  computeCost: vi.fn(
+    ({
+      usage,
+      provider,
+      model,
+    }: {
+      usage: { inputTokens: number; outputTokens: number };
+      provider: string;
+      model: string;
+    }) => ({
+      input: (usage.inputTokens / 1_000_000) * 3.0,
+      output: (usage.outputTokens / 1_000_000) * 15.0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: (usage.inputTokens / 1_000_000) * 3.0 + (usage.outputTokens / 1_000_000) * 15.0,
+      currency: 'USD' as const,
+      isPartial: false,
+      _provider: provider,
+      _model: model,
+    })
+  ),
 }));
 
 // We do NOT mock stubs.ts — we test that perplexity throws at runtime
@@ -192,5 +245,77 @@ describe('createClientFromEnv', () => {
       timeoutMs: 60_000,
     });
     expect(client).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pricing integration (v1.1.0)
+// ---------------------------------------------------------------------------
+
+describe('createClient — pricing integration', () => {
+  it('pricing off: cost is undefined on complete() response', async () => {
+    const client = createClient({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+      // no pricing config
+    });
+    const response = await client.complete([{ role: 'user', content: 'hi' }]);
+    expect(response.cost).toBeUndefined();
+  });
+
+  it('pricing on: cost is attached to complete() response', async () => {
+    const client = createClient({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+      pricing: { computeOnEveryCall: true },
+    });
+    const response = await client.complete([{ role: 'user', content: 'hi' }]);
+    // cost is defined when pricing is configured
+    expect(response.cost).toBeDefined();
+    expect(response.cost?.currency).toBe('USD');
+    expect(typeof response.cost?.total).toBe('number');
+    expect(response.cost?.isPartial).toBe(false);
+  });
+
+  it('pricing on: cost is attached to structured() response', async () => {
+    const client = createClient({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+      pricing: { computeOnEveryCall: true },
+    });
+    const schema = { parse: (d: unknown) => d as { answer: number } };
+    const response = await client.structured([{ role: 'user', content: 'hi' }], schema);
+    expect(response.cost).toBeDefined();
+    expect(response.cost?.currency).toBe('USD');
+  });
+
+  it('pricing on: cost is attached to withTools() response', async () => {
+    const client = createClient({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+      pricing: { computeOnEveryCall: true },
+    });
+    const response = await client.withTools([{ role: 'user', content: 'hi' }], []);
+    expect(response.cost).toBeDefined();
+    expect(response.cost?.currency).toBe('USD');
+  });
+
+  it('pricing on: cost math matches expected values for 100k in + 50k out at $3/$15 per 1M', async () => {
+    const client = createClient({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      apiKey: 'test',
+      pricing: { computeOnEveryCall: true },
+    });
+    const response = await client.complete([{ role: 'user', content: 'hi' }]);
+    // mockCompleteResponse: 100k input, 50k output
+    // Mock computeCost: input = 100000/1M × $3 = $0.0003; output = 50000/1M × $15 = $0.00075
+    expect(response.cost?.input).toBeCloseTo(0.0003, 6);
+    expect(response.cost?.output).toBeCloseTo(0.00075, 6);
+    expect(response.cost?.total).toBeCloseTo(0.00105, 6);
   });
 });
