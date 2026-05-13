@@ -1,5 +1,17 @@
 # @diabolicallabs/llm-client
 
+## 1.1.0
+
+### Minor Changes
+
+- 6c477c9: Optional per-response cost computation via @diabolicallabs/llm-pricing. Pass `pricing: { computeOnEveryCall: true }` to `createClient()` to attach `cost?: LlmCost` on every `complete()`, `structured()`, and `withTools()` response. Requires the optional peer dep `@diabolicallabs/llm-pricing@^0.1.0`. Consumers who don't configure pricing see no cost field and incur no import overhead.
+
+### Patch Changes
+
+- 0e4e895: DeepSeek canonical model IDs are now `deepseek-v4-flash` and `deepseek-v4-pro` (V3/R1 IDs deprecated upstream and now alias to V4). Smoke script and README updated; no API surface change.
+- Updated dependencies [968a9ec]
+  - @diabolicallabs/llm-pricing@0.1.0
+
 ## 1.0.0
 
 ### Major Changes
