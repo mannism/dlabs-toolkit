@@ -6,12 +6,28 @@ purpose: >
   instrumentation is non-blocking — LLM response is returned to the caller
   before ingestion completes. Failed ingestion retries with exponential backoff,
   then drops and logs on exhaustion. Never affects the underlying LLM call.
+  v1.1.0: cost propagation via @diabolicallabs/llm-pricing peer dep.
+  v1.2.0: requestedModel tracking on provider failover.
+  v1.3.0: streamStructured() usage capture (one CallRecord per call, from done event).
+  v1.4.0: internal B1-hybrid refactor — non-streaming paths (complete, structured,
+  withTools) use shared buildAfterCallHandler() via llm-client hooks infrastructure
+  instead of bespoke per-method closures. stream() and streamStructured() retain
+  direct generator wrappers until LlmAfterCallContext.usage lands in v1.6.0.
+  Public API is unchanged — instrumentClient() is the only entry point.
 owner: Sable
-status: in-progress
+status: published
 
 depends_on:
   - name: "@diabolicallabs/llm-client"
-    why: "Wraps LlmClient — agent-sdk intercepts complete(), stream(), structured() calls"
+    version: "^1.5.0"
+    why: "Wraps LlmClient via instrumentClient(). v1.4.0+ uses the llm-client hooks
+          infrastructure (afterCall) internally for non-streaming paths. Runtime import
+          of createClient at dispatch time (not module load time) to preserve test-mock
+          compatibility — tests inject mock clients without instantiating real provider SDKs."
+  - name: "@diabolicallabs/llm-pricing"
+    version: "^0.1.0"
+    why: "Optional peer dep — cost is propagated to CallRecord when llm-client has pricing
+          configured and llm-pricing is installed."
 
 depended_on_by:
   - name: "Agent Spend Dashboard"
@@ -28,18 +44,20 @@ contracts:
     pattern: "fire-and-forget — non-blocking, never delays the LLM response"
     max_retries_default: 3
     timeout_default_ms: 5000
-    on_exhaustion: "drop record + structured warning log"
-  queue:
-    type: "in-memory array"
-    max_items: 100
-    note: "buffers records when ingestion endpoint is temporarily unreachable"
+    on_exhaustion: "drop record + structured warning log (includes call_id for audit)"
   disabled_mode:
     trigger: "config.disabled = true"
     behavior: "all instrumentation skipped — LlmClient passthrough only"
+  stream_wrappers:
+    note: >
+      stream() and streamStructured() retain direct generator wrappers in v1.4.0.
+      Token usage is captured from the done event / final chunk inside the wrapper.
+      These wrappers will be deleted in v1.6.0 when LlmAfterCallContext.usage lands
+      and usage can be read from the afterCall hook instead.
 
 failure_modes:
   - trigger: "Ingestion endpoint down"
-    impact: "Record queued in-memory, retried. If queue fills (100 items), oldest dropped."
+    impact: "Record dispatched with retry. On exhaustion, dropped."
     propagation: "silent — LLM call is never affected"
   - trigger: "Ingestion retries exhausted"
     impact: "Record dropped. Structured warning log includes call_id for audit."
@@ -47,15 +65,26 @@ failure_modes:
   - trigger: "llm-client throws LlmError"
     impact: "No CallRecord captured (no usage data available). Error propagated to caller."
     propagation: "propagated"
+  - trigger: "config.disabled = true"
+    impact: "instrumentClient() returns the original LlmClient unwrapped. Zero overhead."
+    propagation: "n/a"
 
 performance:
   critical_path_overhead_target: "<2ms"
-  notes: "Ingestion dispatch uses setImmediate/queueMicrotask. If overhead exceeds 5ms in Week 4 tests, queue dispatch moves to setImmediate."
+  notes: >
+    Non-streaming: buildAfterCallHandler() executes synchronously post-response.
+    dispatchWithRetry fires async (fire-and-forget). No blocking ingestion on critical path.
+    Streaming: generator wrapper adds a single async iteration layer. Overhead is negligible.
 
 notes: |
-  Status 'in-progress': instrumentClient() is fully implemented (Week 4).
-  In-memory queue deferred to v0.2 — direct dispatch with retry covers 99% of
-  transient failures without the background-worker teardown complexity.
-  CallRecord shape is the ingestion contract with the Agent Spend Dashboard —
-  do not change without coordinating with the Dashboard brief.
-  Pre-release (@next) to be cut after PR merges.
+  v1.0.0: instrumentClient() wraps complete(), stream(), structured() — bespoke per-method closures.
+  v1.1.0: cost propagation — CallRecord.cost when llm-pricing peer dep is installed.
+  v1.2.0: requestedModel on CallRecord when provider failover fires in llm-client.
+  v1.3.0: streamStructured() usage capture — one CallRecord per call, from done event.
+  v1.4.0: B1-hybrid internal refactor. Non-streaming paths use shared buildAfterCallHandler()
+          via llm-client hooks. Stream wrappers retained pending LlmAfterCallContext.usage (v1.6.0).
+          Public API 100% unchanged.
+  CallRecord shape is the ingestion contract with the Agent Spend Dashboard — do not change
+  without coordinating with the Dashboard brief.
+  In-memory queue deferred to v0.2 — direct dispatch with retry covers 99% of transient
+  failures without background-worker teardown complexity.

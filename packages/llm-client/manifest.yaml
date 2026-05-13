@@ -13,6 +13,11 @@ purpose: >
   Optional semaphore + rate-limiter via @diabolicallabs/llm-client/pool sub-path (v1.2.0+).
   v1.4.0 additions: capability matrix (getModelCapabilities), linkedAbortController fan-out
   helper, and response IDs (id + idSource) on all three response types.
+  v1.5.0 additions: pre-call hooks API (LlmHooks) — beforeCall (mutation + short-circuit)
+  and afterCall (informational) on all 5 call types. Hooks fire once per public method
+  invocation, not per retry. beforeCall errors propagate as bad_request; afterCall errors
+  are logged and dropped. Streaming paths fire afterCall after generator exhaustion;
+  response is undefined for streaming in v1.5.0 (usage deferred to v1.6.0).
 owner: Sable
 status: published
 
@@ -53,6 +58,12 @@ exports:
   - "LlmErrorKind (type) — 14-kind discriminated union"
   - "Types: LlmMessage, LlmClientConfig, LlmCallOptions, LlmUsage, LlmResponse, LlmStreamChunk, LlmStructuredResponse, LlmToolResponse, LlmClient, LlmCost"
   - "RetryConfig, RetryStrategy (types)"
+  - "LlmCallType (type) — 'complete' | 'stream' | 'structured' | 'withTools' | 'streamStructured' (v1.5.0+)"
+  - "LlmCallContext (type) — context object passed to beforeCall hooks: messages, options, provider, model, callType (v1.5.0+)"
+  - "LlmBeforeCallResult (type) — return shape for beforeCall: { messages?, options?, skip? } (v1.5.0+)"
+  - "LlmSkipResult (type) — named union for the skip field; all valid response shapes (v1.5.0+)"
+  - "LlmAfterCallContext (type) — context passed to afterCall hooks: request, response, error, latencyMs (v1.5.0+)"
+  - "LlmHooks (type) — { beforeCall?, afterCall? } interface; pass as hooks? on LlmClientConfig (v1.5.0+)"
   - "getModelCapabilities(provider, model): ModelCapabilities | null — provider capability lookup (v1.4.0+)"
   - "ModelCapabilities (type) — capability descriptor returned by getModelCapabilities"
   - "CAPABILITIES_VERSIONED_AT (constant) — ISO date of last capability table update"
@@ -116,8 +127,13 @@ notes: |
           pool sub-path with semaphore + rate-limiter.
   v1.3.0: streamStructured() — async generator: streaming tokens + Zod-validated output.
           Supported providers: OpenAI, Anthropic, DeepSeek (JSON-mode accumulation).
-  v1.4.0 (pending): getModelCapabilities() capability matrix; linkedAbortController fan-out helper;
+  v1.4.0: getModelCapabilities() capability matrix; linkedAbortController fan-out helper;
           response IDs (id + idSource) on LlmResponse, LlmStructuredResponse, LlmToolResponse.
+  v1.5.0: Pre-call hooks API (LlmHooks). beforeCall: mutation + short-circuit. afterCall:
+          informational observer. Hooks fire once per method invocation, not per retry.
+          wrapWithHooks() is the outermost layer in createClient's wrapping order.
+          Streaming paths fire afterCall after generator exhaustion; response is undefined
+          in v1.5.0 (no accumulated response object). Usage for streams deferred to v1.6.0.
   Provider SDKs are devDependencies — bundled into dist at build time via tsup.
   Consumers do not need to install provider SDKs directly.
   Published to npmjs.com under @diabolicallabs scope. GEOAudit is the live pilot consumer.
