@@ -22,7 +22,7 @@ import OpenAI from 'openai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { parseJsonOrThrow } from '../extract-json.js';
 import { isZodSchema, toProviderSchema } from '../json-schema.js';
-import { mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
+import { classifyHttpStatus, mergeRetryOptsWithSignal, normalizeThrownError, withRetry } from '../retry.js';
 import type {
   LlmCallOptions,
   LlmClient,
@@ -86,26 +86,35 @@ export function normalizeOpenAIError(err: unknown): LlmError {
     return new LlmError({
       message: err.message,
       provider: PROVIDER,
+      kind: 'network',
       retryable: true,
       cause: err,
     });
   }
 
   // Catch all other APIError subclasses: RateLimitError (429), AuthenticationError (401),
-  // InternalServerError (500), etc. Retryability is determined by HTTP status code.
+  // InternalServerError (500), etc. Classify to specific LlmErrorKind via HTTP status.
   if (typeof OpenAI.APIError === 'function' && err instanceof OpenAI.APIError) {
     const status: number | undefined = err.status;
     if (status !== undefined) {
-      const retryable = [429, 502, 503, 504].includes(status) || status >= 500;
+      const kind = classifyHttpStatus(status);
+      const retryable = kind === 'rate_limit' || kind === 'server_error';
       return new LlmError({
         message: err.message,
         provider: PROVIDER,
         statusCode: status,
+        kind,
         retryable,
         cause: err,
       });
     }
-    return new LlmError({ message: err.message, provider: PROVIDER, retryable: false, cause: err });
+    return new LlmError({
+      message: err.message,
+      provider: PROVIDER,
+      kind: 'unknown',
+      retryable: false,
+      cause: err,
+    });
   }
 
   return normalizeThrownError(err, PROVIDER);
@@ -337,6 +346,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       throw new LlmError({
         message: `OpenAI structured output: response failed schema validation. ${String(err)}`,
         provider: PROVIDER,
+        kind: 'structured_parse_failed',
         retryable: false,
         cause: err,
       });
@@ -417,6 +427,7 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
       throw new LlmError({
         message: `OpenAI structured output: response failed schema validation. ${String(err)}`,
         provider: PROVIDER,
+        kind: 'structured_parse_failed',
         retryable: false,
         cause: err,
       });

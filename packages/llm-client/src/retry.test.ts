@@ -312,10 +312,10 @@ describe('normalizeThrownError', () => {
     expect(result.retryable).toBe(false);
   });
 
-  it('maps retryable status 429 to kind:"http"', () => {
+  it('maps status 429 to kind:"rate_limit" (v1.0.0 taxonomy)', () => {
     const err = Object.assign(new Error('rate limited'), { status: 429 });
     const result = normalizeThrownError(err, 'test');
-    expect(result.kind).toBe('http');
+    expect(result.kind).toBe('rate_limit');
     expect(result.retryable).toBe(true);
   });
 
