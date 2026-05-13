@@ -138,9 +138,9 @@ Requires `PERPLEXITY_API_KEY`. Queries Perplexity `sonar` once per provider, pri
 
 ### Monthly drift check
 
-A Routine running on the first of each month queries Perplexity for all provider prices and diffs against the table. Drift above 5% files a GitHub issue with label `pricing-drift` in this repo. Tom triages within 48 hours.
+A Routine running on the first of each month queries Perplexity `sonar` for all provider prices and diffs against the current table values. Detection threshold: 5% on input or output. When drift is detected, the Routine posts an alert to the `#repos` Slack channel. Tom triages within 48 hours and determines whether a full research refresh is warranted.
 
-See: `/Users/mann/Documents/Claude/routines/llm-pricing-drift-check.md` for the full Routine spec.
+The Routine is detection only — it never auto-updates the table. All table changes require human-verified research before any PR is opened.
 
 ### Reporting a pricing error
 
