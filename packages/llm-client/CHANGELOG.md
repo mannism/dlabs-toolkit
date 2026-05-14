@@ -1,5 +1,16 @@
 # @diabolicallabs/llm-client
 
+## 1.7.0
+
+### Minor Changes
+
+- b121b60: feat: pricing.remoteUrl config wires fetchRemoteTable into createClient. Opt-in — bundled DEFAULT_PRICING_TABLE remains the floor. createClient is now async (awaits remote fetch on init when remoteUrl set). Logs structured pricing_source event on createClient init. Peer dep range bumped to @diabolicallabs/llm-pricing@^0.2.0.
+
+### Patch Changes
+
+- Updated dependencies [13248b9]
+  - @diabolicallabs/llm-pricing@0.2.0
+
 ## 1.6.0
 
 ### Minor Changes

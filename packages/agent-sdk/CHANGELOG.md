@@ -1,5 +1,15 @@
 # @diabolicallabs/agent-sdk
 
+## 3.0.0
+
+### Patch Changes
+
+- 4efe3a3: chore: peer dep range disjunction (`^0.1.0 || ^0.2.0`) for `@diabolicallabs/llm-pricing`. Pure manifest tweak — no API change, no behavior change. Explicit patch entry to override the default major-bump cascade that fires when a peer-dep pre-1.0 minor boundary is crossed.
+- Updated dependencies [b121b60]
+- Updated dependencies [13248b9]
+  - @diabolicallabs/llm-client@1.7.0
+  - @diabolicallabs/llm-pricing@0.2.0
+
 ## 2.0.0
 
 ### Major Changes
