@@ -4,9 +4,10 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**v1.5.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
+**v1.6.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
 
 Highlights:
+- **v1.6.0** — `LlmAfterCallContext` now carries `usage?: LlmUsage` for all 5 call types. Non-streaming paths mirror `response.usage`; `stream()` captures from the terminal chunk; `streamStructured()` from the `done` event. The v1.5.0 caveat ("usage not surfaced for streaming in afterCall") is removed. `agent-sdk` v2.0.0 uses this to complete its architecture migration.
 - **v1.5.0** — Pre-call hooks API (`hooks?: LlmHooks` on `createClient`). `beforeCall` for request mutation and short-circuit caching; `afterCall` for custom logging and observability. Fires on all 5 call types. Cross-reference: [`@diabolicallabs/agent-sdk`](../agent-sdk/README.md) uses hooks internally.
 - **v1.4.0** — Provider capability matrix (`getModelCapabilities()`), linked AbortController helper (`linkedAbortController()`), response IDs on all response types (`id` + `idSource`).
 - **v1.3.0** — Streaming structured output (`streamStructured()`) — token streaming + Zod-validated final object. OpenAI, Anthropic, DeepSeek supported; Gemini and Perplexity throw pre-call.
@@ -750,7 +751,7 @@ const client = createClient({
 
 `stream()` does not attach cost — cost requires final token counts from a complete response. Use `complete()` if you need cost tracking. See [`@diabolicallabs/llm-pricing`](../llm-pricing/README.md) for the full pricing table, maintenance plan, and `pnpm pricing:verify` diagnostic script.
 
-## Hooks (v1.5.0)
+## Hooks (v1.5.0+)
 
 Attach `beforeCall` and `afterCall` hooks to any `createClient()` config. Hooks fire for all five call types: `complete`, `stream`, `structured`, `withTools`, `streamStructured`.
 
@@ -764,7 +765,7 @@ const client = createClient({
       // ctx.callType, ctx.provider, ctx.model, ctx.messages, ctx.options
     },
     afterCall: async (ctx) => {
-      // ctx.request, ctx.response, ctx.error, ctx.latencyMs
+      // ctx.request, ctx.response, ctx.usage, ctx.error, ctx.latencyMs
     },
   },
 });
@@ -812,13 +813,17 @@ hooks: {
       callType: ctx.request.callType,
       model: ctx.request.model,
       latencyMs: ctx.latencyMs,
+      inputTokens: ctx.usage?.inputTokens,
+      outputTokens: ctx.usage?.outputTokens,
       error: ctx.error?.message,
     });
   },
 }
 ```
 
-**Streaming paths:** `ctx.response` is `undefined` for `stream()` and `streamStructured()` in v1.5.0 — no accumulated response object is available. Usage surfacing for streaming `afterCall` context is planned for v1.6.0.
+**`ctx.usage` (v1.6.0+):** Populated for all 5 call types. For non-streaming paths (`complete`, `structured`, `withTools`), `ctx.usage` mirrors `ctx.response.usage`. For `stream()`, usage comes from the terminal chunk; for `streamStructured()`, from the `done` event. `ctx.usage` is `undefined` only when the call failed before a response was received.
+
+**`ctx.response`:** `undefined` for `stream()` and `streamStructured()` — no accumulated response object exists for streaming calls. Read token counts from `ctx.usage` instead.
 
 ### Hook contract
 
@@ -828,6 +833,8 @@ hooks: {
 | `beforeCall` error | Propagates as `LlmError({ kind: 'bad_request' })` |
 | `afterCall` error | Logged as structured warn, dropped — never propagates |
 | `ctx.model` at `beforeCall` | Primary (first) model in config array. May differ from `response.model` if failover fires. |
+| `ctx.usage` (v1.6.0+) | Populated for all 5 call types. `undefined` only on error paths (call failed before a response). |
+| `ctx.response` on streaming | `undefined` for `stream()` and `streamStructured()` — read token counts from `ctx.usage`. |
 
 ### When to use hooks vs `instrumentClient`
 

@@ -9,21 +9,22 @@ purpose: >
   v1.1.0: cost propagation via @diabolicallabs/llm-pricing peer dep.
   v1.2.0: requestedModel tracking on provider failover.
   v1.3.0: streamStructured() usage capture (one CallRecord per call, from done event).
-  v1.4.0: internal B1-hybrid refactor — non-streaming paths (complete, structured,
-  withTools) use shared buildAfterCallHandler() via llm-client hooks infrastructure
-  instead of bespoke per-method closures. stream() and streamStructured() retain
-  direct generator wrappers until LlmAfterCallContext.usage lands in v1.6.0.
+  v1.4.0: B1-hybrid internal refactor — non-streaming paths use shared buildAfterCallHandler()
+  via llm-client hooks. Streaming paths retained bespoke generator wrappers.
+  v2.0.0: architecture-migration complete — all 5 call types now route through a single
+  buildAfterCallDispatch() function. Bespoke stream wrappers deleted. Requires
+  llm-client@^1.6.0 (LlmAfterCallContext.usage populated for streaming paths).
   Public API is unchanged — instrumentClient() is the only entry point.
 owner: Sable
 status: published
 
 depends_on:
   - name: "@diabolicallabs/llm-client"
-    version: "^1.5.0"
-    why: "Wraps LlmClient via instrumentClient(). v1.4.0+ uses the llm-client hooks
-          infrastructure (afterCall) internally for non-streaming paths. Runtime import
-          of createClient at dispatch time (not module load time) to preserve test-mock
-          compatibility — tests inject mock clients without instantiating real provider SDKs."
+    version: "^1.6.0"
+    why: "Wraps LlmClient via instrumentClient(). v2.0.0 routes all 5 call types through
+          a single buildAfterCallDispatch() function. Requires v1.6.0+ for
+          LlmAfterCallContext.usage to be populated on streaming paths — this is what
+          allows the unified dispatch to read usage from afterCall on stream/streamStructured."
   - name: "@diabolicallabs/llm-pricing"
     version: "^0.1.0"
     why: "Optional peer dep — cost is propagated to CallRecord when llm-client has pricing
@@ -48,12 +49,12 @@ contracts:
   disabled_mode:
     trigger: "config.disabled = true"
     behavior: "all instrumentation skipped — LlmClient passthrough only"
-  stream_wrappers:
+  unified_dispatch:
     note: >
-      stream() and streamStructured() retain direct generator wrappers in v1.4.0.
-      Token usage is captured from the done event / final chunk inside the wrapper.
-      These wrappers will be deleted in v1.6.0 when LlmAfterCallContext.usage lands
-      and usage can be read from the afterCall hook instead.
+      v2.0.0: all 5 call types (complete, stream, structured, streamStructured, withTools)
+      route through a single buildAfterCallDispatch() function. No bespoke per-method
+      stream wrappers remain. Usage for stream/streamStructured is populated by
+      llm-client@1.6.0 on LlmAfterCallContext.usage, read uniformly in the dispatch fn.
 
 failure_modes:
   - trigger: "Ingestion endpoint down"
@@ -72,9 +73,9 @@ failure_modes:
 performance:
   critical_path_overhead_target: "<2ms"
   notes: >
-    Non-streaming: buildAfterCallHandler() executes synchronously post-response.
+    All call types: buildAfterCallDispatch() executes synchronously post-response/stream.
     dispatchWithRetry fires async (fire-and-forget). No blocking ingestion on critical path.
-    Streaming: generator wrapper adds a single async iteration layer. Overhead is negligible.
+    Streaming paths add a single async iteration layer for usage accumulation. Negligible overhead.
 
 notes: |
   v1.0.0: instrumentClient() wraps complete(), stream(), structured() — bespoke per-method closures.
@@ -82,8 +83,11 @@ notes: |
   v1.2.0: requestedModel on CallRecord when provider failover fires in llm-client.
   v1.3.0: streamStructured() usage capture — one CallRecord per call, from done event.
   v1.4.0: B1-hybrid internal refactor. Non-streaming paths use shared buildAfterCallHandler()
-          via llm-client hooks. Stream wrappers retained pending LlmAfterCallContext.usage (v1.6.0).
+          via llm-client hooks. Stream wrappers retained pending LlmAfterCallContext.usage.
           Public API 100% unchanged.
+  v2.0.0: Architecture-migration complete. All 5 call types route through a single
+          buildAfterCallDispatch() function. Bespoke stream wrappers deleted.
+          Requires llm-client@^1.6.0. Public API unchanged.
   CallRecord shape is the ingestion contract with the Agent Spend Dashboard — do not change
   without coordinating with the Dashboard brief.
   In-memory queue deferred to v0.2 — direct dispatch with retry covers 99% of transient
