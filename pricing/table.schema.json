@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.schema.json",
+  "title": "LlmPricingTable",
+  "description": "Canonical pricing table for @diabolicallabs/llm-pricing. Provider → model → per-token USD rates.",
+  "type": "object",
+  "required": ["versionedAt", "anthropic", "openai", "gemini", "deepseek", "perplexity"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema self-reference."
+    },
+    "versionedAt": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO 8601 date the table was last verified against official pricing sources."
+    },
+    "anthropic": { "$ref": "#/definitions/ProviderTable" },
+    "openai": { "$ref": "#/definitions/ProviderTable" },
+    "gemini": { "$ref": "#/definitions/ProviderTable" },
+    "deepseek": { "$ref": "#/definitions/ProviderTable" },
+    "perplexity": { "$ref": "#/definitions/ProviderTable" }
+  },
+  "definitions": {
+    "ProviderTable": {
+      "type": "object",
+      "description": "Map of model ID → ModelPricing record.",
+      "additionalProperties": { "$ref": "#/definitions/ModelPricing" }
+    },
+    "ModelPricing": {
+      "type": "object",
+      "description": "Per-model pricing record. All prices in USD per 1M tokens.",
+      "required": ["inputPer1M", "outputPer1M", "verifiedAt", "sourceUrl"],
+      "additionalProperties": false,
+      "properties": {
+        "inputPer1M": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1M input tokens (standard / cache miss rate)."
+        },
+        "outputPer1M": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1M output tokens."
+        },
+        "cacheReadPer1M": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1M cache read tokens. Omit if cache is not supported for this model."
+        },
+        "cacheWritePer1M": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1M cache write tokens (5-min ephemeral tier for Anthropic). Omit if not separately billed."
+        },
+        "cacheWrite1hPer1M": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1M cache write tokens for the 1-hour duration tier. Anthropic only."
+        },
+        "longContextThreshold": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Input token count above which long-context pricing applies (e.g. 200000 for Gemini 3.1 Pro)."
+        },
+        "longContextInputPer1M": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1M input tokens when totalInputTokens > longContextThreshold."
+        },
+        "longContextOutputPer1M": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1M output tokens when totalInputTokens > longContextThreshold."
+        },
+        "longContextCacheReadPer1M": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1M cache read tokens when totalInputTokens > longContextThreshold."
+        },
+        "hasInvisibleReasoningTokens": {
+          "type": "boolean",
+          "description": "True for o-series / reasoning models that bill invisible reasoning tokens against outputPer1M. computeCost() marks result isPartial=true."
+        },
+        "partialCostCoverage": {
+          "type": "boolean",
+          "description": "True when known billing components (e.g. per-search fees) cannot be computed from token usage alone."
+        },
+        "deprecatedAliasFor": {
+          "type": "string",
+          "description": "If this model ID is a deprecated alias, the canonical model ID it resolves to."
+        },
+        "verifiedAt": {
+          "type": "string",
+          "format": "date",
+          "description": "ISO 8601 date this record was last verified against provider pricing documentation."
+        },
+        "sourceUrl": {
+          "type": "string",
+          "description": "Source URL — official provider docs or best available cross-reference."
+        }
+      }
+    }
+  }
+}
