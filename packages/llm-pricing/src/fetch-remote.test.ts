@@ -200,7 +200,9 @@ describe('fetchRemoteTable', () => {
       await fetchRemoteTable(TEST_URL);
 
       expect(console.warn).toHaveBeenCalledOnce();
-      const [warnArg] = vi.mocked(console.warn).mock.calls[0];
+      const firstCall = vi.mocked(console.warn).mock.calls[0];
+      expect(firstCall).toBeDefined();
+      const warnArg = firstCall?.[0];
       const parsed = JSON.parse(warnArg as string);
       expect(parsed.event).toBe('llm_pricing_fetch_failed');
       expect(parsed.url).toBe(TEST_URL);
