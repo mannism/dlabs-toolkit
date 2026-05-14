@@ -11,10 +11,31 @@
  * v1.2.0 additions:
  *   CallRecord.requestedModel — optional string; present when llm-client provider failover
  *                               fired. model = actually-serving model; requestedModel = primary.
+ *
+ * v3.0.1 notes:
+ *   LlmCost is defined inline here (Option 2). The peer-dep on @diabolicallabs/llm-pricing was
+ *   removed in v3.0.1 — it was type-only and compiled away at build time. The type is inlined to
+ *   ensure consumers in environments that don't transitively resolve types continue to compile
+ *   cleanly without installing llm-pricing. Shape matches llm-pricing's LlmCost exactly — if the
+ *   shapes ever diverge, the workspace typecheck will catch the boundary mismatch.
  */
 
 import type { LlmClient, LlmToolCall } from '@diabolicallabs/llm-client';
-import type { LlmCost } from '@diabolicallabs/llm-pricing';
+
+/**
+ * USD cost breakdown for a single LLM call.
+ * Inlined from @diabolicallabs/llm-pricing — no runtime dependency required.
+ * Shape is kept in sync with llm-pricing's LlmCost via workspace typecheck.
+ */
+export interface LlmCost {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+  currency: string;
+  isPartial?: boolean;
+}
 
 // Identifies a call's origin for cost attribution
 export interface AgentIdentity {

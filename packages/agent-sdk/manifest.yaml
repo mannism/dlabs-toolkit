@@ -15,6 +15,10 @@ purpose: >
   buildAfterCallDispatch() function. Bespoke stream wrappers deleted. Requires
   llm-client@^1.6.0 (LlmAfterCallContext.usage populated for streaming paths).
   Public API is unchanged — instrumentClient() is the only entry point.
+  v3.0.1: peer-dep cleanup — @diabolicallabs/llm-pricing removed from peerDependencies
+  and peerDependenciesMeta. The only usage was type-only imports of LlmCost (compiled away
+  at build time). LlmCost is now inlined in types.ts. Prevents Changesets peer-cascade
+  major-bump on future llm-pricing pre-1.0 minor boundaries. No API change.
 owner: Sable
 status: published
 
@@ -26,9 +30,9 @@ depends_on:
           LlmAfterCallContext.usage to be populated on streaming paths — this is what
           allows the unified dispatch to read usage from afterCall on stream/streamStructured."
   - name: "@diabolicallabs/llm-pricing"
-    version: "^0.1.0"
-    why: "Optional peer dep — cost is propagated to CallRecord when llm-client has pricing
-          configured and llm-pricing is installed."
+    version: "devDependency only (workspace:*)"
+    why: "Dev-only — used in tests and local type resolution. NOT a peer dep as of v3.0.1.
+          LlmCost type is inlined in types.ts; no runtime dependency on llm-pricing."
 
 depended_on_by:
   - name: "Agent Spend Dashboard"

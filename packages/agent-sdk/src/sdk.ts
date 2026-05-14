@@ -64,8 +64,8 @@ import type {
   LlmToolResponse,
   LlmUsage,
 } from '@diabolicallabs/llm-client';
-import type { LlmCost } from '@diabolicallabs/llm-pricing';
-import type { AgentSdkConfig, CallRecord, InstrumentedLlmClient } from './types.js';
+// LlmCost is inlined locally in types.ts (v3.0.1 — peer-dep on llm-pricing removed)
+import type { AgentSdkConfig, CallRecord, InstrumentedLlmClient, LlmCost } from './types.js';
 
 // ---------------------------------------------------------------------------
 // CallRecord builder
