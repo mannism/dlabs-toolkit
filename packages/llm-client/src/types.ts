@@ -42,6 +42,14 @@
  *   LlmHooks             — { beforeCall?, afterCall? } interface.
  *   LlmClientConfig.hooks — optional LlmHooks; wires hooks into every call type.
  *
+ * v1.6.0 additions (streaming usage in afterCall):
+ *   LlmAfterCallContext.usage — now populated for all 5 call types. For non-streaming paths
+ *     (complete, structured, withTools), usage comes from the response object (unchanged).
+ *     For stream(), usage comes from the final chunk's usage field (emitted by the provider
+ *     when stream_options.include_usage is set — OpenAI — or on the terminal chunk — others).
+ *     For streamStructured(), usage comes from the 'done' event. The agent-sdk stream wrappers
+ *     retained in v1.4.0 are deleted in agent-sdk@2.0.0 once this field is populated here.
+ *
  * Hook semantics:
  *   - beforeCall fires once per public method invocation, NOT per retry attempt.
  *   - Returning { messages, options } from beforeCall replaces the originals for that call.
@@ -49,8 +57,7 @@
  *   - beforeCall errors propagate as LlmError({ kind: 'bad_request' }).
  *   - afterCall errors are logged (structured warn) and dropped — never crash the caller.
  *   - For streaming paths (stream(), streamStructured()), afterCall fires after generator
- *     exhaustion. response is undefined for streaming paths in v1.5.0; usage is not
- *     surfaced in afterCall on streaming paths — deferred to v1.6.0.
+ *     exhaustion. usage is populated in afterCall from the final chunk / done event (v1.6.0+).
  *   - LlmCallContext.model reflects the primary model at beforeCall time; if failover fires,
  *     afterCall receives the actual serving model via response.model.
  *
@@ -191,8 +198,9 @@ export interface LlmClientConfig {
    *
    * beforeCall fires once per public method invocation, NOT per retry attempt.
    * afterCall fires after the call completes (or after generator exhaustion for streams).
-   * For streaming paths, afterCall receives response: undefined — usage is not surfaced in
-   * v1.5.0 and is a candidate for v1.6.0.
+   * For streaming paths, afterCall receives response: undefined and usage populated from
+   * the terminal chunk / done event (v1.6.0+). All five supported providers emit usage
+   * on their final streaming event.
    *
    * @see LlmHooks for the full hook interface and examples.
    */
@@ -668,14 +676,14 @@ export interface LlmBeforeCallResult {
  * Context object passed to afterCall hooks after the provider call completes.
  *
  * For non-streaming paths (complete, structured, withTools):
- *   response is the full response object; error is undefined on success.
+ *   response is the full response object; usage mirrors response.usage; error is undefined on success.
  *
  * For streaming paths (stream, streamStructured):
  *   response is undefined — no accumulated response object exists.
+ *   usage is populated from the final chunk's usage field (stream) or the 'done' event (streamStructured).
+ *   If the stream ends without emitting a usage value (e.g. the provider does not include usage on the
+ *   terminal chunk), usage is undefined.
  *   latencyMs measures call-to-generator-exhaustion time.
- *   Usage data from streaming paths is not surfaced in afterCall in v1.5.0; this is
- *   a known limitation and a candidate for v1.6.0. Retain stream()/streamStructured()
- *   wrappers in agent-sdk until usage lands in LlmAfterCallContext.
  *
  * afterCall fires after any successful call or after an error. When error is defined,
  * response is undefined. afterCall exceptions are logged (structured warn) and dropped —
@@ -685,11 +693,23 @@ export interface LlmAfterCallContext {
   request: LlmCallContext;
   /**
    * The response object, when available.
-   * Undefined for streaming paths (stream, streamStructured) in v1.5.0 — no accumulated
-   * response object exists. Also undefined when error is defined (call failed).
-   * Usage surfacing for streaming paths is deferred to v1.6.0.
+   * Undefined for streaming paths (stream, streamStructured) — no accumulated response object
+   * exists. Also undefined when error is defined (call failed).
+   * Read usage directly from the usage field for stream/streamStructured paths (v1.6.0+).
    */
   response: LlmResponse | LlmStructuredResponse<unknown> | LlmToolResponse | undefined;
+  /**
+   * Normalized token usage for the call (v1.6.0+).
+   *
+   * Non-streaming paths (complete, structured, withTools): always present on success;
+   * mirrors response.usage. Undefined when error is defined (call failed before a response).
+   *
+   * Streaming paths (stream, streamStructured): present when the provider emits usage on
+   * the terminal chunk (stream) or the 'done' event (streamStructured). Undefined when the
+   * stream errors before emitting usage, or when the provider does not include usage
+   * on the final chunk (provider-dependent — all five supported providers do emit it).
+   */
+  usage: LlmUsage | undefined;
   /**
    * The error, when the call failed. Undefined on success.
    * afterCall fires on both success and error paths.

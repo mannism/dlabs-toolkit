@@ -465,6 +465,11 @@ function wrapWithPricing(base: LlmClient, config: LlmClientConfig): LlmClient {
  *
  * This ensures hooks see the final cost-annotated response from wrapWithPricing,
  * and that beforeCall mutation reaches the provider before any retry or failover logic.
+ *
+ * v1.6.0: streaming paths now accumulate usage from the terminal chunk (stream) or
+ * the 'done' event (streamStructured) and surface it as afterCtx.usage. This allows
+ * afterCall hooks — including agent-sdk's ingestion handler — to record token counts
+ * without maintaining their own generator wrappers.
  */
 function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
   const { hooks } = config;
@@ -537,6 +542,8 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
       const afterCtx: LlmAfterCallContext = {
         request: ctx,
         response,
+        // usage mirrors response.usage on success; undefined on error (no response).
+        usage: response?.usage,
         error,
         latencyMs: Date.now() - start,
       };
@@ -545,6 +552,9 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
   }
 
   // ── stream() ─────────────────────────────────────────────────────────────────
+  // v1.6.0: accumulates usage from the terminal chunk (where usage is present) and
+  // surfaces it as afterCtx.usage. All five supported providers emit usage on the
+  // final chunk when streaming. Chunks without usage are passed through unchanged.
   async function* stream(
     messages: LlmMessage[],
     options?: LlmCallOptions
@@ -561,16 +571,23 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
 
     const start = Date.now();
     let error: LlmError | undefined;
+    let streamUsage: import('./types.js').LlmUsage | undefined;
     try {
-      yield* base.stream(beforeResult.messages, beforeResult.options);
+      for await (const chunk of base.stream(beforeResult.messages, beforeResult.options)) {
+        // Capture usage from whichever chunk carries it (providers emit on the final chunk).
+        if (chunk.usage !== undefined) {
+          streamUsage = chunk.usage;
+        }
+        yield chunk;
+      }
     } catch (err) {
       error = asLlmError(err);
       throw err;
     } finally {
-      // response is undefined for streaming paths in v1.5.0 — usage not surfaced here.
       const afterCtx: LlmAfterCallContext = {
         request: ctx,
         response: undefined,
+        usage: streamUsage,
         error,
         latencyMs: Date.now() - start,
       };
@@ -605,6 +622,7 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
       const afterCtx: LlmAfterCallContext = {
         request: ctx,
         response,
+        usage: response?.usage,
         error,
         latencyMs: Date.now() - start,
       };
@@ -613,6 +631,8 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
   }
 
   // ── streamStructured() ────────────────────────────────────────────────────────
+  // v1.6.0: captures usage from the 'done' event (the single terminal event that
+  // carries the full accumulated token count) and surfaces it as afterCtx.usage.
   async function* streamStructured<T>(
     messages: LlmMessage[],
     schema: { parse: (data: unknown) => T },
@@ -629,8 +649,19 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
 
     const start = Date.now();
     let error: LlmError | undefined;
+    let streamUsage: import('./types.js').LlmUsage | undefined;
     try {
-      yield* base.streamStructured(beforeResult.messages, schema, beforeResult.options);
+      for await (const event of base.streamStructured(
+        beforeResult.messages,
+        schema,
+        beforeResult.options
+      )) {
+        // The 'done' event carries the full accumulated usage for the call.
+        if (event.type === 'done') {
+          streamUsage = event.usage;
+        }
+        yield event;
+      }
     } catch (err) {
       error = asLlmError(err);
       throw err;
@@ -638,6 +669,7 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
       const afterCtx: LlmAfterCallContext = {
         request: ctx,
         response: undefined,
+        usage: streamUsage,
         error,
         latencyMs: Date.now() - start,
       };
@@ -676,6 +708,7 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
       const afterCtx: LlmAfterCallContext = {
         request: ctx,
         response,
+        usage: response?.usage,
         error,
         latencyMs: Date.now() - start,
       };
