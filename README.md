@@ -2,7 +2,7 @@
 
 Shared platform infrastructure for the Diabolical Labs and Diana Ismail project fleet. Independently-versioned TypeScript packages consumed across multiple repos. © Diabolical Labs
 
-**`llm-client` at v1.6.0; `agent-sdk` at v2.0.0; `llm-pricing` at v0.1.0.** `notion` and `rate-limiter` remain pre-1.0.
+**`llm-client` at v1.7.0; `agent-sdk` at v2.0.0; `llm-pricing` at v0.2.0.** `notion` and `rate-limiter` remain pre-1.0.
 
 ---
 
@@ -10,9 +10,9 @@ Shared platform infrastructure for the Diabolical Labs and Diana Ismail project 
 
 | Package | Status | Description |
 |---|---|---|
-| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v1.6.0) | Unified LLM API — Anthropic, OpenAI (Responses API), Gemini, DeepSeek, Perplexity. `complete()` / `stream()` / `structured()` / `withTools()` / `streamStructured()`. 14-kind `LlmErrorKind` taxonomy. Native strict structured outputs (Zod 4). Per-call timeouts/AbortSignal/stream stall, token normalization, web-grounded citations, `providerOptions` escape hatch. Anthropic prompt cache opt-in. Optional cost computation via `@diabolicallabs/llm-pricing` (v1.1.0+). Configurable retry (v1.2.0+), provider failover, pool sub-path. Capability matrix + linked abort + response IDs (v1.4.0+). **v1.5.0:** pre-call hooks (`beforeCall`/`afterCall`) on all 5 call types. **v1.6.0:** `LlmAfterCallContext.usage` populated for all 5 call types including streaming paths. See [`packages/llm-client/MIGRATION.md`](packages/llm-client/MIGRATION.md) for v0.x → v1.0.0 migration. |
-| [`@diabolicallabs/llm-pricing`](packages/llm-pricing/) | published (v0.1.0) | Default pricing table + `computeCost()` for all 5 providers. Verified 2026-05-13. Gemini long-context tiering, Anthropic dual cache write rates, DeepSeek deprecated alias resolution, o-series and sonar-deep-research partial-cost flags. `versionedAt` field for staleness detection. `pnpm pricing:verify` script for monthly drift checks. Optional peer dep for `llm-client` and `agent-sdk`. |
-| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v2.0.0) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. `CallRecord.tool_calls` captures `withTools()` invocations. `CallRecord.cost` propagates per-call USD cost when `llm-pricing` is installed (v1.1.0+). `CallRecord.requestedModel` on provider failover (v1.2.0+). `streamStructured()` usage capture (v1.3.0+). **v2.0.0:** architecture-migration complete — all 5 call types route through a single dispatch function; bespoke stream wrappers deleted; public API unchanged. Requires `llm-client@^1.6.0`. Optional peer-dep on `llm-pricing@^0.1.0`. |
+| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v1.7.0) | Unified LLM API — Anthropic, OpenAI (Responses API), Gemini, DeepSeek, Perplexity. `complete()` / `stream()` / `structured()` / `withTools()` / `streamStructured()`. 14-kind `LlmErrorKind` taxonomy. Native strict structured outputs (Zod 4). Per-call timeouts/AbortSignal/stream stall, token normalization, web-grounded citations, `providerOptions` escape hatch. Anthropic prompt cache opt-in. Optional cost computation via `@diabolicallabs/llm-pricing` (v1.1.0+). Configurable retry (v1.2.0+), provider failover, pool sub-path. Capability matrix + linked abort + response IDs (v1.4.0+). **v1.5.0:** pre-call hooks (`beforeCall`/`afterCall`) on all 5 call types. **v1.6.0:** `LlmAfterCallContext.usage` populated for all 5 call types including streaming paths. **v1.7.0:** `pricing.remoteUrl` on `createClient()` — fetches live pricing from a remote URL (stale-while-revalidate, 24h TTL, never-throws); `createClient()` is now async. See [`packages/llm-client/MIGRATION.md`](packages/llm-client/MIGRATION.md) for v0.x → v1.0.0 migration. |
+| [`@diabolicallabs/llm-pricing`](packages/llm-pricing/) | published (v0.2.0) | Default pricing table + `computeCost()` for all 5 providers. Verified 2026-05-13. Gemini long-context tiering, Anthropic dual cache write rates, DeepSeek deprecated alias resolution, o-series and sonar-deep-research partial-cost flags. `versionedAt` field for staleness detection. `pnpm pricing:verify` script for monthly drift checks. **v0.2.0:** hybrid storage — `pricing/table.json` at repo root is the canonical remote source; `fetchRemoteTable()` fetches it with stale-while-revalidate cache and a never-throws fail-safe. Price refreshes update the JSON directly; no release cycle needed. Optional peer dep for `llm-client` and `agent-sdk`. |
+| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v2.0.0) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. `CallRecord.tool_calls` captures `withTools()` invocations. `CallRecord.cost` propagates per-call USD cost when `llm-pricing` is installed (v1.1.0+). `CallRecord.requestedModel` on provider failover (v1.2.0+). `streamStructured()` usage capture (v1.3.0+). **v2.0.0:** architecture-migration complete — all 5 call types route through a single dispatch function; bespoke stream wrappers deleted; public API unchanged. Requires `llm-client@^1.7.0`. Optional peer-dep on `llm-pricing@^0.2.0`. |
 | [`@diabolicallabs/notion`](packages/notion/) | scaffolded (v0.0.2) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
 | [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | scaffolded (v0.0.2) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
 
@@ -32,7 +32,8 @@ Public on npmjs.com under the `@diabolicallabs` scope — no `.npmrc` config req
 import { createClientFromEnv } from '@diabolicallabs/llm-client';
 
 // Reads ANTHROPIC_API_KEY from environment
-const client = createClientFromEnv('anthropic', 'claude-sonnet-4-6');
+// createClientFromEnv is async as of v1.7.0
+const client = await createClientFromEnv('anthropic', 'claude-sonnet-4-6');
 
 const response = await client.complete([
   { role: 'user', content: 'Hello' },
@@ -45,7 +46,7 @@ for await (const chunk of client.stream([{ role: 'user', content: 'Hello' }])) {
 }
 
 // Configurable retry (v1.2.0)
-const clientWithRetry = createClientFromEnv('openai', 'gpt-5.5', {
+const clientWithRetry = await createClientFromEnv('openai', 'gpt-5.5', {
   retry: {
     maxAttempts: 5,
     strategy: 'decorrelated',
@@ -56,7 +57,7 @@ const clientWithRetry = createClientFromEnv('openai', 'gpt-5.5', {
 });
 
 // Provider failover (v1.2.0)
-const clientWithFallback = createClientFromEnv('anthropic', ['claude-opus-4-99', 'claude-sonnet-4-6'], {
+const clientWithFallback = await createClientFromEnv('anthropic', ['claude-opus-4-99', 'claude-sonnet-4-6'], {
   fallbackOn: ['not_found'],
 });
 
