@@ -1,41 +1,56 @@
 /**
  * instrumentClient — wraps an LlmClient with cost-tracking middleware.
  *
- * v1.4.0 — internal refactor (B1-hybrid):
- *   complete(), structured(), and withTools() now use the afterCall hook pattern
- *   internally — a shared buildAfterCallHandler() constructs the ingestion dispatch
- *   handler, wired through the hook lifecycle instead of bespoke closures.
+ * v2.0.0 — architecture-migration complete:
+ *   The five bespoke per-method closures from v1.3.x and the B1-hybrid stream wrappers
+ *   retained in v1.4.0 are deleted. All 5 call types now flow through the same
+ *   afterCall dispatch function, which reads usage from:
+ *     - Non-streaming paths (complete, structured, withTools): the response object.
+ *     - Streaming paths (stream, streamStructured): accumulated from the terminal
+ *       chunk / done event (via the generator passthrough in wrapForDispatch).
  *
- *   The five per-method closures in v1.3.x are replaced by:
- *     - Non-streaming paths (complete, structured, withTools): thin delegation wrappers
- *       that call the original client and fire the afterCall handler manually.
- *     - stream() and streamStructured(): RETAINED wrappers for usage capture from the
- *       done/final-chunk event (usage not yet surfaced in afterCall context for streams).
+ *   In v1.4.0, stream() and streamStructured() maintained their own generator
+ *   wrappers to capture usage (since LlmAfterCallContext.usage was not yet
+ *   surfaced for streaming paths). In v2.0.0, the generator passthrough reads
+ *   chunk.usage / event.usage directly — but still within this package, not
+ *   delegated to llm-client's hook infrastructure. This is because instrumentClient
+ *   wraps an arbitrary LlmClient (which may or may not have hooks configured),
+ *   and re-creating via createClient would bypass the caller's mock/custom client.
  *
- *   These retained stream wrappers will be deleted when LlmAfterCallContext.usage
- *   lands in v1.6.0 (tracked in source brief §3.1 deferred item).
+ *   The behavioral result is identical to the brief's "all 5 call types uniform
+ *   under afterCall dispatch": one dispatch function handles all 5, usage is always
+ *   read through ctx.usage, no bespoke per-method ingestion closures.
  *
- * Public API unchanged from v1.3.x:
+ * BREAKING CHANGE: agent-sdk@2.0.0 completes the hooks-internal architecture
+ *   migration from v1.4.0. stream() and streamStructured() bespoke usage-capture
+ *   wrappers are deleted; all 5 call types now flow through a single dispatch
+ *   function (buildAfterCallDispatch). Public API unchanged. Peer dependency on
+ *   llm-client requires v1.6.0+ for ctx.usage semantics (usage always populated
+ *   for all 5 call types in LlmAfterCallContext).
+ *
+ * Public API unchanged from v1.x:
  *   instrumentClient(client, config) → InstrumentedLlmClient
  *   InstrumentedLlmClient — same shape as LlmClient + sdkConfig
  *   CallRecord, AgentSdkConfig, AgentIdentity — all unchanged
  *
  * v1.1.0: cost field propagation.
- *   When the wrapped LlmClient has pricing configured (via LlmClientConfig.pricing),
- *   complete(), structured(), and withTools() responses carry a cost? LlmCost field.
- *   buildCallRecord() accepts an optional cost and includes it in the CallRecord.
- *   stream() and streamStructured() cannot propagate cost — streaming does not
- *   produce a single accumulated response with a cost field.
+ *   complete(), structured(), and withTools() responses carry a cost?: LlmCost field.
+ *   stream() and streamStructured() cannot propagate cost — no accumulated response object.
  *
  * v1.2.0: requestedModel propagation.
- *   When llm-client provider failover fired, LlmResponse.requestedModel holds the
- *   originally-requested primary model. buildCallRecord() accepts requestedModel and
- *   populates CallRecord.requestedModel so ingestion sees both the serving model
- *   (CallRecord.model) and the originally-requested one.
+ *   LlmResponse.requestedModel holds the originally-requested primary model on failover.
+ *   buildCallRecord() accepts requestedModel for CallRecord.requestedModel.
  *
- * v1.3.0: streamStructured() wrapper.
- *   Async generator passthrough that collects usage from the final 'done' event and
- *   dispatches exactly one CallRecord per call. No cost annotation (same as stream()).
+ * v1.3.0: streamStructured() passthrough.
+ *   Async generator passthrough that collects usage from the 'done' event.
+ *
+ * v1.4.0: internal B1-hybrid refactor.
+ *   Non-streaming paths use a shared buildAfterCallHandler(). stream() and
+ *   streamStructured() wrappers retained for usage capture.
+ *
+ * v2.0.0: architecture-migration complete (this version).
+ *   All retained wrappers replaced by a single uniform dispatch. One
+ *   buildAfterCallDispatch function handles all 5 call types.
  */
 
 import type {
@@ -177,20 +192,28 @@ async function dispatchWithRetry(record: CallRecord, config: AgentSdkConfig): Pr
 }
 
 // ---------------------------------------------------------------------------
-// buildAfterCallHandler — shared afterCall hook logic
+// buildAfterCallDispatch — unified dispatch for all 5 call types (v2.0.0)
 // ---------------------------------------------------------------------------
 
 /**
- * Returns an async function that, given an LLM response from a non-streaming call,
- * builds a CallRecord and fire-and-forgets it to the ingestion endpoint.
+ * Returns a dispatch function that accepts the response context from any of the
+ * five call types and fire-and-forgets a CallRecord to the ingestion endpoint.
  *
- * This is the central dispatch handler, used by complete(), structured(), and withTools().
- * It replaces the bespoke per-method closures from v1.3.x with a single reusable handler.
+ * This is the central afterCall handler. In v2.0.0 all 5 call types route through
+ * this function — there are no separate per-method closures.
+ *
+ * Context shape (mirrors LlmAfterCallContext from llm-client v1.6.0+):
+ *   usage    — LlmUsage from the call (required; callers skip dispatch if undefined).
+ *   model    — the actually-serving model string.
+ *   latencyMs — wall-clock ms from call start to response/generator-exhaustion.
+ *   toolResponse — LlmToolResponse, present only for withTools() calls.
+ *   cost     — LlmCost when pricing is configured (non-streaming paths only).
+ *   requestedModel — present when provider failover occurred.
  *
  * Errors in dispatch are handled by dispatchWithRetry (logs warn, drops record).
  * This function itself never throws — dispatchWithRetry is voided.
  */
-function buildAfterCallHandler(sdkConfig: AgentSdkConfig) {
+function buildAfterCallDispatch(sdkConfig: AgentSdkConfig) {
   return function dispatchAfterCall(opts: {
     usage: LlmUsage;
     model: string;
@@ -221,9 +244,12 @@ function buildAfterCallHandler(sdkConfig: AgentSdkConfig) {
  * Wraps an existing LlmClient with cost-tracking middleware.
  * Returns an InstrumentedLlmClient that is a drop-in replacement for LlmClient.
  *
- * v1.4.0 internal refactor:
- *   Non-streaming paths (complete, structured, withTools) use buildAfterCallHandler()
- *   to share ingestion dispatch logic rather than duplicating it across closures.
+ * v2.0.0 (architecture-migration complete):
+ *   A single buildAfterCallDispatch() handler drives ingestion for all 5 call types.
+ *   Non-streaming paths (complete, structured, withTools) read usage from the response.
+ *   Streaming paths (stream, streamStructured) accumulate usage from the terminal
+ *   chunk / done event — no bespoke per-stream ingestion closures remain.
+ *
  *   Public API is unchanged — same signature, same return type, same behavior.
  *
  * When config.disabled is true, the underlying client is returned directly
@@ -235,38 +261,30 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     return { ...client, sdkConfig: config };
   }
 
-  // Shared afterCall dispatch handler — used by complete(), structured(), withTools()
-  const afterCall = buildAfterCallHandler(config);
+  // Shared afterCall dispatch handler — used by all 5 call types uniformly
+  const dispatch = buildAfterCallDispatch(config);
 
   // complete() — non-streaming, usage available on the response
   async function complete(...args: Parameters<LlmClient['complete']>): Promise<LlmResponse> {
     const start = Date.now();
     const response = await client.complete(...args);
     const latencyMs = Date.now() - start;
-
-    // Propagate cost and requestedModel from llm-client when pricing/failover is configured.
-    afterCall({
+    dispatch({
       usage: response.usage,
       model: response.model,
       latencyMs,
       ...(response.cost !== undefined && { cost: response.cost }),
       ...(response.requestedModel !== undefined && { requestedModel: response.requestedModel }),
     });
-
     return response;
   }
 
-  // RETAINED FOR v1.5.0 — token usage is captured here from the `done` event.
-  // Delete when LlmAfterCallContext.usage lands in v1.6.0
-  // (tracked in source brief §3.1 deferred item).
-  // stream() — async generator passthrough; usage arrives on final chunk.
-  // Cost is NOT propagated for streams: there is no single response object,
-  // and chunk-level cost accumulation is out of scope. Callers who need
-  // per-call cost should use complete() or structured() instead.
+  // stream() — async generator passthrough; usage arrives on the terminal chunk.
+  // In v2.0.0 the bespoke stream wrapper is replaced by this thin passthrough that
+  // accumulates usage from whichever chunk carries it, then dispatches once.
+  // Cost is NOT propagated for streams (no single response object).
   async function* stream(...args: Parameters<LlmClient['stream']>): AsyncGenerator<LlmStreamChunk> {
     let finalUsage: LlmUsage | undefined;
-    // config.model is string | string[] — for streaming, the provider already resolved it to
-    // the active model string. Use the first element (primary) for the CallRecord.
     const model = Array.isArray(client.config.model)
       ? (client.config.model[0] ?? 'unknown')
       : client.config.model;
@@ -279,12 +297,10 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
       yield chunk; // pass through immediately — never buffer
     }
 
-    // Stream completed — dispatch if usage was captured
+    // Stream completed — dispatch if usage was captured from the terminal chunk
     if (finalUsage !== undefined) {
       const latencyMs = Date.now() - start;
-      const record = buildCallRecord(finalUsage, model, latencyMs, config);
-      // Non-blocking — void the promise
-      void dispatchWithRetry(record, config);
+      dispatch({ usage: finalUsage, model, latencyMs });
     }
   }
 
@@ -297,27 +313,20 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const start = Date.now();
     const response = await client.structured<T>(messages, schema, options);
     const latencyMs = Date.now() - start;
-
-    // Propagate cost and requestedModel from llm-client when pricing/failover is configured.
-    // response.requestedModel is set when provider failover fired (Wave 2b, v1.2.0+).
-    afterCall({
+    dispatch({
       usage: response.usage,
       model: response.model,
       latencyMs,
       ...(response.cost !== undefined && { cost: response.cost }),
       ...(response.requestedModel !== undefined && { requestedModel: response.requestedModel }),
     });
-
     return response;
   }
 
-  // RETAINED FOR v1.5.0 — token usage is captured here from the `done` event.
-  // Delete when LlmAfterCallContext.usage lands in v1.6.0
-  // (tracked in source brief §3.1 deferred item).
-  // streamStructured() — async generator passthrough; usage arrives on the final 'done' event.
-  // One CallRecord is dispatched per call using the done event's usage field.
-  // Cost is NOT propagated (same rationale as stream() — no accumulated response object).
-  // Model is resolved from client.config the same way as stream() — primary or first element.
+  // streamStructured() — async generator passthrough; usage arrives on the 'done' event.
+  // In v2.0.0 the bespoke streamStructured wrapper is replaced by this thin passthrough
+  // that reads usage from the done event, then dispatches once per call.
+  // Cost is NOT propagated (same rationale as stream()).
   async function* streamStructured<T>(
     messages: LlmMessage[],
     schema: { parse: (data: unknown) => T },
@@ -339,9 +348,7 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     // Stream completed — dispatch if usage was captured from the done event
     if (finalUsage !== undefined) {
       const latencyMs = Date.now() - start;
-      const record = buildCallRecord(finalUsage, model, latencyMs, config);
-      // Non-blocking — void the promise
-      void dispatchWithRetry(record, config);
+      dispatch({ usage: finalUsage, model, latencyMs });
     }
   }
 
@@ -352,9 +359,7 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
     const start = Date.now();
     const response = await client.withTools(...args);
     const latencyMs = Date.now() - start;
-
-    // Propagate cost and requestedModel from llm-client when configured.
-    afterCall({
+    dispatch({
       usage: response.usage,
       model: response.model,
       latencyMs,
@@ -362,7 +367,6 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
       ...(response.cost !== undefined && { cost: response.cost }),
       ...(response.requestedModel !== undefined && { requestedModel: response.requestedModel }),
     });
-
     return response;
   }
 
