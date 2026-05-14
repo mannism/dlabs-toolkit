@@ -17,7 +17,9 @@ purpose: >
   and afterCall (informational) on all 5 call types. Hooks fire once per public method
   invocation, not per retry. beforeCall errors propagate as bad_request; afterCall errors
   are logged and dropped. Streaming paths fire afterCall after generator exhaustion;
-  response is undefined for streaming in v1.5.0 (usage deferred to v1.6.0).
+  ctx.response is undefined for streaming (no buffered response object).
+  v1.6.0 additions: LlmAfterCallContext.usage populated for all 5 call types including
+  streaming — stream() captures from terminal chunk, streamStructured() from done event.
 owner: Sable
 status: published
 
@@ -62,7 +64,7 @@ exports:
   - "LlmCallContext (type) — context object passed to beforeCall hooks: messages, options, provider, model, callType (v1.5.0+)"
   - "LlmBeforeCallResult (type) — return shape for beforeCall: { messages?, options?, skip? } (v1.5.0+)"
   - "LlmSkipResult (type) — named union for the skip field; all valid response shapes (v1.5.0+)"
-  - "LlmAfterCallContext (type) — context passed to afterCall hooks: request, response, error, latencyMs (v1.5.0+)"
+  - "LlmAfterCallContext (type) — context passed to afterCall hooks: request, response, usage, error, latencyMs; usage populated for all 5 call types (v1.5.0+, usage field v1.6.0+)"
   - "LlmHooks (type) — { beforeCall?, afterCall? } interface; pass as hooks? on LlmClientConfig (v1.5.0+)"
   - "getModelCapabilities(provider, model): ModelCapabilities | null — provider capability lookup (v1.4.0+)"
   - "ModelCapabilities (type) — capability descriptor returned by getModelCapabilities"
@@ -132,8 +134,10 @@ notes: |
   v1.5.0: Pre-call hooks API (LlmHooks). beforeCall: mutation + short-circuit. afterCall:
           informational observer. Hooks fire once per method invocation, not per retry.
           wrapWithHooks() is the outermost layer in createClient's wrapping order.
-          Streaming paths fire afterCall after generator exhaustion; response is undefined
-          in v1.5.0 (no accumulated response object). Usage for streams deferred to v1.6.0.
+  v1.6.0: LlmAfterCallContext.usage populated for all 5 call types, including streaming paths.
+          stream() accumulates usage from the terminal chunk (the chunk that carries chunk.usage).
+          streamStructured() captures usage from the done event. For non-streaming paths,
+          usage mirrors the response directly. usage is undefined only when the call throws.
   Provider SDKs are devDependencies — bundled into dist at build time via tsup.
   Consumers do not need to install provider SDKs directly.
   Published to npmjs.com under @diabolicallabs scope. GEOAudit is the live pilot consumer.
