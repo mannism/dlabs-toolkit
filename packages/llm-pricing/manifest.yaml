@@ -1,9 +1,12 @@
 name: "@diabolicallabs/llm-pricing"
+version: "0.2.0"
 purpose: >
-  Default pricing table (all five providers: Anthropic, OpenAI, Gemini, DeepSeek, Perplexity)
-  and computeCost() function for @diabolicallabs/llm-client. Converts LlmUsage token counts
-  to USD cost breakdowns. Ships a curated default table (versionedAt field for staleness detection)
-  with consumer override support. Maintained via monthly Perplexity drift check + quarterly
+  Pricing table + cost computation for @diabolicallabs/llm-client. Converts LlmUsage token counts
+  to USD cost breakdowns across all five supported providers. Ships a bundled DEFAULT_PRICING_TABLE
+  (offline fallback, always available) plus an opt-in fetchRemoteTable() helper for live pricing
+  via a remote URL (stale-while-revalidate cache, 24h TTL, never-throws fail-safe). The canonical
+  remote source is pricing/table.json at the repo root — refreshes update that file directly
+  without requiring an npm release cycle. Maintained via monthly Perplexity drift check + quarterly
   baseline refresh (Option D — see brief-pricing-maintenance.md).
 owner: Sable
 status: active
@@ -14,7 +17,7 @@ depends_on:
 
 depended_on_by:
   - name: "@diabolicallabs/llm-client"
-    how: "Optional peer dep — when pricing is configured at createClient(), cost is computed per response via computeCost()"
+    how: "Optional peer dep — when pricing is configured at createClient(), cost is computed per response via computeCost(). pricing.remoteUrl wires fetchRemoteTable() automatically (v1.7.0+)."
   - name: "@diabolicallabs/agent-sdk"
     how: "Imports LlmCost type for CallRecord.cost field; pricing computed by llm-client layer"
   - name: "Agent Spend Dashboard"
@@ -22,14 +25,21 @@ depended_on_by:
 
 exports:
   - "computeCost(input: ComputeCostInput): LlmCost"
-  - "DEFAULT_PRICING_TABLE: PricingTable — versionedAt field for staleness detection"
-  - "Types: LlmCost, ModelPricing, PricingTable, ComputeCostInput, Provider, LlmUsage"
+  - "DEFAULT_PRICING_TABLE: PricingTable — bundled offline fallback, versionedAt field for staleness detection"
+  - "fetchRemoteTable(url, options?): Promise<FetchRemoteTableResult> — opt-in remote fetch with stale-while-revalidate cache (v0.2.0+)"
+  - "clearPricingCache(url?): void — reset in-memory remote table cache; useful in tests (v0.2.0+)"
+  - "Types: LlmCost, ModelPricing, PricingTable, ComputeCostInput, Provider, LlmUsage, FetchRemoteTableOptions, FetchRemoteTableResult"
 
 contracts:
   pricing_table:
     versionedAt: "ISO 8601 date the table was last verified. Consumers check staleness against Date.now()."
     maintenance: "Monthly Perplexity drift check (sonar) + quarterly baseline refresh. See routines/llm-pricing-drift-check.md"
     override: "Consumers pass pricingTable to computeCost() or pricingTable option in createClient() to override defaults."
+  remote_fetch:
+    source: "pricing/table.json at repo root — canonical remote source served via GitHub raw."
+    cache: "In-memory Map keyed by URL. Default TTL: 24h. Override via options.cacheTtlMs."
+    fail_safe: "On any failure (network error, HTTP non-2xx, parse error, schema validation failure, 5s timeout) returns DEFAULT_PRICING_TABLE with source:'fallback'. Never throws."
+    precedence: "pricing.table (explicit override) > pricing.remoteUrl (remote fetch) > DEFAULT_PRICING_TABLE (bundled fallback)."
   cost_computation:
     anthropic_cache: "cacheCreationTokens billed at cacheWritePer1M (5-min ephemeral). 1-hr tier (cacheWrite1hPer1M) is reserved for future LlmUsage field."
     gemini_tiering: "inputTokens > longContextThreshold selects the elevated rate tier (200k threshold for gemini-3.1-pro-preview and gemini-2.5-pro)."
@@ -40,6 +50,9 @@ failure_modes:
   - trigger: "Model not in pricing table"
     impact: "computeCost() returns zero cost with isPartial=true. Emits console.warn."
     propagation: "silent — caller receives a result, not an exception"
+  - trigger: "Remote fetch failure (network error, HTTP non-2xx, parse/schema error, 5s timeout)"
+    impact: "fetchRemoteTable() returns DEFAULT_PRICING_TABLE with source:'fallback'. Logs structured warning."
+    propagation: "degraded mode — cost estimates continue from bundled table, never crash LLM requests"
   - trigger: "Perplexity drift check fails (API error, key missing)"
     impact: "pricing:verify exits non-zero with clear error message. Table is NOT modified."
     propagation: "propagated to CLI exit code"
@@ -49,9 +62,16 @@ failure_modes:
 
 performance:
   expected_latency: "computeCost() is synchronous, pure arithmetic — sub-millisecond."
+  expected_latency_remote: "fetchRemoteTable() resolves from in-memory cache in <1ms after first fetch. First fetch: network-bound, 5s connect timeout."
   notes: "pricing:verify makes one Perplexity API call per provider (5 calls total). ~10-30s runtime."
 
 notes: |
+  v0.2.0 hybrid storage model: price refreshes update pricing/table.json at the repo root.
+  Consumers using pricing.remoteUrl pick up changes on next process restart (no npm release needed).
+  Bundled DEFAULT_PRICING_TABLE is updated when table is stale enough to warrant a release.
+  Sync script: node pricing/sync-bundled.mjs — regenerates packages/llm-pricing/src/table.ts from table.json.
+  Run after any pricing/table.json change and commit both files together.
+
   DeepSeek v4-pro has a 75% promotional discount active through 2026-05-31.
   Post-discount rates will be ~4× current table values. Monitor via the monthly drift check.
 

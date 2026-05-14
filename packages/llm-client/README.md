@@ -4,9 +4,10 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**v1.6.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
+**v1.7.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
 
 Highlights:
+- **v1.7.0** — `createClient()` is now `async`. `pricing.remoteUrl` config option fetches a remote `PricingTable` on init (stale-while-revalidate cache, 24h default TTL). `pricing.cacheTtlMs` controls the TTL. Structured `pricing_source` log on every `createClient()` with pricing config. Requires `@diabolicallabs/llm-pricing@^0.2.0`.
 - **v1.6.0** — `LlmAfterCallContext` now carries `usage?: LlmUsage` for all 5 call types. Non-streaming paths mirror `response.usage`; `stream()` captures from the terminal chunk; `streamStructured()` from the `done` event. The v1.5.0 caveat ("usage not surfaced for streaming in afterCall") is removed. `agent-sdk` v2.0.0 uses this to complete its architecture migration.
 - **v1.5.0** — Pre-call hooks API (`hooks?: LlmHooks` on `createClient`). `beforeCall` for request mutation and short-circuit caching; `afterCall` for custom logging and observability. Fires on all 5 call types. Cross-reference: [`@diabolicallabs/agent-sdk`](../agent-sdk/README.md) uses hooks internally.
 - **v1.4.0** — Provider capability matrix (`getModelCapabilities()`), linked AbortController helper (`linkedAbortController()`), response IDs on all response types (`id` + `idSource`).
@@ -28,15 +29,15 @@ Public on npmjs.com — no `.npmrc` config required.
 ```typescript
 import { createClient, createClientFromEnv } from '@diabolicallabs/llm-client';
 
-// From explicit config
-const client = createClient({
+// From explicit config — createClient() is async (v1.7.0+)
+const client = await createClient({
   provider: 'anthropic',
   model: 'claude-sonnet-4-6',
   apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
-// From environment variables
-const client = createClientFromEnv('anthropic', 'claude-sonnet-4-6');
+// From environment variables — also async
+const client = await createClientFromEnv('anthropic', 'claude-sonnet-4-6');
 
 // Non-streaming completion
 const response = await client.complete([
@@ -708,7 +709,8 @@ pnpm add @diabolicallabs/llm-pricing
 ```typescript
 import { createClient } from '@diabolicallabs/llm-client';
 
-const client = createClient({
+// createClient() is async (v1.7.0+) — await it
+const client = await createClient({
   provider: 'anthropic',
   model: 'claude-sonnet-4-6',
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -728,12 +730,49 @@ console.log(response.cost);
 // }
 ```
 
+### Remote pricing table (v1.7.0)
+
+Set `pricing.remoteUrl` to fetch the latest prices from a URL on client init, with a stale-while-revalidate cache. No code change or npm release needed when prices change — consumers pick up updates on the next process restart.
+
+```typescript
+const client = await createClient({
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  pricing: {
+    remoteUrl: 'https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.json',
+    cacheTtlMs: 24 * 60 * 60 * 1000, // 24h (default)
+    computeOnEveryCall: true,
+  },
+});
+```
+
+**Precedence (highest → lowest):**
+
+| `pricing.table` | `pricing.remoteUrl` | Result |
+|---|---|---|
+| set | any | Consumer table always wins — no fetch |
+| unset | set | Fetched on init, cached per TTL |
+| unset | unset | Bundled `DEFAULT_PRICING_TABLE` |
+
+On fetch failure (network error, HTTP error, schema validation failure, 5s timeout), the client falls back silently to `DEFAULT_PRICING_TABLE` and logs a structured warning. Pricing failures never crash LLM calls.
+
+A structured `pricing_source` log line is emitted on every `createClient()` with a pricing config:
+
+```json
+{ "event": "pricing_source", "source": "remote", "url": "...", "fetchedAt": "..." }
+```
+
+`source` is one of: `"remote"` | `"cache"` | `"fallback"` | `"bundled"` | `"consumer_override"`.
+
+### Static table override
+
 The `pricing.table` option accepts a custom `PricingTable` from `@diabolicallabs/llm-pricing` to override default rates:
 
 ```typescript
 import { DEFAULT_PRICING_TABLE } from '@diabolicallabs/llm-pricing';
 
-const client = createClient({
+const client = await createClient({
   provider: 'openai',
   model: 'gpt-5.5',
   apiKey: process.env.OPENAI_API_KEY!,

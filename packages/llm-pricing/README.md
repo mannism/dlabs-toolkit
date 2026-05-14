@@ -4,7 +4,7 @@ Pricing table + cost computation for `@diabolicallabs/llm-client`. Converts `Llm
 
 ## Status
 
-**v0.1.0** — Default pricing table verified 2026-05-13. Covers Anthropic, OpenAI, Gemini, DeepSeek, Perplexity.
+**v0.2.0** — Default pricing table verified 2026-05-13. Covers Anthropic, OpenAI, Gemini, DeepSeek, Perplexity. Adds `fetchRemoteTable()` for opt-in live pricing (hybrid storage model).
 
 ## Install
 
@@ -78,6 +78,65 @@ if (ageInDays > 90) {
 
 The Agent Spend Dashboard surfaces `versionedAt` in its UI so operators can see when the table was last confirmed.
 
+## Remote table (v0.2.0)
+
+`fetchRemoteTable()` fetches a `PricingTable` from a URL (typically the canonical `pricing/table.json` in the dlabs-toolkit repo) with an in-memory stale-while-revalidate cache. It **never throws** — on any failure it returns the bundled `DEFAULT_PRICING_TABLE`.
+
+```typescript
+import { fetchRemoteTable, computeCost } from '@diabolicallabs/llm-pricing';
+
+const CANONICAL_URL =
+  'https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.json';
+
+const result = await fetchRemoteTable(CANONICAL_URL);
+// result.source — 'remote' | 'cache' | 'fallback'
+// result.table  — the resolved PricingTable
+// result.error  — set when source === 'fallback'
+
+const cost = computeCost({
+  usage: response.usage,
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
+  pricingTable: result.table,
+});
+```
+
+When used with `@diabolicallabs/llm-client@^1.7.0`, set `pricing.remoteUrl` on `createClient()` to wire this automatically — you don't need to call `fetchRemoteTable()` directly.
+
+### Precedence (highest → lowest)
+
+| Source | How |
+|---|---|
+| `pricing.table` on `createClient()` | Consumer-explicit static override — always wins |
+| `pricing.remoteUrl` on `createClient()` | Fetched once on init, cached per TTL |
+| `DEFAULT_PRICING_TABLE` | Bundled fallback — always available |
+
+### Cache TTL
+
+Default: **24 hours** (`cacheTtlMs: 24 * 60 * 60 * 1000`).
+
+Rationale: GitHub raw fetches are cheap but bounded. 24h matches the realistic provider-repricing cadence — faster wouldn't catch drift sooner; slower starts to lag noticeably. Override via `options.cacheTtlMs`.
+
+### Fail-safe contract
+
+On any failure (network error, HTTP non-2xx, JSON parse error, schema validation failure, 5s connect timeout), `fetchRemoteTable()` returns `{ source: 'fallback', table: DEFAULT_PRICING_TABLE }` and logs a structured warning:
+
+```json
+{ "event": "llm_pricing_fetch_failed", "url": "...", "error": "...", "fallback": "DEFAULT_PRICING_TABLE" }
+```
+
+Pricing failures never crash LLM requests — degraded mode (bundled table) is always preferable to an exception.
+
+### Testing
+
+Use `clearPricingCache(url?)` to reset the in-memory cache between tests:
+
+```typescript
+import { clearPricingCache } from '@diabolicallabs/llm-pricing';
+
+beforeEach(() => clearPricingCache());
+```
+
 ## Provider-specific behavior
 
 ### Anthropic — prompt cache
@@ -136,19 +195,26 @@ pnpm pricing:verify --threshold=5
 
 Requires `PERPLEXITY_API_KEY`. Queries Perplexity `sonar` once per provider, prints a diff table, and exits non-zero if any model's detected price differs by more than the threshold. **Never auto-updates the table** — detected drift triggers a human-verified research refresh.
 
-### Monthly drift check
+### Monthly drift check (v0.2.0+ hybrid model)
 
-A Routine running on the first of each month queries Perplexity `sonar` for all provider prices and diffs against the current table values. Detection threshold: 5% on input or output. When drift is detected, the Routine posts an alert to the `#repos` Slack channel. Tom triages within 48 hours and determines whether a full research refresh is warranted.
+A Routine running on the first of each month queries Perplexity `sonar` for all provider prices and diffs against `pricing/table.json`. Detection threshold: 5% on input or output. When drift is detected, the Routine opens a PR directly against `pricing/table.json` with the diffed price changes — no code change, no npm release needed.
 
-The Routine is detection only — it never auto-updates the table. All table changes require human-verified research before any PR is opened.
+**Refresh workflow (v0.2.0+):**
+1. Routine detects drift → opens a PR with updated `pricing/table.json`.
+2. Sable reviews + runs `pnpm pricing:verify`, then merges.
+3. After merge: run `node pricing/sync-bundled.mjs` to regenerate `table.ts`, commit both files together.
+4. Consumers using `pricing.remoteUrl` pick up the change on next process restart (no npm release needed).
+5. When bundled table is stale enough to warrant a release, bump `llm-pricing` and publish normally.
+
+This is lighter than the v0.1.0 flow which required a full release cycle per price fix.
 
 ### Reporting a pricing error
 
 If you notice a rate that appears wrong:
 
 1. Check the official provider pricing page (links in `ModelPricing.sourceUrl`).
-2. Open a GitHub issue in `dlabs-toolkit` with label `pricing-drift`, title: `[pricing-drift] {provider} {model} — detected rate: {X}, table rate: {Y}`.
-3. Tom will run a full research refresh; Sable will open a PR.
+2. Edit `pricing/table.json` directly via GitHub — or open an issue with label `pricing-drift`, title: `[pricing-drift] {provider} {model} — detected rate: {X}, table rate: {Y}`.
+3. Tom will verify; Sable opens a PR against `pricing/table.json`.
 
 ## License
 
