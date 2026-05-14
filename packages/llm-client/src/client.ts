@@ -126,29 +126,111 @@ function createProviderClient(config: LlmClientConfig & { model: string }): LlmC
  *
  * When config.pricing is set, cost computation is applied to every
  * complete(), structured(), and withTools() response.
+ *
+ * When config.pricing.remoteUrl is set (v1.7.0+), the pricing table is fetched
+ * from that URL on init (with a stale-while-revalidate cache). Adds at most one
+ * network round-trip to createClient(). Falls back silently to DEFAULT_PRICING_TABLE
+ * on fetch failure — never throws.
+ *
+ * Pricing source precedence (highest to lowest):
+ *   1. pricing.table (consumer override — explicit, static)
+ *   2. pricing.remoteUrl (fetched on init, cached per TTL)
+ *   3. DEFAULT_PRICING_TABLE (bundled fallback — always available)
  */
-export function createClient(config: LlmClientConfig): LlmClient {
+export async function createClient(config: LlmClientConfig): Promise<LlmClient> {
   const models = resolveModelArray(config.model);
   const fallbackOnSet: ReadonlySet<LlmErrorKind> =
     config.fallbackOn !== undefined ? new Set(config.fallbackOn) : DEFAULT_FALLBACK_ON;
+
+  // Resolve pricing table if remoteUrl is set and pricing.table is not (table wins).
+  // resolvedPricingConfig carries the same shape as config.pricing but may have
+  // an overridden table from the remote fetch.
+  let resolvedPricingConfig = config.pricing;
+
+  if (
+    config.pricing !== undefined &&
+    config.pricing.remoteUrl !== undefined &&
+    config.pricing.table === undefined
+  ) {
+    // Dynamic import — keeps @diabolicallabs/llm-pricing optional.
+    // If it's not installed, the import fails and we skip remoteUrl silently.
+    try {
+      const pricingMod = await import('@diabolicallabs/llm-pricing');
+      const { fetchRemoteTable } = pricingMod as {
+        fetchRemoteTable: (
+          url: string,
+          opts?: { cacheTtlMs?: number }
+        ) => Promise<{
+          table: import('@diabolicallabs/llm-pricing').PricingTable;
+          source: 'remote' | 'cache' | 'fallback';
+          fetchedAt?: string;
+          error?: string;
+        }>;
+      };
+
+      // exactOptionalPropertyTypes: omit cacheTtlMs from options when undefined
+      // to avoid passing { cacheTtlMs: undefined } to a { cacheTtlMs?: number } param.
+      const fetchOpts =
+        config.pricing.cacheTtlMs !== undefined
+          ? { cacheTtlMs: config.pricing.cacheTtlMs }
+          : undefined;
+      const result = await fetchRemoteTable(config.pricing.remoteUrl, fetchOpts);
+
+      // Log pricing source on init — structured line for observability.
+      console.info(
+        JSON.stringify({
+          event: 'pricing_source',
+          source: result.source,
+          url: config.pricing.remoteUrl,
+          fetchedAt: result.fetchedAt,
+          error: result.error,
+        })
+      );
+
+      // Merge the fetched table into the pricing config for this client instance.
+      resolvedPricingConfig = { ...config.pricing, table: result.table };
+    } catch {
+      // llm-pricing not installed or fetchRemoteTable unavailable.
+      // Log and continue with bundled default — cost will be computed from DEFAULT_PRICING_TABLE.
+      console.warn(
+        JSON.stringify({
+          event: 'pricing_source',
+          source: 'fallback',
+          url: config.pricing.remoteUrl,
+          error: '@diabolicallabs/llm-pricing is not installed or fetchRemoteTable unavailable',
+        })
+      );
+    }
+  } else if (config.pricing !== undefined) {
+    // No remoteUrl — log the source so all clients emit the pricing_source line.
+    const source = config.pricing.table !== undefined ? 'consumer_override' : 'bundled';
+    console.info(JSON.stringify({ event: 'pricing_source', source }));
+  }
+
+  // Build the resolved config — pricing.table now reflects the remote fetch result.
+  // exactOptionalPropertyTypes: only spread pricing when it's defined (never set to undefined).
+  const resolvedConfig: LlmClientConfig =
+    resolvedPricingConfig !== config.pricing && resolvedPricingConfig !== undefined
+      ? { ...config, pricing: resolvedPricingConfig }
+      : config;
 
   // Build the inner client (provider + optional failover + optional pricing).
   // wrapWithHooks is applied last so it is the outermost layer — hooks see the
   // final cost-annotated response and wrap the full retry + failover stack.
   let inner: LlmClient;
   if (models.length === 1) {
-    const singleConfig = configForModel(config, models[0]);
+    const singleConfig = configForModel(resolvedConfig, models[0]);
     inner = createProviderClient(singleConfig);
   } else {
-    inner = createFailoverClient(config, models, fallbackOnSet);
+    inner = createFailoverClient(resolvedConfig, models, fallbackOnSet);
   }
 
-  if (config.pricing !== undefined) {
-    inner = wrapWithPricing(inner, config);
+  if (resolvedConfig.pricing !== undefined) {
+    inner = wrapWithPricing(inner, resolvedConfig);
   }
 
   // Hooks are outermost — wrapWithHooks is a no-op when config.hooks is undefined.
-  return wrapWithHooks(inner, config);
+  return wrapWithHooks(inner, resolvedConfig);
 }
 
 // ─── createFailoverClient ────────────────────────────────────────────────────
@@ -740,11 +822,11 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
  *
  * Throws LlmError if the required env var is not set.
  */
-export function createClientFromEnv(
+export async function createClientFromEnv(
   provider: LlmClientConfig['provider'],
   model: string,
   overrides?: Partial<Omit<LlmClientConfig, 'provider' | 'model' | 'apiKey'>>
-): LlmClient {
+): Promise<LlmClient> {
   const apiKey = resolveApiKey(provider);
   return createClient({ provider, model, apiKey, ...overrides });
 }
