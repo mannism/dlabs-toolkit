@@ -54,7 +54,7 @@
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@diabolicallabs/llm-pricing": "^0.1.0"
+    "@diabolicallabs/llm-pricing": "^0.2.0"
   },
   "peerDependenciesMeta": {
     "@diabolicallabs/llm-pricing": {

@@ -347,7 +347,7 @@ describe('runAfterCall', () => {
 describe('createClient hooks integration — complete()', () => {
   it('beforeCall mutation: mutated messages reach the provider', async () => {
     let capturedCtx: LlmCallContext | undefined;
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async (ctx) => {
@@ -383,7 +383,7 @@ describe('createClient hooks integration — complete()', () => {
     // The skip goes through the early-return path before the try/finally block.
     // This means afterCall does NOT fire when skip is used.
 
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async () => {
@@ -408,7 +408,7 @@ describe('createClient hooks integration — complete()', () => {
   it('afterCall fires after successful complete()', async () => {
     const afterCallCaptures: LlmAfterCallContext[] = [];
 
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         afterCall: async (ctx) => {
@@ -434,7 +434,7 @@ describe('createClient hooks integration — complete()', () => {
   });
 
   it('beforeCall error propagates as LlmError(kind:bad_request)', async () => {
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async () => {
@@ -454,7 +454,7 @@ describe('createClient hooks integration — complete()', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const cached = makeMockResponse({ content: 'from cache' });
 
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async () => ({ skip: cached }),
@@ -522,7 +522,7 @@ describe('hooks fire once per invocation (not per retry)', () => {
 describe('skip result type validation', () => {
   it('skip with a plain LlmResponse is returned directly', async () => {
     const cached = makeMockResponse({ content: 'cache' });
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async () => ({ skip: cached }),
@@ -539,7 +539,7 @@ describe('skip result type validation', () => {
       yield { token: 'x' };
     }
 
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async () => ({
@@ -566,7 +566,7 @@ describe('hooks on streaming paths', () => {
       }
     }
 
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async () => ({ skip: cachedGen() }),
@@ -587,7 +587,7 @@ describe('hooks on streaming paths', () => {
       yield { token: 'x' };
     }
 
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async () => ({ skip: cachedGen() }),
@@ -620,7 +620,7 @@ describe('hooks on streaming paths', () => {
     }
 
     const schema = { parse: (d: unknown) => d as { value: number } };
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async () => ({ skip: cachedGen() }),
@@ -760,7 +760,7 @@ describe('afterCall.usage populated for all 5 call types (v1.6.0)', () => {
       yield { token: 'tok2', usage: MOCK_USAGE };
     }
 
-    const client = createClient({
+    const client = await createClient({
       ...BASE_CONFIG,
       hooks: {
         beforeCall: async () => ({ skip: generatorWithUsage() }),

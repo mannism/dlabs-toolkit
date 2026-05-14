@@ -223,13 +223,48 @@ export interface LlmClientConfig {
    * console.log(response.cost?.total); // e.g. 0.0045 (USD)
    */
   pricing?: {
-    /** Custom pricing table. Merged over the default table at the provider level. */
+    /**
+     * Custom pricing table. Merged over the default table at the provider level.
+     * When set, this takes precedence over remoteUrl — consumer-explicit table wins.
+     * Precedence order (highest to lowest):
+     *   1. pricing.table  (consumer override — explicit, static)
+     *   2. pricing.remoteUrl (fetched once on createClient() init, cached)
+     *   3. DEFAULT_PRICING_TABLE (bundled fallback — always available)
+     */
     table?: PricingTable;
     /**
      * When true, cost is computed on every call and attached to the response.
      * Default: true when pricing config is present.
      */
     computeOnEveryCall?: boolean;
+    /**
+     * Remote URL for the canonical pricing JSON (v1.7.0+).
+     *
+     * When set, createClient() fetches the pricing table from this URL on init
+     * (with a stale-while-revalidate cache). Useful for picking up price updates
+     * without a new npm release of @diabolicallabs/llm-pricing.
+     *
+     * Recommended value:
+     *   'https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.json'
+     *
+     * Ignored when pricing.table is also set (consumer-explicit table wins).
+     *
+     * On fetch failure, falls back silently to DEFAULT_PRICING_TABLE.
+     * Requires @diabolicallabs/llm-pricing ^0.2.0.
+     */
+    remoteUrl?: string;
+    /**
+     * Cache TTL in milliseconds for the remote pricing table (v1.7.0+).
+     *
+     * Default: 86_400_000 (24 hours).
+     *
+     * Rationale: GitHub raw fetches are cheap but bounded. 24h matches the
+     * realistic provider-repricing cadence — faster wouldn't catch drift sooner;
+     * slower starts to lag noticeably.
+     *
+     * Only relevant when pricing.remoteUrl is set.
+     */
+    cacheTtlMs?: number;
   };
 }
 
