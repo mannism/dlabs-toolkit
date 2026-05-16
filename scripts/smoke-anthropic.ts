@@ -1,6 +1,5 @@
 /**
  * Live smoke test for the Anthropic provider.
- * Gitignored — not committed.
  *
  * Run from monorepo root:
  *   set -a; source .env; set +a && npx tsx scripts/smoke-anthropic.ts
@@ -92,7 +91,7 @@ async function runSmoke(): Promise<void> {
 
   // ─── Test 1: complete() happy path ───────────────────────────────────────
   console.log(`Test 1: complete() with ${MODEL} — happy path`);
-  const client1 = createClientFromEnv('anthropic', MODEL);
+  const client1 = await createClientFromEnv('anthropic', MODEL);
   const start1 = Date.now();
   const result1 = await client1.complete([
     {
@@ -110,7 +109,7 @@ async function runSmoke(): Promise<void> {
 
   // ─── Test 2: stream() ─────────────────────────────────────────────────────
   console.log(`Test 2: stream() with ${MODEL}`);
-  const client2 = createClientFromEnv('anthropic', MODEL);
+  const client2 = await createClientFromEnv('anthropic', MODEL);
   let accumulated = '';
   let finalUsage = undefined as import('../packages/llm-client/src/types.js').LlmUsage | undefined;
 
@@ -136,7 +135,7 @@ async function runSmoke(): Promise<void> {
 
   // ─── Test 3: structured() with Zod 4 schema ──────────────────────────────
   console.log(`Test 3: structured() with ${MODEL} — Zod 4 tool-use path`);
-  const client3 = createClientFromEnv('anthropic', MODEL);
+  const client3 = await createClientFromEnv('anthropic', MODEL);
 
   const TopicSchema = z.object({
     topic: z.string(),
@@ -168,7 +167,7 @@ async function runSmoke(): Promise<void> {
   // Second call: cache read (cacheReadTokens > 0).
   // Both calls must complete within the 5-minute ephemeral cache TTL window.
   console.log('Test 4a: complete() with promptCache: "ephemeral" — first call (cache write)');
-  const client4 = createClientFromEnv('anthropic', MODEL);
+  const client4 = await createClientFromEnv('anthropic', MODEL);
   const cacheOptions = {
     providerOptions: { promptCache: 'ephemeral' as const },
   };
