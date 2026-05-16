@@ -85,7 +85,7 @@ async function main(): Promise<void> {
   // ───────────────────────────────────────────────────────────────────────────
   section('Anthropic — claude-3-5-haiku-20241022');
 
-  const anthropic = createClientFromEnv('anthropic', 'claude-3-5-haiku-20241022', {
+  const anthropic = await createClientFromEnv('anthropic', 'claude-3-5-haiku-20241022', {
     maxTokens: 256,
     maxRetries: 2,
   });
@@ -161,7 +161,7 @@ async function main(): Promise<void> {
   // ───────────────────────────────────────────────────────────────────────────
   section('OpenAI — gpt-4o-mini');
 
-  const openai = createClientFromEnv('openai', 'gpt-4o-mini', {
+  const openai = await createClientFromEnv('openai', 'gpt-4o-mini', {
     maxTokens: 256,
     maxRetries: 2,
   });
@@ -240,7 +240,7 @@ async function main(): Promise<void> {
   if (!process.env['GOOGLE_AI_API_KEY']) {
     skipSection('gemini', 'GOOGLE_AI_API_KEY not set');
   } else {
-    const gemini = createClientFromEnv('gemini', 'gemini-2.0-flash', {
+    const gemini = await createClientFromEnv('gemini', 'gemini-2.0-flash', {
       maxTokens: 256,
       maxRetries: 2,
     });
@@ -320,7 +320,7 @@ async function main(): Promise<void> {
   if (!process.env['DEEPSEEK_API_KEY']) {
     skipSection('deepseek', 'DEEPSEEK_API_KEY not set');
   } else {
-    const deepseek = createClientFromEnv('deepseek', 'deepseek-chat', {
+    const deepseek = await createClientFromEnv('deepseek', 'deepseek-chat', {
       maxTokens: 256,
       maxRetries: 2,
     });

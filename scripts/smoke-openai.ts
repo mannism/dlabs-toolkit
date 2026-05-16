@@ -1,6 +1,5 @@
 /**
  * Live smoke test for the OpenAI provider.
- * Gitignored — not committed.
  *
  * Run from monorepo root:
  *   set -a; source .env; set +a && npx tsx scripts/smoke-openai.ts
@@ -40,7 +39,7 @@ async function runSmoke(): Promise<void> {
   // max_completion_tokens, the API returns a 400 with "unsupported parameter: max_tokens".
   // A clean response here confirms the rename in openai.ts:145 is functioning.
   console.log(`Test 1: complete() with ${MODEL} and maxTokens: 256 — proves max_completion_tokens rename`);
-  const client1 = createClientFromEnv('openai', MODEL);
+  const client1 = await createClientFromEnv('openai', MODEL);
   const result1 = await client1.complete(
     [
       {
@@ -62,7 +61,7 @@ async function runSmoke(): Promise<void> {
 
   // ─── Test 2: stream() ─────────────────────────────────────────────────────
   console.log(`Test 2: stream() with ${MODEL}`);
-  const client2 = createClientFromEnv('openai', MODEL);
+  const client2 = await createClientFromEnv('openai', MODEL);
   let accumulated = '';
   let finalUsage: LlmUsage | undefined;
 
@@ -89,7 +88,7 @@ async function runSmoke(): Promise<void> {
   // ─── Test 3: structured() strict path — Zod 4 json_schema mode ──────────
   // Exercises response_format: { type: 'json_schema', strict: true } in openai.ts:278.
   console.log(`Test 3: structured() with ${MODEL} — Zod 4 json_schema strict mode`);
-  const client3 = createClientFromEnv('openai', MODEL);
+  const client3 = await createClientFromEnv('openai', MODEL);
 
   const TopicSchema = z.object({
     topic: z.string(),
@@ -119,7 +118,7 @@ async function runSmoke(): Promise<void> {
   // This exercises the prompt-only json_object path in openai.ts:363, including the
   // parseJsonOrThrow extractor that handles fences and trailing prose.
   console.log(`Test 4: structured() with ${MODEL} — prompt-fallback path (GEOAudit's call shape)`);
-  const client4 = createClientFromEnv('openai', MODEL);
+  const client4 = await createClientFromEnv('openai', MODEL);
 
   const FallbackSchema = z.object({
     topic: z.string(),

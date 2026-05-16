@@ -24,7 +24,7 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const client = createClientFromEnv('deepseek', 'deepseek-v4-flash', { maxTokens: 5 });
+const client = await createClientFromEnv('deepseek', 'deepseek-v4-flash', { maxTokens: 5 });
 
 console.log('[smoke-deepseek] Starting complete() call...');
 const start = Date.now();

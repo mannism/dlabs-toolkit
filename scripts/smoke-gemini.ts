@@ -1,6 +1,5 @@
 /**
  * Live smoke test for the Gemini provider.
- * Gitignored — not committed.
  *
  * Run from monorepo root:
  *   set -a; source .env; set +a && npx tsx scripts/smoke-gemini.ts
@@ -39,7 +38,7 @@ async function runSmoke(): Promise<void> {
 
   // ─── Test 1: complete() happy path ───────────────────────────────────────
   console.log(`Test 1: complete() with ${MODEL} — happy path`);
-  const client1 = createClientFromEnv('gemini', MODEL);
+  const client1 = await createClientFromEnv('gemini', MODEL);
   const result1 = await client1.complete([
     {
       role: 'user',
@@ -63,7 +62,7 @@ async function runSmoke(): Promise<void> {
   // The provider wraps the SDK stream with withStallTimeout and yields an empty
   // sentinel chunk with usage at the end (gemini.ts:272).
   console.log(`Test 2: stream() with ${MODEL}`);
-  const client2 = createClientFromEnv('gemini', MODEL);
+  const client2 = await createClientFromEnv('gemini', MODEL);
   let accumulated = '';
   let finalUsage: LlmUsage | undefined;
 
@@ -92,7 +91,7 @@ async function runSmoke(): Promise<void> {
   // via toProviderSchema) plus responseMimeType: 'application/json'. The provider does a
   // belt-and-braces fence-strip on the response before JSON.parse (gemini.ts:333).
   console.log(`Test 3: structured() with ${MODEL} — Zod 4 responseSchema path`);
-  const client3 = createClientFromEnv('gemini', MODEL);
+  const client3 = await createClientFromEnv('gemini', MODEL);
 
   const TopicSchema = z.object({
     topic: z.string(),

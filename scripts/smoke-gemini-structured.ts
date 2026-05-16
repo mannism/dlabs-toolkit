@@ -32,7 +32,7 @@ async function runSmoke(): Promise<void> {
 
   console.log('=== Gemini Structured Output Smoke Test ===\n');
 
-  const client = createClientFromEnv('gemini', MODEL);
+  const client = await createClientFromEnv('gemini', MODEL);
   let passed = 0;
   let failed = 0;
 

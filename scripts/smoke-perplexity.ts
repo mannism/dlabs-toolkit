@@ -1,6 +1,5 @@
 /**
  * Live smoke test for the Perplexity provider.
- * Gitignored — not committed.
  *
  * Run from monorepo root:
  *   set -a; source .env; set +a
@@ -31,7 +30,7 @@ async function runSmoke(): Promise<void> {
   // ─── Test 1: sonar — happy path with citations ───────────────────────────
   console.log('Test 1: complete() with sonar — expecting citations');
   const start1 = Date.now();
-  const client1 = createClientFromEnv('perplexity', 'sonar');
+  const client1 = await createClientFromEnv('perplexity', 'sonar');
   const result1 = await client1.complete([{ role: 'user', content: QUESTION }]);
   console.log(`  model: ${result1.model}`);
   console.log(`  latency: ${result1.latencyMs}ms`);
@@ -49,7 +48,7 @@ async function runSmoke(): Promise<void> {
 
   // ─── Test 2: sonar-reasoning-pro ─────────────────────────────────────────
   console.log('Test 2: complete() with sonar-reasoning-pro');
-  const client2 = createClientFromEnv('perplexity', 'sonar-reasoning-pro');
+  const client2 = await createClientFromEnv('perplexity', 'sonar-reasoning-pro');
   const result2 = await client2.complete([
     { role: 'user', content: 'What is 2 + 2? Answer with just the number.' },
   ]);
@@ -60,7 +59,7 @@ async function runSmoke(): Promise<void> {
 
   // ─── Test 3: search_recency_filter ───────────────────────────────────────
   console.log("Test 3: complete() with providerOptions: { search_recency_filter: 'week' }");
-  const client3 = createClientFromEnv('perplexity', 'sonar');
+  const client3 = await createClientFromEnv('perplexity', 'sonar');
   const result3 = await client3.complete(
     [{ role: 'user', content: 'What AI news happened this week?' }],
     { providerOptions: { search_recency_filter: 'week' } }
@@ -75,7 +74,7 @@ async function runSmoke(): Promise<void> {
   console.log(
     "Test 4: complete() with providerOptions: { search_domain_filter: ['example.com'] }"
   );
-  const client4 = createClientFromEnv('perplexity', 'sonar');
+  const client4 = await createClientFromEnv('perplexity', 'sonar');
   const result4 = await client4.complete(
     [{ role: 'user', content: 'Tell me about example.com — what is it used for?' }],
     { providerOptions: { search_domain_filter: ['example.com'] } }
