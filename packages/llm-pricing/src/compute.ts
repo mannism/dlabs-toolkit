@@ -60,15 +60,18 @@ export function _resetWarnSetsForTesting(): void {
  *   -YYYY-MM     e.g. gpt-4o-2024-08 (rare)
  */
 function stripDateSuffix(model: string): string | null {
-  // -YYYY-MM-DD (e.g. gpt-5.4-mini-2026-03-17) — check longest pattern first
-  const ymdMatch = /^(?<base>.+)-\d{4}-\d{2}-\d{2}$/.exec(model);
-  if (ymdMatch?.groups?.['base'] !== undefined) return ymdMatch.groups['base'];
+  // Use positional capture group [1] to avoid noPropertyAccessFromIndexSignature
+  // conflict with named groups. Patterns checked longest-first.
+  //
+  // -YYYY-MM-DD (e.g. gpt-5.4-mini-2026-03-17)
+  const ymdBase = /^(.+)-\d{4}-\d{2}-\d{2}$/.exec(model)?.[1];
+  if (ymdBase !== undefined) return ymdBase;
   // -YYYYMMDD (e.g. claude-haiku-4-5-20251001)
-  const ymdCompactMatch = /^(?<base>.+)-\d{8}$/.exec(model);
-  if (ymdCompactMatch?.groups?.['base'] !== undefined) return ymdCompactMatch.groups['base'];
+  const ymdCompactBase = /^(.+)-\d{8}$/.exec(model)?.[1];
+  if (ymdCompactBase !== undefined) return ymdCompactBase;
   // -YYYY-MM (e.g. gpt-4o-2024-08)
-  const ymMatch = /^(?<base>.+)-\d{4}-\d{2}$/.exec(model);
-  if (ymMatch?.groups?.['base'] !== undefined) return ymMatch.groups['base'];
+  const ymBase = /^(.+)-\d{4}-\d{2}$/.exec(model)?.[1];
+  if (ymBase !== undefined) return ymBase;
   return null;
 }
 

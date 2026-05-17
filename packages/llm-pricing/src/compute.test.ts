@@ -710,7 +710,11 @@ describe('computeCost — new model rows (patch 1)', () => {
   it('gemini-3.1-pro: long-context tier applies above 200k tokens', () => {
     // This is the non-preview variant added in patch 1.
     const usageShort = basicUsage(100_000, 50_000);
-    const costShort = computeCost({ usage: usageShort, provider: 'gemini', model: 'gemini-3.1-pro' });
+    const costShort = computeCost({
+      usage: usageShort,
+      provider: 'gemini',
+      model: 'gemini-3.1-pro',
+    });
     // Short-context: $2.00/1M input, $12.00/1M output
     expect(costShort.input).toBeCloseTo(0.2, 5);
     expect(costShort.output).toBeCloseTo(0.6, 5);
