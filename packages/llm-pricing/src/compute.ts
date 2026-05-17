@@ -7,8 +7,12 @@
  *   1-hr tier (cacheWrite1hPer1M) is reserved for a future LlmUsage.cacheWrite1hTokens field.
  * - Reasoning models (o-series): hasInvisibleReasoningTokens sets isPartial = true on result.
  * - Perplexity sonar-deep-research: partialCostCoverage sets isPartial = true.
- * - Deprecated aliases: emits console.warn once per alias at runtime.
- * - Unknown model: returns zero cost with isPartial = true and logs a warning.
+ * - Deprecated aliases: emits console.warn once per alias per process lifetime.
+ * - Unknown model: returns zero cost with isPartial = true and logs a warning once per model.
+ * - Date-strip fallback: if exact lookup fails, strips trailing date suffixes
+ *   (-YYYY-MM-DD, -YYYYMMDD, -YYYY-MM) and retries. Emits a warn once per dated model ID.
+ *   Fixes cost-tracking leak where providers return dated model IDs (e.g. gpt-5.4-mini-2026-03-17)
+ *   that don't match alias-only entries in the pricing table.
  */
 
 import { DEFAULT_PRICING_TABLE } from './table.js';
@@ -19,11 +23,72 @@ function perMillion(tokens: number): number {
   return tokens / 1_000_000;
 }
 
+// ---------------------------------------------------------------------------
+// Warn-once Sets — keyed by `${provider}::${model}` so the same warn fires
+// once per unique (provider, model) pair per process lifetime. High-volume
+// callers (GEOAudit firing hundreds of requests/hour) would otherwise spam logs.
+// Three separate Sets so warn messages can identify the cause by the set used.
+// ---------------------------------------------------------------------------
+
+/** Tracks models that have already emitted a deprecation warning. */
+const deprecationWarnedSet = new Set<string>();
+
+/** Tracks (provider, model) pairs that have already emitted an unknown-model warning. */
+const unknownModelWarnedSet = new Set<string>();
+
+/** Tracks dated model IDs that have already emitted a date-strip fallback warning. */
+const dateStripWarnedSet = new Set<string>();
+
 /**
- * Resolve the ModelPricing record for a given provider + model,
- * handling deprecated aliases and unknown models.
+ * Clear all warn-once Sets. Exported for test isolation only — do not call in production code.
+ * Module-level Sets persist across test cases in the same process; clearing them in beforeEach
+ * ensures each test can assert on first-warn behavior independently.
+ */
+export function _resetWarnSetsForTesting(): void {
+  deprecationWarnedSet.clear();
+  unknownModelWarnedSet.clear();
+  dateStripWarnedSet.clear();
+}
+
+/**
+ * Strip a trailing date suffix from a model string, returning the base alias.
+ * Returns null if no recognizable date suffix is found.
  *
- * Returns null if the model is not in the table.
+ * Patterns (checked longest-first to avoid greedy partial matches):
+ *   -YYYY-MM-DD  e.g. gpt-5.4-mini-2026-03-17, claude-opus-4-7-20251101 (wrong fmt — see -YYYYMMDD)
+ *   -YYYYMMDD    e.g. claude-haiku-4-5-20251001
+ *   -YYYY-MM     e.g. gpt-4o-2024-08 (rare)
+ */
+function stripDateSuffix(model: string): string | null {
+  // Use positional capture group [1] to avoid noPropertyAccessFromIndexSignature
+  // conflict with named groups. Patterns checked longest-first.
+  //
+  // -YYYY-MM-DD (e.g. gpt-5.4-mini-2026-03-17)
+  const ymdBase = /^(.+)-\d{4}-\d{2}-\d{2}$/.exec(model)?.[1];
+  if (ymdBase !== undefined) return ymdBase;
+  // -YYYYMMDD (e.g. claude-haiku-4-5-20251001)
+  const ymdCompactBase = /^(.+)-\d{8}$/.exec(model)?.[1];
+  if (ymdCompactBase !== undefined) return ymdCompactBase;
+  // -YYYY-MM (e.g. gpt-4o-2024-08)
+  const ymBase = /^(.+)-\d{4}-\d{2}$/.exec(model)?.[1];
+  if (ymBase !== undefined) return ymBase;
+  return null;
+}
+
+/**
+ * Resolve the ModelPricing record for a given provider + model.
+ *
+ * Lookup order:
+ * 1. Exact match against provider table.
+ * 2. Date-strip fallback: strips trailing date suffix from model ID and retries.
+ *    This handles providers that return dated model IDs (e.g. gpt-5.4-mini-2026-03-17)
+ *    when the table only has the canonical alias (e.g. gpt-5.4-mini).
+ *
+ * Emits warn-once console.warn for:
+ * - Deprecated alias hits (once per alias).
+ * - Date-strip fallback hits (once per dated model ID).
+ *
+ * Returns null if neither lookup finds a match.
  */
 function resolveModelPricing(
   table: PricingTable,
@@ -33,19 +98,43 @@ function resolveModelPricing(
   const providerTable = table[provider];
   if (providerTable === undefined) return null;
 
+  // --- Exact match ---
   const record = providerTable[model];
-  if (record === undefined) return null;
-
-  // Emit deprecation warning if this is a known deprecated alias.
-  // We warn on every call — consumers should update their model IDs.
-  if (record.deprecatedAliasFor !== undefined) {
-    console.warn(
-      `[llm-pricing] Model ID '${model}' is deprecated — use '${record.deprecatedAliasFor}' instead. ` +
-        `The deprecated alias maps to the same pricing as ${record.deprecatedAliasFor}.`
-    );
+  if (record !== undefined) {
+    // Emit deprecation warning once per deprecated alias.
+    if (record.deprecatedAliasFor !== undefined) {
+      const warnKey = `${provider}::${model}`;
+      if (!deprecationWarnedSet.has(warnKey)) {
+        deprecationWarnedSet.add(warnKey);
+        console.warn(
+          `[llm-pricing] Model ID '${model}' is deprecated — use '${record.deprecatedAliasFor}' instead. ` +
+            `The deprecated alias maps to the same pricing as ${record.deprecatedAliasFor}.`
+        );
+      }
+    }
+    return record;
   }
 
-  return record;
+  // --- Date-strip fallback ---
+  // Fires only when the exact lookup missed. Handles providers that echo back a
+  // dated snapshot ID (e.g. gpt-5.4-mini-2026-03-17) while the table has the alias.
+  const alias = stripDateSuffix(model);
+  if (alias !== null) {
+    const aliasRecord = providerTable[alias];
+    if (aliasRecord !== undefined) {
+      const warnKey = `${provider}::${model}`;
+      if (!dateStripWarnedSet.has(warnKey)) {
+        dateStripWarnedSet.add(warnKey);
+        console.warn(
+          `[llm-pricing] Matched via date-strip fallback: '${model}' → '${alias}'. ` +
+            `Update the pricing table to add '${model}' as an explicit entry to silence this warning.`
+        );
+      }
+      return aliasRecord;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -69,10 +158,15 @@ export function computeCost(input: ComputeCostInput): LlmCost {
   const pricing = resolveModelPricing(table, provider, model);
 
   if (pricing === null) {
-    console.warn(
-      `[llm-pricing] No pricing data for provider='${provider}' model='${model}'. ` +
-        `Returning zero cost with isPartial=true. Update the pricing table or provide an override.`
-    );
+    // Warn once per unique (provider, model) pair — high-volume callers should not spam logs.
+    const unknownKey = `${provider}::${model}`;
+    if (!unknownModelWarnedSet.has(unknownKey)) {
+      unknownModelWarnedSet.add(unknownKey);
+      console.warn(
+        `[llm-pricing] No pricing data for provider='${provider}' model='${model}'. ` +
+          `Returning zero cost with isPartial=true. Update the pricing table or provide an override.`
+      );
+    }
     return {
       input: 0,
       output: 0,
