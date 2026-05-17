@@ -10,10 +10,13 @@
  * - Override pricing table behavior
  * - Reasoning model isPartial flag (o-series)
  * - sonar-deep-research partialCostCoverage flag
+ * - Date-strip fallback for dated model IDs (e.g. gpt-5.4-mini-2026-03-17)
+ * - Warn-once behavior for unknown/deprecated/date-strip warns
+ * - New model rows: claude-opus-4-5, gpt-5.4-nano, gpt-4o, gemini-3.1-pro long-context
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { computeCost } from './compute.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { _resetWarnSetsForTesting, computeCost } from './compute.js';
 import { DEFAULT_PRICING_TABLE } from './table.js';
 import type { LlmUsage, PricingTable } from './types.js';
 
@@ -26,6 +29,9 @@ beforeEach(() => {
   console.warn = (...args: unknown[]) => {
     warnCalls.push(args.map(String).join(' '));
   };
+  // Reset module-level warn-once Sets so each test can assert on first-warn behavior
+  // independently. Without this, warn Sets accumulate across tests in the same process.
+  _resetWarnSetsForTesting();
 });
 
 afterEach(() => {
@@ -522,7 +528,7 @@ describe('DEFAULT_PRICING_TABLE integrity', () => {
 
   it('Gemini long-context models have paired threshold + rate fields', () => {
     const { gemini } = DEFAULT_PRICING_TABLE;
-    const tieredModels = ['gemini-3.1-pro-preview', 'gemini-2.5-pro'];
+    const tieredModels = ['gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-3.1-pro'];
     for (const model of tieredModels) {
       const record = gemini[model];
       expect(record?.longContextThreshold, `${model} missing longContextThreshold`).toBeDefined();
@@ -536,5 +542,205 @@ describe('DEFAULT_PRICING_TABLE integrity', () => {
         `${model} long-context input should be higher than standard`
       ).toBeGreaterThan(record?.inputPer1M ?? 0);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Date-strip fallback
+// ---------------------------------------------------------------------------
+
+describe('computeCost — date-strip fallback', () => {
+  it('gpt-5.4-mini-2026-03-17: resolves to gpt-5.4-mini pricing (the prod leak case)', () => {
+    // This is the exact model ID GEOAudit's afterCall hook receives from the
+    // OpenAI Responses API. Before this fix, it returned { total: 0, isPartial: true }.
+    const usage = basicUsage(1_000_000, 500_000);
+    const cost = computeCost({ usage, provider: 'openai', model: 'gpt-5.4-mini-2026-03-17' });
+
+    // gpt-5.4-mini: Input $0.75/1M, Output $4.50/1M
+    expect(cost.input).toBeCloseTo(0.75, 5);
+    expect(cost.output).toBeCloseTo(2.25, 5);
+    expect(cost.total).toBeGreaterThan(0);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gpt-5.4-mini-2026-03-17: emits date-strip fallback warn', () => {
+    const usage = basicUsage(100_000, 50_000);
+    computeCost({ usage, provider: 'openai', model: 'gpt-5.4-mini-2026-03-17' });
+
+    const fallbackWarns = warnCalls.filter((w) => w.includes('date-strip fallback'));
+    expect(fallbackWarns).toHaveLength(1);
+    expect(fallbackWarns[0]).toContain('gpt-5.4-mini-2026-03-17');
+    expect(fallbackWarns[0]).toContain('gpt-5.4-mini');
+  });
+
+  it('claude-opus-4-7-20251101: strips -YYYYMMDD suffix, resolves to claude-opus-4-7', () => {
+    const usage = basicUsage(100_000, 100_000);
+    const cost = computeCost({ usage, provider: 'anthropic', model: 'claude-opus-4-7-20251101' });
+
+    // claude-opus-4-7: Input $5.00/1M, Output $25.00/1M
+    expect(cost.input).toBeCloseTo(0.5, 5);
+    expect(cost.output).toBeCloseTo(2.5, 5);
+    expect(cost.total).toBeGreaterThan(0);
+    expect(cost.isPartial).toBe(false);
+    // Date-strip warn should fire
+    expect(warnCalls.some((w) => w.includes('date-strip fallback'))).toBe(true);
+  });
+
+  it('claude-haiku-4-5-20251001: exact match wins, fallback never fires', () => {
+    // This dated ID IS in the table as an explicit entry — exact match must win.
+    const usage = basicUsage(1_000_000, 1_000_000);
+    const cost = computeCost({ usage, provider: 'anthropic', model: 'claude-haiku-4-5-20251001' });
+
+    // claude-haiku-4-5: Input $1.00/1M, Output $5.00/1M
+    expect(cost.input).toBeCloseTo(1.0, 5);
+    expect(cost.output).toBeCloseTo(5.0, 5);
+    expect(cost.total).toBeGreaterThan(0);
+    expect(cost.isPartial).toBe(false);
+    // No date-strip fallback warn — exact match path
+    expect(warnCalls.some((w) => w.includes('date-strip fallback'))).toBe(false);
+  });
+
+  it('unknown-model-2026-01-01: strips to unknown-model, still not found → zero cost', () => {
+    const usage = basicUsage(100_000, 50_000);
+    const cost = computeCost({ usage, provider: 'openai', model: 'unknown-model-2026-01-01' });
+
+    expect(cost.total).toBe(0);
+    expect(cost.isPartial).toBe(true);
+    // Unknown model warn fires, not date-strip warn (alias also misses)
+    expect(warnCalls.some((w) => w.includes('No pricing data'))).toBe(true);
+    expect(warnCalls.some((w) => w.includes('date-strip fallback'))).toBe(false);
+  });
+
+  it('deepseek-v4-flash: no date suffix, exact match, no fallback attempted', () => {
+    const usage = basicUsage(1_000_000, 500_000);
+    const cost = computeCost({ usage, provider: 'deepseek', model: 'deepseek-v4-flash' });
+
+    expect(cost.total).toBeGreaterThan(0);
+    expect(cost.isPartial).toBe(false);
+    expect(warnCalls.some((w) => w.includes('date-strip fallback'))).toBe(false);
+    expect(warnCalls.some((w) => w.includes('No pricing data'))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Warn-once behavior
+// ---------------------------------------------------------------------------
+
+describe('computeCost — warn-once for repeated calls', () => {
+  it('unknown model: console.warn fires exactly once across multiple calls', () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    // Reset the spy after beforeEach replaced console.warn — spy on the intercepted version
+    // Restore to get accurate call count from vi.spyOn
+    console.warn = originalWarn;
+    _resetWarnSetsForTesting();
+    const warnSpyReal = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const usage = basicUsage(100_000, 50_000);
+    computeCost({ usage, provider: 'openai', model: 'gpt-unknown-9999' });
+    computeCost({ usage, provider: 'openai', model: 'gpt-unknown-9999' });
+    computeCost({ usage, provider: 'openai', model: 'gpt-unknown-9999' });
+
+    const unknownWarns = warnSpyReal.mock.calls.filter((args) =>
+      String(args[0]).includes('No pricing data')
+    );
+    expect(unknownWarns).toHaveLength(1);
+
+    warnSpyReal.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it('date-strip fallback: warn fires exactly once for the same dated model ID', () => {
+    console.warn = originalWarn;
+    _resetWarnSetsForTesting();
+    const warnSpyReal = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const usage = basicUsage(100_000, 50_000);
+    computeCost({ usage, provider: 'openai', model: 'gpt-5.4-mini-2026-03-17' });
+    computeCost({ usage, provider: 'openai', model: 'gpt-5.4-mini-2026-03-17' });
+    computeCost({ usage, provider: 'openai', model: 'gpt-5.4-mini-2026-03-17' });
+
+    const fallbackWarns = warnSpyReal.mock.calls.filter((args) =>
+      String(args[0]).includes('date-strip fallback')
+    );
+    expect(fallbackWarns).toHaveLength(1);
+
+    warnSpyReal.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// New model pricing rows — smoke tests
+// ---------------------------------------------------------------------------
+
+describe('computeCost — new model rows (patch 1)', () => {
+  it('claude-opus-4-5: correct pricing (same tier as claude-opus-4-7)', () => {
+    const usage = basicUsage(1_000_000, 1_000_000);
+    const cost = computeCost({ usage, provider: 'anthropic', model: 'claude-opus-4-5' });
+
+    // Input: $5.00/1M, Output: $25.00/1M
+    expect(cost.input).toBeCloseTo(5.0, 5);
+    expect(cost.output).toBeCloseTo(25.0, 5);
+    expect(round(cost.total)).toBe(30.0);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gpt-5.4-nano: lowest OpenAI tier pricing', () => {
+    const usage = basicUsage(1_000_000, 1_000_000);
+    const cost = computeCost({ usage, provider: 'openai', model: 'gpt-5.4-nano' });
+
+    // Input: $0.20/1M, Output: $1.25/1M
+    expect(cost.input).toBeCloseTo(0.2, 5);
+    expect(cost.output).toBeCloseTo(1.25, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gpt-4o: mid-tier pricing with cache read', () => {
+    const usage = basicUsage(1_000_000, 500_000, { cacheReadTokens: 500_000 });
+    const cost = computeCost({ usage, provider: 'openai', model: 'gpt-4o' });
+
+    // Input: 1M × $2.50 = $2.50
+    // Output: 0.5M × $10.00 = $5.00
+    // CacheRead: 0.5M × $1.25 = $0.625
+    expect(cost.input).toBeCloseTo(2.5, 5);
+    expect(cost.output).toBeCloseTo(5.0, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.625, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gemini-3.1-pro: long-context tier applies above 200k tokens', () => {
+    // This is the non-preview variant added in patch 1.
+    const usageShort = basicUsage(100_000, 50_000);
+    const costShort = computeCost({ usage: usageShort, provider: 'gemini', model: 'gemini-3.1-pro' });
+    // Short-context: $2.00/1M input, $12.00/1M output
+    expect(costShort.input).toBeCloseTo(0.2, 5);
+    expect(costShort.output).toBeCloseTo(0.6, 5);
+
+    const usageLong = basicUsage(250_000, 100_000);
+    const costLong = computeCost({ usage: usageLong, provider: 'gemini', model: 'gemini-3.1-pro' });
+    // Long-context: $4.00/1M input, $18.00/1M output
+    expect(costLong.input).toBeCloseTo(1.0, 5);
+    expect(costLong.output).toBeCloseTo(1.8, 5);
+    expect(costLong.isPartial).toBe(false);
+  });
+
+  it('o3-mini: reasoning model, isPartial = true', () => {
+    const usage = basicUsage(100_000, 100_000);
+    const cost = computeCost({ usage, provider: 'openai', model: 'o3-mini' });
+
+    // Input: $1.10/1M, Output: $4.40/1M
+    expect(cost.input).toBeCloseTo(0.11, 5);
+    expect(cost.output).toBeCloseTo(0.44, 5);
+    expect(cost.isPartial).toBe(true); // hasInvisibleReasoningTokens
+  });
+
+  it('o1: reasoning model, isPartial = true, with cache read', () => {
+    const usage = basicUsage(100_000, 50_000, { cacheReadTokens: 200_000 });
+    const cost = computeCost({ usage, provider: 'openai', model: 'o1' });
+
+    // Input: $15.00/1M, Output: $60.00/1M, CacheRead: $7.50/1M
+    expect(cost.input).toBeCloseTo(1.5, 5);
+    expect(cost.output).toBeCloseTo(3.0, 5);
+    expect(cost.cacheRead).toBeCloseTo(1.5, 5);
+    expect(cost.isPartial).toBe(true);
   });
 });
