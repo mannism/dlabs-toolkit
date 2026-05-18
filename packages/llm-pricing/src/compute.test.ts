@@ -669,6 +669,86 @@ describe('computeCost — warn-once for repeated calls', () => {
 });
 
 // ---------------------------------------------------------------------------
+// New model pricing rows — gpt-5.1/5.2/5.3 family (patch 2, 2026-05-18)
+// ---------------------------------------------------------------------------
+
+describe('computeCost — gpt-5.1/5.2/5.3 family (patch 2)', () => {
+  it('gpt-5.1: correct input/output/cacheRead pricing', () => {
+    const usage = basicUsage(1_000_000, 500_000, { cacheReadTokens: 1_000_000 });
+    const cost = computeCost({ usage, provider: 'openai', model: 'gpt-5.1' });
+
+    // Input: 1M × $1.25 = $1.25
+    // Output: 0.5M × $10.00 = $5.00
+    // CacheRead: 1M × $0.125 = $0.125
+    expect(cost.input).toBeCloseTo(1.25, 5);
+    expect(cost.output).toBeCloseTo(5.0, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.125, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gpt-5.1-2025-11-13: date-strip fallback resolves to gpt-5.1 pricing', () => {
+    // A real dated variant returned by the OpenAI Responses API.
+    // date-strip fallback should strip -2025-11-13 and match gpt-5.1.
+    const usage = basicUsage(1_000_000, 500_000);
+    const cost = computeCost({ usage, provider: 'openai', model: 'gpt-5.1-2025-11-13' });
+
+    // Same rates as gpt-5.1
+    expect(cost.input).toBeCloseTo(1.25, 5);
+    expect(cost.output).toBeCloseTo(5.0, 5);
+    expect(cost.total).toBeGreaterThan(0);
+    expect(cost.isPartial).toBe(false);
+    // Date-strip warn must fire
+    expect(warnCalls.some((w) => w.includes('date-strip fallback'))).toBe(true);
+  });
+
+  it('gpt-5.1-codex-mini: lowest gpt-5.1 tier', () => {
+    const usage = basicUsage(1_000_000, 1_000_000);
+    const cost = computeCost({ usage, provider: 'openai', model: 'gpt-5.1-codex-mini' });
+
+    // Input: $0.25/1M, Output: $2.00/1M
+    expect(cost.input).toBeCloseTo(0.25, 5);
+    expect(cost.output).toBeCloseTo(2.0, 5);
+    expect(round(cost.total)).toBe(2.25);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gpt-5.2: same rates as gpt-5.3-chat-latest and gpt-5.3-codex', () => {
+    const usage = basicUsage(1_000_000, 500_000);
+    const c52 = computeCost({ usage, provider: 'openai', model: 'gpt-5.2' });
+    const c53chat = computeCost({ usage, provider: 'openai', model: 'gpt-5.3-chat-latest' });
+    const c53codex = computeCost({ usage, provider: 'openai', model: 'gpt-5.3-codex' });
+
+    // Input: 1M × $1.75 = $1.75, Output: 0.5M × $14.00 = $7.00
+    expect(c52.input).toBeCloseTo(1.75, 5);
+    expect(c52.output).toBeCloseTo(7.0, 5);
+    expect(c52.total).toBeCloseTo(c53chat.total, 5);
+    expect(c52.total).toBeCloseTo(c53codex.total, 5);
+    expect(c52.isPartial).toBe(false);
+  });
+
+  it('gpt-5.2-pro: premium tier with highest output rate', () => {
+    const usage = basicUsage(100_000, 100_000, { cacheReadTokens: 100_000 });
+    const cost = computeCost({ usage, provider: 'openai', model: 'gpt-5.2-pro' });
+
+    // Input: 0.1M × $21.00 = $2.10
+    // Output: 0.1M × $168.00 = $16.80
+    // CacheRead: 0.1M × $2.10 = $0.21
+    expect(cost.input).toBeCloseTo(2.1, 5);
+    expect(cost.output).toBeCloseTo(16.8, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.21, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gpt-5.2-codex: same rates as gpt-5.2', () => {
+    const usage = basicUsage(500_000, 200_000);
+    const c52 = computeCost({ usage, provider: 'openai', model: 'gpt-5.2' });
+    const c52codex = computeCost({ usage, provider: 'openai', model: 'gpt-5.2-codex' });
+
+    expect(c52.total).toBeCloseTo(c52codex.total, 5);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // New model pricing rows — smoke tests
 // ---------------------------------------------------------------------------
 
