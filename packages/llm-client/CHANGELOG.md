@@ -1,5 +1,13 @@
 # @diabolicallabs/llm-client
 
+## 3.0.1
+
+### Patch Changes
+
+- 7ac1d59: Update `@diabolicallabs/llm-pricing` peer dependency range from `^0.4.0` to `^1.0.0`. Tracks the llm-pricing 1.0 graduation. No API changes — `computeCost` call sites are unaffected.
+- Updated dependencies [7ac1d59]
+  - @diabolicallabs/llm-pricing@1.0.0
+
 ## 3.0.0
 
 ### Patch Changes
