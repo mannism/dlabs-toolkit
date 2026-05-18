@@ -1,5 +1,12 @@
 # @diabolicallabs/llm-client
 
+## 3.0.0
+
+### Patch Changes
+
+- Updated dependencies [82624de]
+  - @diabolicallabs/llm-pricing@0.4.0
+
 ## 2.0.0
 
 ### Patch Changes
