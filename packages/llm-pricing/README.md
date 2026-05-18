@@ -2,9 +2,11 @@
 
 Pricing table + cost computation for `@diabolicallabs/llm-client`. Converts `LlmUsage` token counts to per-call USD cost breakdowns across all five supported providers. © Diabolical Labs
 
+**Stable since 1.0.0** (2026-05-18). The public API — `computeCost`, `resolveModelPricing`, `fetchRemoteTable`, `DEFAULT_PRICING_TABLE`, and the exported type shapes — is committed. Pricing-table refreshes and new model additions ship as minor releases. Breaking schema changes (e.g. multimodal billing extensions) will be flagged in advance and shipped as a major.
+
 ## Status
 
-**v0.2.0** — Default pricing table verified 2026-05-13. Covers Anthropic, OpenAI, Gemini, DeepSeek, Perplexity. Adds `fetchRemoteTable()` for opt-in live pricing (hybrid storage model).
+**v0.4.0** — Default pricing table covers Anthropic, OpenAI (including GPT-5.x family), Gemini, DeepSeek, Perplexity. Remote table via `fetchRemoteTable()` with stale-while-revalidate cache.
 
 ## Install
 
