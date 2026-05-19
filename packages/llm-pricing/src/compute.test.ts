@@ -5,7 +5,7 @@
  * - Every provider with a representative model
  * - Anthropic prompt cache math (5-min ephemeral write + read)
  * - Gemini long-context tier branching (≤200k vs >200k)
- * - Deprecated alias resolution (deepseek-chat, deepseek-reasoner) with console.warn
+ * - Deprecated alias resolution (deepseek-chat, deepseek-reasoner) with structured log event
  * - Unknown model → zero cost, isPartial = true
  * - Override pricing table behavior
  * - Reasoning model isPartial flag (o-series)
@@ -13,29 +13,40 @@
  * - Date-strip fallback for dated model IDs (e.g. gpt-5.4-mini-2026-03-17)
  * - Warn-once behavior for unknown/deprecated/date-strip warns
  * - New model rows: claude-opus-4-5, gpt-5.4-nano, gpt-4o, gemini-3.1-pro long-context
+ *
+ * Diagnostic capture: tests inject a PricingLogger via setPricingLogger() that
+ * pushes events into `warnCalls`. Assertions match on the stable event names
+ * exported by the package (pricing_deprecated_alias, pricing_date_strip_fallback,
+ * pricing_unknown_model) instead of brittle log-string substrings.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { _resetWarnSetsForTesting, computeCost } from './compute.js';
+import { setPricingLogger } from './logger.js';
 import { DEFAULT_PRICING_TABLE } from './table.js';
 import type { LlmUsage, PricingTable } from './types.js';
 
-// Suppress console.warn during deprecation tests; capture for assertions.
-const originalWarn = console.warn;
-let warnCalls: string[] = [];
+interface CapturedWarn {
+  event: string;
+  data: Record<string, unknown>;
+}
+
+let warnCalls: CapturedWarn[] = [];
 
 beforeEach(() => {
   warnCalls = [];
-  console.warn = (...args: unknown[]) => {
-    warnCalls.push(args.map(String).join(' '));
-  };
+  setPricingLogger({
+    warn: (event, data) => {
+      warnCalls.push({ event, data });
+    },
+  });
   // Reset module-level warn-once Sets so each test can assert on first-warn behavior
   // independently. Without this, warn Sets accumulate across tests in the same process.
   _resetWarnSetsForTesting();
 });
 
 afterEach(() => {
-  console.warn = originalWarn;
+  setPricingLogger(null);
 });
 
 // ---------------------------------------------------------------------------
@@ -279,7 +290,7 @@ describe('computeCost — DeepSeek deprecated alias resolution', () => {
     expect(cost.input).toBeCloseTo(0.14, 5);
     expect(cost.output).toBeCloseTo(0.14, 5);
     expect(cost.isPartial).toBe(false);
-    expect(warnCalls.filter((w) => w.includes('deprecated'))).toHaveLength(0);
+    expect(warnCalls.filter((w) => w.event === 'pricing_deprecated_alias')).toHaveLength(0);
   });
 
   it('deepseek-chat: emits deprecation warning, returns v4-flash rates', () => {
@@ -290,10 +301,12 @@ describe('computeCost — DeepSeek deprecated alias resolution', () => {
     expect(cost.input).toBeCloseTo(0.14, 5);
     expect(cost.output).toBeCloseTo(0.14, 5);
     // Deprecation warning must be emitted
-    const depWarnings = warnCalls.filter((w) => w.includes('deprecated'));
+    const depWarnings = warnCalls.filter((w) => w.event === 'pricing_deprecated_alias');
     expect(depWarnings.length).toBeGreaterThan(0);
-    expect(depWarnings[0]).toContain('deepseek-chat');
-    expect(depWarnings[0]).toContain('deepseek-v4-flash');
+    // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+    expect(depWarnings[0]?.data['model']).toBe('deepseek-chat');
+    // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+    expect(depWarnings[0]?.data['deprecatedAliasFor']).toBe('deepseek-v4-flash');
   });
 
   it('deepseek-reasoner: emits deprecation warning, returns v4-flash rates', () => {
@@ -302,9 +315,10 @@ describe('computeCost — DeepSeek deprecated alias resolution', () => {
 
     expect(cost.input).toBeCloseTo(0.07, 5); // 0.5M × $0.14
     expect(cost.output).toBeCloseTo(0.056, 5); // 0.2M × $0.28
-    const depWarnings = warnCalls.filter((w) => w.includes('deprecated'));
+    const depWarnings = warnCalls.filter((w) => w.event === 'pricing_deprecated_alias');
     expect(depWarnings.length).toBeGreaterThan(0);
-    expect(depWarnings[0]).toContain('deepseek-reasoner');
+    // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+    expect(depWarnings[0]?.data['model']).toBe('deepseek-reasoner');
   });
 
   it('deepseek-v4-pro: canonical ID, promotional pricing', () => {
@@ -315,7 +329,7 @@ describe('computeCost — DeepSeek deprecated alias resolution', () => {
     expect(cost.input).toBeCloseTo(0.435, 5);
     expect(cost.output).toBeCloseTo(0.87, 5);
     expect(cost.isPartial).toBe(false);
-    expect(warnCalls.filter((w) => w.includes('deprecated'))).toHaveLength(0);
+    expect(warnCalls.filter((w) => w.event === 'pricing_deprecated_alias')).toHaveLength(0);
   });
 
   it('deepseek-v4-flash: with server-side cache read', () => {
@@ -390,7 +404,7 @@ describe('computeCost — unknown model', () => {
     expect(cost.cacheWrite).toBe(0);
     expect(cost.total).toBe(0);
     expect(cost.isPartial).toBe(true);
-    expect(warnCalls.some((w) => w.includes('No pricing data'))).toBe(true);
+    expect(warnCalls.some((w) => w.event === 'pricing_unknown_model')).toBe(true);
   });
 
   it('unknown provider also returns zero + warning', () => {
@@ -567,10 +581,14 @@ describe('computeCost — date-strip fallback', () => {
     const usage = basicUsage(100_000, 50_000);
     computeCost({ usage, provider: 'openai', model: 'gpt-5.4-mini-2026-03-17' });
 
-    const fallbackWarns = warnCalls.filter((w) => w.includes('date-strip fallback'));
+    const fallbackWarns = warnCalls.filter((w) => w.event === 'pricing_date_strip_fallback');
     expect(fallbackWarns).toHaveLength(1);
-    expect(fallbackWarns[0]).toContain('gpt-5.4-mini-2026-03-17');
-    expect(fallbackWarns[0]).toContain('gpt-5.4-mini');
+    // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+    expect(fallbackWarns[0]?.data['model']).toBe('gpt-5.4-mini-2026-03-17');
+    // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+    expect(fallbackWarns[0]?.data['alias']).toBe('gpt-5.4-mini');
+    // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+    expect(fallbackWarns[0]?.data['provider']).toBe('openai');
   });
 
   it('claude-opus-4-7-20251101: strips -YYYYMMDD suffix, resolves to claude-opus-4-7', () => {
@@ -583,7 +601,7 @@ describe('computeCost — date-strip fallback', () => {
     expect(cost.total).toBeGreaterThan(0);
     expect(cost.isPartial).toBe(false);
     // Date-strip warn should fire
-    expect(warnCalls.some((w) => w.includes('date-strip fallback'))).toBe(true);
+    expect(warnCalls.some((w) => w.event === 'pricing_date_strip_fallback')).toBe(true);
   });
 
   it('claude-haiku-4-5-20251001: exact match wins, fallback never fires', () => {
@@ -597,7 +615,7 @@ describe('computeCost — date-strip fallback', () => {
     expect(cost.total).toBeGreaterThan(0);
     expect(cost.isPartial).toBe(false);
     // No date-strip fallback warn — exact match path
-    expect(warnCalls.some((w) => w.includes('date-strip fallback'))).toBe(false);
+    expect(warnCalls.some((w) => w.event === 'pricing_date_strip_fallback')).toBe(false);
   });
 
   it('unknown-model-2026-01-01: strips to unknown-model, still not found → zero cost', () => {
@@ -607,8 +625,8 @@ describe('computeCost — date-strip fallback', () => {
     expect(cost.total).toBe(0);
     expect(cost.isPartial).toBe(true);
     // Unknown model warn fires, not date-strip warn (alias also misses)
-    expect(warnCalls.some((w) => w.includes('No pricing data'))).toBe(true);
-    expect(warnCalls.some((w) => w.includes('date-strip fallback'))).toBe(false);
+    expect(warnCalls.some((w) => w.event === 'pricing_unknown_model')).toBe(true);
+    expect(warnCalls.some((w) => w.event === 'pricing_date_strip_fallback')).toBe(false);
   });
 
   it('deepseek-v4-flash: no date suffix, exact match, no fallback attempted', () => {
@@ -617,8 +635,8 @@ describe('computeCost — date-strip fallback', () => {
 
     expect(cost.total).toBeGreaterThan(0);
     expect(cost.isPartial).toBe(false);
-    expect(warnCalls.some((w) => w.includes('date-strip fallback'))).toBe(false);
-    expect(warnCalls.some((w) => w.includes('No pricing data'))).toBe(false);
+    expect(warnCalls.some((w) => w.event === 'pricing_date_strip_fallback')).toBe(false);
+    expect(warnCalls.some((w) => w.event === 'pricing_unknown_model')).toBe(false);
   });
 });
 
@@ -627,44 +645,25 @@ describe('computeCost — date-strip fallback', () => {
 // ---------------------------------------------------------------------------
 
 describe('computeCost — warn-once for repeated calls', () => {
-  it('unknown model: console.warn fires exactly once across multiple calls', () => {
-    const warnSpy = vi.spyOn(console, 'warn');
-    // Reset the spy after beforeEach replaced console.warn — spy on the intercepted version
-    // Restore to get accurate call count from vi.spyOn
-    console.warn = originalWarn;
-    _resetWarnSetsForTesting();
-    const warnSpyReal = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
+  it('unknown model: warn fires exactly once across multiple calls', () => {
+    // beforeEach already installed an injected logger that captures into warnCalls.
     const usage = basicUsage(100_000, 50_000);
     computeCost({ usage, provider: 'openai', model: 'gpt-unknown-9999' });
     computeCost({ usage, provider: 'openai', model: 'gpt-unknown-9999' });
     computeCost({ usage, provider: 'openai', model: 'gpt-unknown-9999' });
 
-    const unknownWarns = warnSpyReal.mock.calls.filter((args) =>
-      String(args[0]).includes('No pricing data')
-    );
+    const unknownWarns = warnCalls.filter((w) => w.event === 'pricing_unknown_model');
     expect(unknownWarns).toHaveLength(1);
-
-    warnSpyReal.mockRestore();
-    warnSpy.mockRestore();
   });
 
   it('date-strip fallback: warn fires exactly once for the same dated model ID', () => {
-    console.warn = originalWarn;
-    _resetWarnSetsForTesting();
-    const warnSpyReal = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
     const usage = basicUsage(100_000, 50_000);
     computeCost({ usage, provider: 'openai', model: 'gpt-5.4-mini-2026-03-17' });
     computeCost({ usage, provider: 'openai', model: 'gpt-5.4-mini-2026-03-17' });
     computeCost({ usage, provider: 'openai', model: 'gpt-5.4-mini-2026-03-17' });
 
-    const fallbackWarns = warnSpyReal.mock.calls.filter((args) =>
-      String(args[0]).includes('date-strip fallback')
-    );
+    const fallbackWarns = warnCalls.filter((w) => w.event === 'pricing_date_strip_fallback');
     expect(fallbackWarns).toHaveLength(1);
-
-    warnSpyReal.mockRestore();
   });
 });
 
@@ -698,7 +697,7 @@ describe('computeCost — gpt-5.1/5.2/5.3 family (patch 2)', () => {
     expect(cost.total).toBeGreaterThan(0);
     expect(cost.isPartial).toBe(false);
     // Date-strip warn must fire
-    expect(warnCalls.some((w) => w.includes('date-strip fallback'))).toBe(true);
+    expect(warnCalls.some((w) => w.event === 'pricing_date_strip_fallback')).toBe(true);
   });
 
   it('gpt-5.1-codex-mini: lowest gpt-5.1 tier', () => {

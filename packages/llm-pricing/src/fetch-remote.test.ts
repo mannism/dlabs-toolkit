@@ -7,8 +7,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearPricingCache, fetchRemoteTable } from './fetch-remote.js';
+import { setPricingLogger } from './logger.js';
 import { DEFAULT_PRICING_TABLE } from './table.js';
 import type { PricingTable } from './types.js';
+
+interface CapturedWarn {
+  event: string;
+  data: Record<string, unknown>;
+}
+
+let warnCalls: CapturedWarn[] = [];
 
 // ─── Test fixture ─────────────────────────────────────────────────────────────
 
@@ -84,11 +92,17 @@ function mockFetch(options: {
 beforeEach(() => {
   // Clear the in-memory cache before each test so tests are independent
   clearPricingCache();
-  // Silence console.warn output from fetch failures in test output
-  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  // Capture pricing log events via the injectable logger instead of spying on console.
+  warnCalls = [];
+  setPricingLogger({
+    warn: (event, data) => {
+      warnCalls.push({ event, data });
+    },
+  });
 });
 
 afterEach(() => {
+  setPricingLogger(null);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -194,19 +208,20 @@ describe('fetchRemoteTable', () => {
       });
     });
 
-    it('emits a structured console.warn on network failure', async () => {
+    it('emits a structured pricing_fetch_failed event on network failure', async () => {
       mockFetch({ ok: false, rejectWith: new Error('ENOTFOUND') });
 
       await fetchRemoteTable(TEST_URL);
 
-      expect(console.warn).toHaveBeenCalledOnce();
-      const firstCall = vi.mocked(console.warn).mock.calls[0];
-      expect(firstCall).toBeDefined();
-      const warnArg = firstCall?.[0];
-      const parsed = JSON.parse(warnArg as string);
-      expect(parsed.event).toBe('llm_pricing_fetch_failed');
-      expect(parsed.url).toBe(TEST_URL);
-      expect(parsed.fallback).toBe('DEFAULT_PRICING_TABLE');
+      expect(warnCalls).toHaveLength(1);
+      const captured = warnCalls[0];
+      expect(captured?.event).toBe('pricing_fetch_failed');
+      // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+      expect(captured?.data['url']).toBe(TEST_URL);
+      // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+      expect(captured?.data['fallback']).toBe('DEFAULT_PRICING_TABLE');
+      // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+      expect(captured?.data['error']).toContain('ENOTFOUND');
     });
   });
 

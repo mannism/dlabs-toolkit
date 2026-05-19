@@ -72,7 +72,8 @@ export interface ModelPricing {
 
   /**
    * If this model ID is a deprecated alias, the canonical ID it resolves to.
-   * computeCost() emits a console.warn when it resolves through a deprecated alias.
+   * computeCost() emits a `pricing_deprecated_alias` log event (via the configured
+   * PricingLogger) when it resolves through a deprecated alias.
    */
   deprecatedAliasFor?: string;
 }
@@ -131,4 +132,21 @@ export interface ComputeCostInput {
   model: string;
   /** Override the default pricing table for this call. Merged at the model level. */
   pricingTable?: PricingTable;
+}
+
+/**
+ * Pluggable logger interface. Configure via `setPricingLogger()`.
+ *
+ * Default behavior: structured JSON to stdout via `console.log`. Override to
+ * route diagnostics through your application logger (pino, winston, Datadog,
+ * OpenTelemetry, etc.) or back to human-readable stderr for CLI consumers.
+ *
+ * Stable event names emitted by the package:
+ * - `pricing_deprecated_alias` — `{ provider, model, deprecatedAliasFor }`
+ * - `pricing_date_strip_fallback` — `{ provider, model, alias }`
+ * - `pricing_unknown_model` — `{ provider, model }`
+ * - `pricing_fetch_failed` — `{ url, error, fallback }`
+ */
+export interface PricingLogger {
+  warn: (event: string, data: Record<string, unknown>) => void;
 }

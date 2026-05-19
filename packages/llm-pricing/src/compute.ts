@@ -7,14 +7,17 @@
  *   1-hr tier (cacheWrite1hPer1M) is reserved for a future LlmUsage.cacheWrite1hTokens field.
  * - Reasoning models (o-series): hasInvisibleReasoningTokens sets isPartial = true on result.
  * - Perplexity sonar-deep-research: partialCostCoverage sets isPartial = true.
- * - Deprecated aliases: emits console.warn once per alias per process lifetime.
- * - Unknown model: returns zero cost with isPartial = true and logs a warning once per model.
+ * - Deprecated aliases: emits `pricing_deprecated_alias` once per alias per process lifetime.
+ * - Unknown model: returns zero cost with isPartial = true and emits `pricing_unknown_model` once per (provider, model).
  * - Date-strip fallback: if exact lookup fails, strips trailing date suffixes
- *   (-YYYY-MM-DD, -YYYYMMDD, -YYYY-MM) and retries. Emits a warn once per dated model ID.
+ *   (-YYYY-MM-DD, -YYYYMMDD, -YYYY-MM) and retries. Emits `pricing_date_strip_fallback` once per dated model ID.
  *   Fixes cost-tracking leak where providers return dated model IDs (e.g. gpt-5.4-mini-2026-03-17)
  *   that don't match alias-only entries in the pricing table.
+ * - All diagnostics route through the pluggable logger (see logger.ts). Default writes
+ *   structured JSON to stdout so log ingesters (Railway, etc.) classify by `level`, not stream.
  */
 
+import { getLogger } from './logger.js';
 import { DEFAULT_PRICING_TABLE } from './table.js';
 import type { ComputeCostInput, LlmCost, ModelPricing, PricingTable, Provider } from './types.js';
 
@@ -106,10 +109,11 @@ function resolveModelPricing(
       const warnKey = `${provider}::${model}`;
       if (!deprecationWarnedSet.has(warnKey)) {
         deprecationWarnedSet.add(warnKey);
-        console.warn(
-          `[llm-pricing] Model ID '${model}' is deprecated — use '${record.deprecatedAliasFor}' instead. ` +
-            `The deprecated alias maps to the same pricing as ${record.deprecatedAliasFor}.`
-        );
+        getLogger().warn('pricing_deprecated_alias', {
+          provider,
+          model,
+          deprecatedAliasFor: record.deprecatedAliasFor,
+        });
       }
     }
     return record;
@@ -125,10 +129,11 @@ function resolveModelPricing(
       const warnKey = `${provider}::${model}`;
       if (!dateStripWarnedSet.has(warnKey)) {
         dateStripWarnedSet.add(warnKey);
-        console.warn(
-          `[llm-pricing] Matched via date-strip fallback: '${model}' → '${alias}'. ` +
-            `Update the pricing table to add '${model}' as an explicit entry to silence this warning.`
-        );
+        getLogger().warn('pricing_date_strip_fallback', {
+          provider,
+          model,
+          alias,
+        });
       }
       return aliasRecord;
     }
@@ -162,10 +167,10 @@ export function computeCost(input: ComputeCostInput): LlmCost {
     const unknownKey = `${provider}::${model}`;
     if (!unknownModelWarnedSet.has(unknownKey)) {
       unknownModelWarnedSet.add(unknownKey);
-      console.warn(
-        `[llm-pricing] No pricing data for provider='${provider}' model='${model}'. ` +
-          `Returning zero cost with isPartial=true. Update the pricing table or provide an override.`
-      );
+      getLogger().warn('pricing_unknown_model', {
+        provider,
+        model,
+      });
     }
     return {
       input: 0,
