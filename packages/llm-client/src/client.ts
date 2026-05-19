@@ -31,6 +31,7 @@
  */
 
 import { runAfterCall, runBeforeCall } from './hooks.js';
+import { getLogger } from './logger.js';
 import { createAnthropicProvider } from './providers/anthropic.js';
 import { createDeepSeekProvider } from './providers/deepseek.js';
 import { createGeminiProvider } from './providers/gemini.js';
@@ -177,34 +178,28 @@ export async function createClient(config: LlmClientConfig): Promise<LlmClient> 
       const result = await fetchRemoteTable(config.pricing.remoteUrl, fetchOpts);
 
       // Log pricing source on init — structured line for observability.
-      console.info(
-        JSON.stringify({
-          event: 'pricing_source',
-          source: result.source,
-          url: config.pricing.remoteUrl,
-          fetchedAt: result.fetchedAt,
-          error: result.error,
-        })
-      );
+      getLogger().warn('pricing_source', {
+        source: result.source,
+        url: config.pricing.remoteUrl,
+        fetchedAt: result.fetchedAt,
+        error: result.error,
+      });
 
       // Merge the fetched table into the pricing config for this client instance.
       resolvedPricingConfig = { ...config.pricing, table: result.table };
     } catch {
       // llm-pricing not installed or fetchRemoteTable unavailable.
       // Log and continue with bundled default — cost will be computed from DEFAULT_PRICING_TABLE.
-      console.warn(
-        JSON.stringify({
-          event: 'pricing_source',
-          source: 'fallback',
-          url: config.pricing.remoteUrl,
-          error: '@diabolicallabs/llm-pricing is not installed or fetchRemoteTable unavailable',
-        })
-      );
+      getLogger().warn('pricing_source', {
+        source: 'fallback',
+        url: config.pricing.remoteUrl,
+        error: '@diabolicallabs/llm-pricing is not installed or fetchRemoteTable unavailable',
+      });
     }
   } else if (config.pricing !== undefined) {
     // No remoteUrl — log the source so all clients emit the pricing_source line.
     const source = config.pricing.table !== undefined ? 'consumer_override' : 'bundled';
-    console.info(JSON.stringify({ event: 'pricing_source', source }));
+    getLogger().warn('pricing_source', { source });
   }
 
   // Build the resolved config — pricing.table now reflects the remote fetch result.
@@ -388,16 +383,10 @@ function createFailoverClient(
 
 /** Emit a structured log line on each model_fallback event. */
 function emitFallbackLog(from: string, to: string, reason: LlmErrorKind): void {
-  console.log(
-    JSON.stringify({
-      level: 'info',
-      pkg: '@diabolicallabs/llm-client',
-      event: 'model_fallback',
-      from,
-      to,
-      reason,
-    })
-  );
+  // level:'info' in the payload signals ingesters that this is informational,
+  // not a warning — the fallback succeeded. Routed through the logger so consumers
+  // can redirect or suppress it alongside other llm-client diagnostics.
+  getLogger().warn('model_fallback', { level: 'info', from, to, reason });
 }
 
 // ─── wrapWithPricing ─────────────────────────────────────────────────────────
@@ -452,10 +441,11 @@ function wrapWithPricing(base: LlmClient, config: LlmClientConfig): LlmClient {
       loadState = fn;
       return fn;
     } catch {
-      console.warn(
-        '[llm-client] pricing config is set but @diabolicallabs/llm-pricing is not installed. ' +
-          'Install it as an optional dep to enable cost computation. cost will be undefined.'
-      );
+      getLogger().warn('pricing_peer_dep_missing', {
+        message:
+          '@diabolicallabs/llm-pricing is not installed. ' +
+          'Install it as an optional dep to enable cost computation. cost will be undefined.',
+      });
       loadState = null;
       return null;
     }

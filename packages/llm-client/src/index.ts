@@ -18,6 +18,9 @@ export type { LlmProvider, ModelCapabilities } from './capabilities.js';
 export { CAPABILITIES_VERSIONED_AT, getModelCapabilities } from './capabilities.js';
 // Factory functions — all five providers fully implemented
 export { createClient, createClientFromEnv } from './client.js';
+// Pluggable logger — route diagnostic events through your application logger (v4.1.0+)
+export type { LlmClientLogger } from './logger.js';
+export { setLlmClientLogger } from './logger.js';
 // HTTP status classifier — useful for consumers building custom error handlers
 export { classifyHttpStatus } from './retry.js';
 // Core message format shared across all providers

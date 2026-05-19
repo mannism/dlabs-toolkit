@@ -10,7 +10,32 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient, createClientFromEnv } from './client.js';
+import { setLlmClientLogger } from './logger.js';
 import { LlmError } from './types.js';
+
+// ─── Logger capture ──────────────────────────────────────────────────────────
+// Inject a capturing LlmClientLogger in each test so assertions match on
+// stable event names instead of console.* spy calls.
+
+interface CapturedWarn {
+  event: string;
+  data: Record<string, unknown>;
+}
+
+let warnCalls: CapturedWarn[] = [];
+
+beforeEach(() => {
+  warnCalls = [];
+  setLlmClientLogger({
+    warn: (event, data) => {
+      warnCalls.push({ event, data });
+    },
+  });
+});
+
+afterEach(() => {
+  setLlmClientLogger(null);
+});
 
 // Mock all four implemented provider modules to avoid real SDK initialisation.
 // vi.mock is hoisted to the top of the file — factories cannot reference local variables.
@@ -330,27 +355,20 @@ describe('createClient — pricing integration', () => {
   });
 
   it('pricing_source log: emits "bundled" when no table or remoteUrl set', async () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     await createClient({
       provider: 'anthropic',
       model: 'claude-sonnet-4-6',
       apiKey: 'test',
       pricing: { computeOnEveryCall: true },
     });
-    const logArgs = infoSpy.mock.calls.map(([arg]) => {
-      try {
-        return JSON.parse(arg as string) as Record<string, unknown>;
-      } catch {
-        return null;
-      }
-    });
-    const pricingLog = logArgs.find((l) => l?.['event'] === 'pricing_source');
-    expect(pricingLog?.['source']).toBe('bundled');
-    infoSpy.mockRestore();
+    // pricing_source event is captured by the injected logger (beforeEach wires it)
+    const pricingLog = warnCalls.find((w) => w.event === 'pricing_source');
+    expect(pricingLog).toBeDefined();
+    // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+    expect(pricingLog?.data['source']).toBe('bundled');
   });
 
-  it('pricing_source log: emits "consumer_override" when pricing.table is set', async () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+  it('pricing_source log: emits "bundled" when pricing.table is undefined', async () => {
     await createClient({
       provider: 'anthropic',
       model: 'claude-sonnet-4-6',
@@ -358,16 +376,10 @@ describe('createClient — pricing integration', () => {
       pricing: { computeOnEveryCall: true, table: undefined as never },
     });
     // table: undefined is treated as absent — source should be 'bundled' not 'consumer_override'
-    const logArgs = infoSpy.mock.calls.map(([arg]) => {
-      try {
-        return JSON.parse(arg as string) as Record<string, unknown>;
-      } catch {
-        return null;
-      }
-    });
-    const pricingLog = logArgs.find((l) => l?.['event'] === 'pricing_source');
-    expect(pricingLog?.['source']).toBe('bundled');
-    infoSpy.mockRestore();
+    const pricingLog = warnCalls.find((w) => w.event === 'pricing_source');
+    expect(pricingLog).toBeDefined();
+    // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+    expect(pricingLog?.data['source']).toBe('bundled');
   });
 
   it('remoteUrl: consumer-explicit table wins over remoteUrl (no fetch called)', async () => {
