@@ -64,6 +64,7 @@ import type {
   LlmToolResponse,
   LlmUsage,
 } from '@diabolicallabs/llm-client';
+import { getLogger } from './logger.js';
 // LlmCost is inlined locally in types.ts (v3.0.1 — peer-dep on llm-pricing removed)
 import type { AgentSdkConfig, CallRecord, InstrumentedLlmClient, LlmCost } from './types.js';
 
@@ -178,17 +179,12 @@ async function dispatchWithRetry(record: CallRecord, config: AgentSdkConfig): Pr
 
   // All retries exhausted — drop the record and warn
   // Structured log: include call_id for audit trail but never log ingestionKey
-  console.warn(
-    JSON.stringify({
-      level: 'warn',
-      pkg: '@diabolicallabs/agent-sdk',
-      event: 'ingestion_exhausted',
-      call_id: record.call_id,
-      agent_id: record.agent_id,
-      model: record.model,
-      message: `Ingestion dispatch failed after ${maxRetries + 1} attempts. Record dropped.`,
-    })
-  );
+  getLogger().warn('ingestion_exhausted', {
+    call_id: record.call_id,
+    agent_id: record.agent_id,
+    model: record.model,
+    message: `Ingestion dispatch failed after ${maxRetries + 1} attempts. Record dropped.`,
+  });
 }
 
 // ---------------------------------------------------------------------------
