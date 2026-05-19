@@ -18,6 +18,7 @@
  * (providers change prices at most daily); slower starts to lag noticeably.
  */
 
+import { getLogger } from './logger.js';
 import { DEFAULT_PRICING_TABLE } from './table.js';
 import type { ModelPricing, PricingTable } from './types.js';
 
@@ -171,7 +172,8 @@ function validatePricingTable(data: unknown): string | null {
  *   'https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.json'
  * );
  * if (result.source === 'fallback') {
- *   console.warn('[llm-pricing] remote fetch failed, using bundled table:', result.error);
+ *   // A `pricing_fetch_failed` log event was already emitted via the configured PricingLogger.
+ *   // result.error contains the human-readable cause.
  * }
  * const cost = computeCost({ usage, provider: 'anthropic', model, pricingTable: result.table });
  * ```
@@ -216,14 +218,11 @@ export async function fetchRemoteTable(
   } catch (err) {
     clearTimeout(timeoutId);
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(
-      JSON.stringify({
-        event: 'llm_pricing_fetch_failed',
-        url,
-        error: message,
-        fallback: 'DEFAULT_PRICING_TABLE',
-      })
-    );
+    getLogger().warn('pricing_fetch_failed', {
+      url,
+      error: message,
+      fallback: 'DEFAULT_PRICING_TABLE',
+    });
     return { table: fallback, source: 'fallback', error: message };
   } finally {
     clearTimeout(timeoutId);
@@ -233,14 +232,11 @@ export async function fetchRemoteTable(
 
   if (!response.ok) {
     const message = `HTTP ${response.status} ${response.statusText}`;
-    console.warn(
-      JSON.stringify({
-        event: 'llm_pricing_fetch_failed',
-        url,
-        error: message,
-        fallback: 'DEFAULT_PRICING_TABLE',
-      })
-    );
+    getLogger().warn('pricing_fetch_failed', {
+      url,
+      error: message,
+      fallback: 'DEFAULT_PRICING_TABLE',
+    });
     return { table: fallback, source: 'fallback', error: message };
   }
 
@@ -252,14 +248,11 @@ export async function fetchRemoteTable(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const wrappedMessage = `JSON parse error: ${message}`;
-    console.warn(
-      JSON.stringify({
-        event: 'llm_pricing_fetch_failed',
-        url,
-        error: wrappedMessage,
-        fallback: 'DEFAULT_PRICING_TABLE',
-      })
-    );
+    getLogger().warn('pricing_fetch_failed', {
+      url,
+      error: wrappedMessage,
+      fallback: 'DEFAULT_PRICING_TABLE',
+    });
     return { table: fallback, source: 'fallback', error: wrappedMessage };
   }
 
@@ -268,14 +261,11 @@ export async function fetchRemoteTable(
   const validationError = validatePricingTable(parsed);
   if (validationError !== null) {
     const message = `schema validation failed: ${validationError}`;
-    console.warn(
-      JSON.stringify({
-        event: 'llm_pricing_fetch_failed',
-        url,
-        error: message,
-        fallback: 'DEFAULT_PRICING_TABLE',
-      })
-    );
+    getLogger().warn('pricing_fetch_failed', {
+      url,
+      error: message,
+      fallback: 'DEFAULT_PRICING_TABLE',
+    });
     return { table: fallback, source: 'fallback', error: message };
   }
 

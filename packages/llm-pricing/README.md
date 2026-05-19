@@ -121,11 +121,13 @@ Rationale: GitHub raw fetches are cheap but bounded. 24h matches the realistic p
 
 ### Fail-safe contract
 
-On any failure (network error, HTTP non-2xx, JSON parse error, schema validation failure, 5s connect timeout), `fetchRemoteTable()` returns `{ source: 'fallback', table: DEFAULT_PRICING_TABLE }` and logs a structured warning:
+On any failure (network error, HTTP non-2xx, JSON parse error, schema validation failure, 5s connect timeout), `fetchRemoteTable()` returns `{ source: 'fallback', table: DEFAULT_PRICING_TABLE }` and emits a `pricing_fetch_failed` event via the configured `PricingLogger`. With the default logger that materializes as:
 
 ```json
-{ "event": "llm_pricing_fetch_failed", "url": "...", "error": "...", "fallback": "DEFAULT_PRICING_TABLE" }
+{ "level": "warn", "event": "pricing_fetch_failed", "url": "...", "error": "...", "fallback": "DEFAULT_PRICING_TABLE" }
 ```
+
+written to stdout. See [Logging](#logging) below to override the logger.
 
 Pricing failures never crash LLM requests — degraded mode (bundled table) is always preferable to an exception.
 
@@ -167,7 +169,7 @@ O-series models bill reasoning tokens against `outputPer1M` but do not return th
 
 ### DeepSeek — deprecated aliases
 
-`deepseek-chat` and `deepseek-reasoner` are deprecated upstream — both now route to `deepseek-v4-flash` server-side. The pricing table includes them with the same rates as `deepseek-v4-flash`. `computeCost()` emits a `console.warn` when it resolves through a deprecated alias.
+`deepseek-chat` and `deepseek-reasoner` are deprecated upstream — both now route to `deepseek-v4-flash` server-side. The pricing table includes them with the same rates as `deepseek-v4-flash`. `computeCost()` emits a `pricing_deprecated_alias` log event (via the configured `PricingLogger`, see [Logging](#logging)) when it resolves through a deprecated alias.
 
 Use the canonical IDs:
 
@@ -179,6 +181,56 @@ Use the canonical IDs:
 ### Perplexity — partial coverage
 
 Perplexity bills token costs **plus** per-request fees based on search context size. `computeCost()` covers token costs only. `sonar-deep-research` additionally has citation token, search query, and reasoning token fees not in `LlmUsage`. For these models, `cost.isPartial` is always `true` — the total is a floor.
+
+## Logging
+
+`@diabolicallabs/llm-pricing` emits diagnostic events for four conditions:
+
+| Event | When |
+|---|---|
+| `pricing_deprecated_alias` | A deprecated model alias resolved (e.g. `deepseek-chat` → `deepseek-v4-flash`) |
+| `pricing_date_strip_fallback` | A dated model ID matched its base alias via date-strip (e.g. `gpt-5.4-mini-2026-03-17` → `gpt-5.4-mini`) |
+| `pricing_unknown_model` | No pricing data for `(provider, model)` — returns zero cost with `isPartial: true` |
+| `pricing_fetch_failed` | `fetchRemoteTable()` fell back to the bundled table |
+
+Each event fires **once per unique key per process lifetime** so high-volume callers don't spam logs.
+
+### Default behavior — structured JSON to stdout
+
+The default logger writes one line per event to `stdout` using `console.log`:
+
+```json
+{ "level": "warn", "event": "pricing_date_strip_fallback", "provider": "openai", "model": "gpt-5.4-mini-2026-03-17", "alias": "gpt-5.4-mini" }
+```
+
+Stdout (not stderr) is deliberate — log ingesters that classify severity by stream (Railway, many GCP/AWS log routers) would otherwise label every warning as `severity: error`. The structured `level` field carries the intent without forcing a false-error classification on every consumer.
+
+### Override — `setPricingLogger()`
+
+Swap the logger at bootstrap to integrate with your app's logger or restore human-readable output:
+
+```typescript
+import { setPricingLogger } from '@diabolicallabs/llm-pricing';
+
+// CLI tool — human-readable stderr
+setPricingLogger({
+  warn: (event, data) => console.warn(`[${event}]`, data),
+});
+
+// Pino / Winston / Datadog
+setPricingLogger({
+  warn: (event, data) => myAppLogger.warn({ event, ...data }, event),
+});
+
+// Reset to the default (structured JSON to stdout)
+setPricingLogger(null);
+```
+
+The `PricingLogger` type is exported for typed implementations:
+
+```typescript
+import type { PricingLogger } from '@diabolicallabs/llm-pricing';
+```
 
 ## Maintenance
 
