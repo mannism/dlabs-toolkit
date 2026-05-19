@@ -12,6 +12,7 @@
  *   - afterCall errors are logged at warn level and dropped.
  */
 
+import { getLogger } from './logger.js';
 import type {
   LlmAfterCallContext,
   LlmBeforeCallResult,
@@ -102,16 +103,12 @@ export async function runAfterCall(
   try {
     await hooks.afterCall(ctx);
   } catch (err) {
-    // Structured warn — same pattern as dispatchWithRetry exhaustion in agent-sdk
-    console.warn(
-      JSON.stringify({
-        level: 'warn',
-        pkg: '@diabolicallabs/llm-client',
-        event: 'aftercall_hook_error',
-        callType: ctx.request.callType,
-        model: ctx.request.model,
-        message: `afterCall hook threw (error dropped): ${err instanceof Error ? err.message : String(err)}`,
-      })
-    );
+    // afterCall errors are dropped to protect callers that already received a response.
+    // Route through the pluggable logger so consumers can redirect alongside other diagnostics.
+    getLogger().warn('aftercall_hook_error', {
+      callType: ctx.request.callType,
+      model: ctx.request.model,
+      message: `afterCall hook threw (error dropped): ${err instanceof Error ? err.message : String(err)}`,
+    });
   }
 }
