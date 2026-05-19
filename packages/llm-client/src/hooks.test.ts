@@ -25,7 +25,33 @@ import {
   type LlmStreamChunk,
   type LlmStreamStructuredEvent,
   type LlmUsage,
+  setLlmClientLogger,
 } from './index.js';
+
+// ─── Logger capture ──────────────────────────────────────────────────────────
+// Mirror the compute.test.ts pattern: inject a capturing LlmClientLogger via
+// setLlmClientLogger() in beforeEach and assert on stable event names.
+// This replaces the previous vi.spyOn(console, 'warn') assertions.
+
+interface CapturedWarn {
+  event: string;
+  data: Record<string, unknown>;
+}
+
+let warnCalls: CapturedWarn[] = [];
+
+beforeEach(() => {
+  warnCalls = [];
+  setLlmClientLogger({
+    warn: (event, data) => {
+      warnCalls.push({ event, data });
+    },
+  });
+});
+
+afterEach(() => {
+  setLlmClientLogger(null);
+});
 
 // ─── Shared fixtures ─────────────────────────────────────────────────────────
 
@@ -238,7 +264,6 @@ describe('runBeforeCall', () => {
 
 describe('runAfterCall', () => {
   it('does nothing when hooks is undefined', async () => {
-    const spy = vi.spyOn(console, 'warn');
     const ctx: LlmAfterCallContext = {
       request: makeBaseCtx(),
       response: makeMockResponse(),
@@ -247,11 +272,11 @@ describe('runAfterCall', () => {
       latencyMs: 100,
     };
     await runAfterCall(undefined, ctx);
-    expect(spy).not.toHaveBeenCalled();
+    // No diagnostic events emitted — logger should not be called
+    expect(warnCalls).toHaveLength(0);
   });
 
   it('does nothing when afterCall is not set', async () => {
-    const spy = vi.spyOn(console, 'warn');
     const ctx: LlmAfterCallContext = {
       request: makeBaseCtx(),
       response: makeMockResponse(),
@@ -260,7 +285,8 @@ describe('runAfterCall', () => {
       latencyMs: 100,
     };
     await runAfterCall({}, ctx);
-    expect(spy).not.toHaveBeenCalled();
+    // No diagnostic events emitted — logger should not be called
+    expect(warnCalls).toHaveLength(0);
   });
 
   it('fires afterCall with the response context', async () => {
@@ -287,7 +313,6 @@ describe('runAfterCall', () => {
   });
 
   it('drops afterCall errors and logs a structured warning — never throws', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const hooks: LlmHooks = {
       afterCall: async () => {
         throw new Error('metric sink unavailable');
@@ -303,13 +328,12 @@ describe('runAfterCall', () => {
     // Must not throw
     await expect(runAfterCall(hooks, ctx)).resolves.toBeUndefined();
 
-    expect(warnSpy).toHaveBeenCalledOnce();
-    const warned = warnSpy.mock.calls[0]?.[0] as string;
-    const parsed = JSON.parse(warned) as Record<string, unknown>;
-    // biome-ignore lint/complexity/useLiteralKeys: Record<string,unknown>
-    expect(parsed['event']).toBe('aftercall_hook_error');
-    // biome-ignore lint/complexity/useLiteralKeys: Record<string,unknown>
-    expect(parsed['level']).toBe('warn');
+    // aftercall_hook_error event must be captured by the injected logger
+    expect(warnCalls).toHaveLength(1);
+    const captured = warnCalls[0];
+    expect(captured?.event).toBe('aftercall_hook_error');
+    // biome-ignore lint/complexity/useLiteralKeys: TS noPropertyAccessFromIndexSignature requires bracket access on Record<string, unknown>
+    expect(captured?.data['callType']).toBe('complete');
   });
 
   it('fires afterCall on error paths with the error in context', async () => {
@@ -451,7 +475,6 @@ describe('createClient hooks integration — complete()', () => {
   });
 
   it('afterCall error is dropped — complete() still returns the response', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const cached = makeMockResponse({ content: 'from cache' });
 
     const client = await createClient({
@@ -470,7 +493,6 @@ describe('createClient hooks integration — complete()', () => {
     // Here we just verify the client returns correctly when skip is used.
     const response = await client.complete(MOCK_MESSAGES);
     expect(response).toBe(cached);
-    warnSpy.mockRestore();
   });
 });
 

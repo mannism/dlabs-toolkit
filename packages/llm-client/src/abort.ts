@@ -21,6 +21,12 @@ import { LlmError } from './types.js';
 
 // ─── AttemptController ──────────────────────────────────────────────────────
 
+/**
+ * Per-attempt abort handle returned by createAttemptController(). Combines a
+ * caller-supplied AbortSignal with an internal timeout into a single signal for SDK calls.
+ * Call dispose() in the finally block of every attempt to prevent timer and listener leaks.
+ * @see createAttemptController
+ */
 export interface AttemptController {
   /** Combined signal to pass to SDK calls. Aborts when timeout fires or caller cancels. */
   signal: AbortSignal;

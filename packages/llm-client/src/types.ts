@@ -135,13 +135,23 @@ export interface RetryConfig {
   retryOn?: LlmErrorKind[];
 }
 
-// The canonical message format shared across all providers
+/**
+ * A single conversation turn passed to complete(), stream(), structured(), and withTools().
+ * The 'system' role sets the model's behavioral instructions; 'user' and 'assistant' form
+ * the conversation history. All providers normalize to this three-role shape regardless of
+ * their native message format.
+ */
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
 
-// Config passed to createClient
+/**
+ * Configuration for createClient(). Selects the provider, model, and API key;
+ * controls retry behavior, timeouts, stall detection, cost tracking, and the
+ * optional pre-call hooks API. Passed once at construction — per-call overrides
+ * go in LlmCallOptions.
+ */
 export interface LlmClientConfig {
   // Full 5-provider union — gemini, deepseek, perplexity are type-only stubs in Week 2
   provider: 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'perplexity';
@@ -268,7 +278,12 @@ export interface LlmClientConfig {
   };
 }
 
-// Normalized token usage — same shape regardless of provider
+/**
+ * Normalized token usage for a completed call. Carried on every response type
+ * (LlmResponse, LlmStructuredResponse, LlmToolResponse) and in LlmAfterCallContext
+ * for streaming paths. The shape is provider-agnostic — Anthropic cache fields are
+ * undefined for all other providers.
+ */
 export interface LlmUsage {
   inputTokens: number;
   outputTokens: number;
@@ -277,7 +292,11 @@ export interface LlmUsage {
   cacheReadTokens?: number; // Anthropic prompt cache read tokens
 }
 
-// Non-streaming response
+/**
+ * Return value from complete(). Carries the model's text content alongside
+ * normalized usage, latency, a provider-issued or synthesized response ID,
+ * and optional cost and web citations fields.
+ */
 export interface LlmResponse {
   content: string;
   model: string; // model ID actually used (may differ from requested)
@@ -381,7 +400,11 @@ export interface LlmCallOptions
   providerOptions?: Record<string, unknown>;
 }
 
-// Streaming chunk
+/**
+ * A single incremental chunk yielded by stream(). Usage is present only on the
+ * final chunk — all preceding chunks carry only token. Consumers must check
+ * `chunk.usage !== undefined` to identify the terminal chunk.
+ */
 export interface LlmStreamChunk {
   token: string;
   usage?: LlmUsage; // present only on the final chunk
@@ -428,7 +451,13 @@ export type LlmErrorKind =
   | 'http'
   | 'unknown';
 
-// Normalized error — wraps provider-specific errors
+/**
+ * Normalized error thrown by all LlmClient methods. Wraps provider-specific errors
+ * into a consistent shape with a kind discriminator, HTTP status code, retryability
+ * flag, and optional response headers. Catch this class to handle all llm-client
+ * failure modes — never match on message strings.
+ * @see LlmErrorKind for the full taxonomy and default retryability per kind.
+ */
 export class LlmError extends Error {
   override readonly name = 'LlmError';
   readonly provider: string;
@@ -812,7 +841,13 @@ export interface LlmHooks {
 
 // ─── LlmClient interface ──────────────────────────────────────────────────────
 
-// The LlmClient interface — what consumers program against
+/**
+ * The unified LLM client interface — what every consumer programs against.
+ * Obtain an instance via createClient() or createClientFromEnv(). Provides
+ * five call types across up to five providers: complete, stream, structured,
+ * withTools, and streamStructured. The config field exposes the resolved
+ * configuration for inspection and is readonly after construction.
+ */
 export interface LlmClient {
   readonly config: Readonly<LlmClientConfig>;
 
