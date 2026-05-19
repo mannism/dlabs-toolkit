@@ -6,7 +6,7 @@ Pricing table + cost computation for `@diabolicallabs/llm-client`. Converts `Llm
 
 ## Status
 
-**v0.4.0** — Default pricing table covers Anthropic, OpenAI (including GPT-5.x family), Gemini, DeepSeek, Perplexity. Remote table via `fetchRemoteTable()` with stale-while-revalidate cache.
+Default pricing table covers Anthropic, OpenAI (including GPT-5.x family), Gemini, DeepSeek, Perplexity. Remote table via `fetchRemoteTable()` with stale-while-revalidate cache. Pluggable diagnostic logger via `setPricingLogger()` — see [Logging](#logging).
 
 ## Install
 
@@ -45,7 +45,7 @@ The default table covers all five providers. Access it directly:
 ```typescript
 import { DEFAULT_PRICING_TABLE } from '@diabolicallabs/llm-pricing';
 
-console.log(DEFAULT_PRICING_TABLE.versionedAt); // '2026-05-13'
+console.log(DEFAULT_PRICING_TABLE.versionedAt); // '2026-05-18'
 
 // Consumer override — merge your rates over the defaults
 const cost = computeCost({
@@ -103,7 +103,7 @@ const cost = computeCost({
 });
 ```
 
-When used with `@diabolicallabs/llm-client@^1.7.0`, set `pricing.remoteUrl` on `createClient()` to wire this automatically — you don't need to call `fetchRemoteTable()` directly.
+When used with `@diabolicallabs/llm-client@^3.0.0`, set `pricing.remoteUrl` on `createClient()` to wire this automatically — you don't need to call `fetchRemoteTable()` directly.
 
 ### Precedence (highest → lowest)
 

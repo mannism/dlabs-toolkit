@@ -5,7 +5,7 @@
  *
  * Public surface:
  *   computeCost(input) — compute USD cost from LlmUsage + provider/model
- *   DEFAULT_PRICING_TABLE — curated pricing table verified 2026-05-13
+ *   DEFAULT_PRICING_TABLE — curated pricing table verified 2026-05-18
  *   fetchRemoteTable(url, options?) — opt-in remote pricing source (v0.2.0+)
  *   clearPricingCache(url?) — clear in-memory cache (testing utility)
  *   setPricingLogger(logger | null) — swap the diagnostic logger (v1.1.0+)
