@@ -21,8 +21,8 @@ import type {
   LlmUsage,
 } from '@diabolicallabs/llm-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { instrumentClient } from './index.js';
-import type { AgentSdkConfig } from './types.js';
+import type { AgentSdkConfig, AgentSdkLogger } from './index.js';
+import { instrumentClient, setAgentSdkLogger } from './index.js';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -119,6 +119,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  // Reset pluggable logger to default between tests
+  setAgentSdkLogger(null);
 });
 
 // ---------------------------------------------------------------------------
@@ -518,7 +520,15 @@ describe('ingestion retry', () => {
   it('drops the record and logs a warning after all retries fail — never throws to caller', async () => {
     const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 503 } as Response);
     vi.stubGlobal('fetch', mockFetch);
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    // Inject a logger spy via the pluggable interface
+    const warnedEvents: Array<{ event: string; data: Record<string, unknown> }> = [];
+    const testLogger: AgentSdkLogger = {
+      warn: (event, data) => {
+        warnedEvents.push({ event, data });
+      },
+    };
+    setAgentSdkLogger(testLogger);
 
     const client = makeMockClient();
     const instrumented = instrumentClient(client, {
@@ -535,22 +545,27 @@ describe('ingestion retry', () => {
 
     // fetch called maxRetries + 1 times (attempts 0 and 1)
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnedEvents).toHaveLength(1);
 
-    const warned = warnSpy.mock.calls[0]?.[0] as string;
-    const parsed = JSON.parse(warned) as Record<string, unknown>;
-    // biome-ignore lint/complexity/useLiteralKeys: parsed is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
-    expect(parsed['event']).toBe('ingestion_exhausted');
-    // biome-ignore lint/complexity/useLiteralKeys: parsed is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
-    expect(parsed['call_id']).toBeDefined();
+    const entry = warnedEvents[0];
+    expect(entry?.event).toBe('ingestion_exhausted');
+    // biome-ignore lint/complexity/useLiteralKeys: entry.data is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(entry?.data['call_id']).toBeDefined();
     // ingestionKey must never appear in logs
-    expect(warned).not.toContain(sdkConfig.ingestionKey);
+    expect(JSON.stringify(entry?.data)).not.toContain(sdkConfig.ingestionKey);
   });
 
   it('handles fetch network errors (throws) the same as HTTP failures', async () => {
     const mockFetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
     vi.stubGlobal('fetch', mockFetch);
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    // Inject a logger spy via the pluggable interface
+    let warnCallCount = 0;
+    setAgentSdkLogger({
+      warn: () => {
+        warnCallCount++;
+      },
+    });
 
     const client = makeMockClient();
     const instrumented = instrumentClient(client, {
@@ -562,7 +577,7 @@ describe('ingestion retry', () => {
     await expect(instrumented.complete(mockMessages)).resolves.toBeDefined();
     await new Promise<void>((r) => setTimeout(r, 50));
 
-    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnCallCount).toBe(1);
   });
 });
 
@@ -588,7 +603,14 @@ describe('security', () => {
   it('warning log on exhaustion never contains ingestionKey', async () => {
     const mockFetch = vi.fn().mockResolvedValue({ ok: false, status: 500 } as Response);
     vi.stubGlobal('fetch', mockFetch);
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    // Inject a logger spy via the pluggable interface
+    const warnedPayloads: string[] = [];
+    setAgentSdkLogger({
+      warn: (event, data) => {
+        warnedPayloads.push(JSON.stringify({ event, ...data }));
+      },
+    });
 
     const client = makeMockClient();
     const instrumented = instrumentClient(client, {
@@ -599,8 +621,8 @@ describe('security', () => {
     await instrumented.complete(mockMessages);
     await new Promise<void>((r) => setTimeout(r, 50));
 
-    for (const call of warnSpy.mock.calls) {
-      expect(String(call[0])).not.toContain(sdkConfig.ingestionKey);
+    for (const payload of warnedPayloads) {
+      expect(payload).not.toContain(sdkConfig.ingestionKey);
     }
   });
 });

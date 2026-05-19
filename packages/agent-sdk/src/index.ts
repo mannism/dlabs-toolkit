@@ -12,8 +12,10 @@
  * Implementation begins Week 4. This file exports the public type surface only.
  */
 
+// Pluggable logger — swap at bootstrap for custom log routing
+export type { AgentSdkLogger } from './logger.js';
+export { setAgentSdkLogger } from './logger.js';
 // Instrumentation factory — wraps an LlmClient with cost-tracking
 export { instrumentClient } from './sdk.js';
-
 // Types: agent identity, SDK config, instrumented client, call record
 export type { AgentIdentity, AgentSdkConfig, CallRecord, InstrumentedLlmClient } from './types.js';
