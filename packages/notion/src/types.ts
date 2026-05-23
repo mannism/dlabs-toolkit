@@ -123,41 +123,29 @@ export interface NotionClient {
  * - NotionUnavailableError — 5xx after SDK retries exhausted
  */
 export class NotionError extends Error {
-  override readonly name = 'NotionError';
   readonly code: string;
 
   constructor(message: string, code: string, cause?: unknown) {
     super(message);
+    this.name = this.constructor.name;
     this.code = code;
     if (cause !== undefined) this.cause = cause;
   }
 }
 
-export class NotionAuthError extends NotionError {
-  override readonly name = 'NotionAuthError';
-}
+export class NotionAuthError extends NotionError {}
 
-export class NotionNotFoundError extends NotionError {
-  override readonly name = 'NotionNotFoundError';
-}
+export class NotionNotFoundError extends NotionError {}
 
 /**
  * Covers 400-family errors (validation_error, invalid_json, missing_version).
  * Non-retryable. Also thrown synchronously by createNotionClientFromEnv()
  * when NOTION_API_KEY env var is absent.
  */
-export class NotionValidationError extends NotionError {
-  override readonly name = 'NotionValidationError';
-}
+export class NotionValidationError extends NotionError {}
 
-export class NotionRateLimitError extends NotionError {
-  override readonly name = 'NotionRateLimitError';
-}
+export class NotionRateLimitError extends NotionError {}
 
-export class NotionConflictError extends NotionError {
-  override readonly name = 'NotionConflictError';
-}
+export class NotionConflictError extends NotionError {}
 
-export class NotionUnavailableError extends NotionError {
-  override readonly name = 'NotionUnavailableError';
-}
+export class NotionUnavailableError extends NotionError {}
