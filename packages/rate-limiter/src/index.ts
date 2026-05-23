@@ -1,27 +1,41 @@
 /**
  * @diabolicallabs/rate-limiter
  *
- * Redis sliding-window rate limiter.
- * Implementation: sorted set per key — ZREMRANGEBYSCORE to evict expired
- * entries, ZCARD to count the window, ZADD to record the request.
- * All three ops in a single pipeline for atomicity.
+ * Redis sliding-window rate limiter. Atomic via Lua EVAL — never MULTI/EXEC.
+ * ioredis is a peerDependency; caller provides the Redis singleton.
  *
- * Fail-closed: if the Redis connection throws, check() returns
- * { allowed: false } and enforce() throws RateLimitError.
- * Never default to permissive on infrastructure failure.
+ * Fail-closed by default: Redis errors are treated as limit exceeded.
+ * Configure onRedisError: 'open' for general product APIs that prefer
+ * fail-open during Redis blips.
  *
- * ioredis is a peerDependency — caller provides the Redis singleton.
- * This prevents duplicate Redis clients and makes the limiter testable
- * without mocking module resolution.
+ * @example
+ * import { createRateLimiter } from '@diabolicallabs/rate-limiter';
+ * import Redis from 'ioredis';
  *
- * Implementation begins Week 5 (parallel with @diabolicallabs/notion).
- * This file exports the public type surface only.
+ * const redis = new Redis(process.env.REDIS_URL);
+ * const limiter = createRateLimiter({ redis, windowMs: 60_000, maxRequests: 100 });
+ *
+ * // At request boundary:
+ * await limiter.enforce(`user:${userId}`); // throws RateLimitError if over limit
+ *
+ * // Or check without throwing:
+ * const { allowed, remaining, resetMs } = await limiter.check(`user:${userId}`);
  */
 
 // Factory function
 export { createRateLimiter } from './limiter.js';
 
+// Logger
+export { setRateLimiterLogger } from './logger.js';
+
 // Types
-export type { RateLimiter, RateLimiterConfig, RateLimitResult } from './types.js';
-// Error class — exported as value
+export type {
+  Logger,
+  RateLimiter,
+  RateLimiterConfig,
+  RateLimitResult,
+  RedisExecutor,
+} from './types.js';
+
+// Error class — exported as value (not just type) for instanceof checks
 export { RateLimitError } from './types.js';
