@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createRateLimiter } from '../../limiter.js';
 import type { RedisExecutor } from '../../types.js';
 
-const hasRedis = process.env.REDIS_URL !== undefined && process.env.REDIS_URL !== '';
+const hasRedis = process.env['REDIS_URL'] !== undefined && process.env['REDIS_URL'] !== '';
 
 describe.skipIf(!hasRedis)('@diabolicallabs/rate-limiter integration — real Redis', () => {
   let redis: RedisExecutor;
@@ -26,7 +26,7 @@ describe.skipIf(!hasRedis)('@diabolicallabs/rate-limiter integration — real Re
   beforeAll(async () => {
     // Dynamic import to avoid ioredis being a hard dep in non-integration test runs
     const { default: Redis } = await import('ioredis');
-    const client = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
+    const client = new Redis(process.env['REDIS_URL'] ?? 'redis://localhost:6379', {
       lazyConnect: true,
       maxRetriesPerRequest: 1,
     });

@@ -48,35 +48,6 @@ function makeAtomicInMemoryExecutor(maxRequests: number): RedisExecutor {
   };
 }
 
-/**
- * Non-atomic (broken) executor — simulates MULTI/EXEC race condition.
- * Two concurrent reads can both see count < max and both increment.
- * Used to verify the test WOULD catch atomicity violations.
- */
-function _makeNonAtomicExecutor(maxRequests: number): RedisExecutor {
-  let count = 0;
-
-  // Non-atomic: read, yield, then increment — allows race conditions
-  const nonAtomicCheck = async (): Promise<[number, number, number]> => {
-    const snapshot = count; // Read current count
-    // In a real race, another call could also read `snapshot` here
-    // before we do the increment below.
-    await Promise.resolve(); // Yield to event loop — simulates potential interleave
-    if (snapshot < maxRequests) {
-      count = snapshot + 1; // Non-atomic: may overwrite concurrent increment
-      const remaining = maxRequests - count;
-      return [1, Math.max(0, remaining), 0];
-    }
-    return [0, 0, 1000];
-  };
-
-  return {
-    eval: () => nonAtomicCheck(),
-    evalsha: () => nonAtomicCheck(),
-    scriptLoad: () => Promise.resolve('non-atomic-sha'),
-  };
-}
-
 describe('Lua atomicity stress test (AC #14)', () => {
   it('atomic executor: 100 parallel check() calls under limit=10 never admit more than 10', async () => {
     const MAX = 10;

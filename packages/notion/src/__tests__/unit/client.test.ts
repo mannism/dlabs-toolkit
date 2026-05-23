@@ -54,7 +54,7 @@ const handlers = [
 
   // GET /v1/pages/:id
   http.get(`${BASE}/pages/:pageId`, ({ params }) => {
-    const id = String(params.pageId);
+    const id = String(params['pageId']);
     if (id === 'not-found') {
       return HttpResponse.json(
         { object: 'error', code: 'object_not_found', message: 'Could not find page' },
@@ -66,7 +66,7 @@ const handlers = [
 
   // PATCH /v1/pages/:id
   http.patch(`${BASE}/pages/:pageId`, ({ params }) =>
-    HttpResponse.json(makePage(String(params.pageId)))
+    HttpResponse.json(makePage(String(params['pageId'])))
   ),
 
   // POST /v1/data_sources/:id/query (dataSources.query via SDK)
@@ -92,52 +92,52 @@ afterAll(() => server.close());
 
 describe('createNotionClientFromEnv', () => {
   it('throws NotionValidationError when NOTION_API_KEY is absent', () => {
-    const saved = process.env.NOTION_API_KEY;
-    const savedToken = process.env.NOTION_TOKEN;
-    delete process.env.NOTION_API_KEY;
-    delete process.env.NOTION_TOKEN;
+    const saved = process.env['NOTION_API_KEY'];
+    const savedToken = process.env['NOTION_TOKEN'];
+    delete process.env['NOTION_API_KEY'];
+    delete process.env['NOTION_TOKEN'];
 
     expect(() => createNotionClientFromEnv()).toThrow(NotionValidationError);
     expect(() => createNotionClientFromEnv()).toThrow(/NOTION_API_KEY/);
 
-    if (saved !== undefined) process.env.NOTION_API_KEY = saved;
-    if (savedToken !== undefined) process.env.NOTION_TOKEN = savedToken;
+    if (saved !== undefined) process.env['NOTION_API_KEY'] = saved;
+    if (savedToken !== undefined) process.env['NOTION_TOKEN'] = savedToken;
   });
 
   it('throws NotionValidationError when NOTION_API_KEY is empty string', () => {
-    const saved = process.env.NOTION_API_KEY;
-    const savedToken = process.env.NOTION_TOKEN;
-    process.env.NOTION_API_KEY = '';
-    delete process.env.NOTION_TOKEN;
+    const saved = process.env['NOTION_API_KEY'];
+    const savedToken = process.env['NOTION_TOKEN'];
+    process.env['NOTION_API_KEY'] = '';
+    delete process.env['NOTION_TOKEN'];
 
     expect(() => createNotionClientFromEnv()).toThrow(NotionValidationError);
 
     if (saved !== undefined) {
-      process.env.NOTION_API_KEY = saved;
+      process.env['NOTION_API_KEY'] = saved;
     } else {
-      delete process.env.NOTION_API_KEY;
+      delete process.env['NOTION_API_KEY'];
     }
-    if (savedToken !== undefined) process.env.NOTION_TOKEN = savedToken;
+    if (savedToken !== undefined) process.env['NOTION_TOKEN'] = savedToken;
   });
 
   it('accepts NOTION_TOKEN as fallback', () => {
-    const saved = process.env.NOTION_API_KEY;
-    const savedToken = process.env.NOTION_TOKEN;
-    delete process.env.NOTION_API_KEY;
-    process.env.NOTION_TOKEN = 'test-token';
+    const saved = process.env['NOTION_API_KEY'];
+    const savedToken = process.env['NOTION_TOKEN'];
+    delete process.env['NOTION_API_KEY'];
+    process.env['NOTION_TOKEN'] = 'test-token';
 
     // Should NOT throw — creates client with NOTION_TOKEN
     expect(() => createNotionClientFromEnv()).not.toThrow();
 
     if (saved !== undefined) {
-      process.env.NOTION_API_KEY = saved;
+      process.env['NOTION_API_KEY'] = saved;
     } else {
-      delete process.env.NOTION_API_KEY;
+      delete process.env['NOTION_API_KEY'];
     }
     if (savedToken !== undefined) {
-      process.env.NOTION_TOKEN = savedToken;
+      process.env['NOTION_TOKEN'] = savedToken;
     } else {
-      delete process.env.NOTION_TOKEN;
+      delete process.env['NOTION_TOKEN'];
     }
   });
 });

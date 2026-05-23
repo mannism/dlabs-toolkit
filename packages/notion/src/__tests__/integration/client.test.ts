@@ -21,15 +21,15 @@ import type { NotionClient } from '../../types.js';
 
 // Skip all tests in this file when the env vars are not set.
 const hasCredentials =
-  process.env.NOTION_API_KEY !== undefined &&
-  process.env.NOTION_API_KEY !== '' &&
-  process.env.NOTION_TEST_DATABASE_ID !== undefined &&
-  process.env.NOTION_TEST_DATABASE_ID !== '';
+  process.env['NOTION_API_KEY'] !== undefined &&
+  process.env['NOTION_API_KEY'] !== '' &&
+  process.env['NOTION_TEST_DATABASE_ID'] !== undefined &&
+  process.env['NOTION_TEST_DATABASE_ID'] !== '';
 
 describe.skipIf(!hasCredentials)('@diabolicallabs/notion integration', () => {
   let client: NotionClient;
   let createdPageId: string | undefined;
-  const databaseId = process.env.NOTION_TEST_DATABASE_ID ?? '';
+  const databaseId = process.env['NOTION_TEST_DATABASE_ID'] ?? '';
 
   beforeAll(() => {
     client = createNotionClientFromEnv();

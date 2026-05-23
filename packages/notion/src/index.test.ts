@@ -37,15 +37,15 @@ describe('@diabolicallabs/notion', () => {
   });
 
   it('createNotionClientFromEnv throws NotionValidationError when key is absent', () => {
-    const saved = process.env.NOTION_API_KEY;
-    const savedToken = process.env.NOTION_TOKEN;
-    delete process.env.NOTION_API_KEY;
-    delete process.env.NOTION_TOKEN;
+    const saved = process.env['NOTION_API_KEY'];
+    const savedToken = process.env['NOTION_TOKEN'];
+    delete process.env['NOTION_API_KEY'];
+    delete process.env['NOTION_TOKEN'];
 
     expect(() => createNotionClientFromEnv()).toThrow(NotionValidationError);
 
-    if (saved !== undefined) process.env.NOTION_API_KEY = saved;
-    if (savedToken !== undefined) process.env.NOTION_TOKEN = savedToken;
+    if (saved !== undefined) process.env['NOTION_API_KEY'] = saved;
+    if (savedToken !== undefined) process.env['NOTION_TOKEN'] = savedToken;
   });
 
   // Error class exports

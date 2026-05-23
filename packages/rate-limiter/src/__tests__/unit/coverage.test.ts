@@ -194,7 +194,7 @@ describe('RL_REJECTED log event', () => {
     await limiter.check('rejected-key');
     const rejectedEvent = warnEvents.find((e) => e.event === 'RL_REJECTED');
     expect(rejectedEvent).toBeDefined();
-    expect(rejectedEvent?.data.key).toBe('rejected-key');
-    expect(rejectedEvent?.data.kind).toBe('exceeded');
+    expect(rejectedEvent?.data['key']).toBe('rejected-key');
+    expect(rejectedEvent?.data['kind']).toBe('exceeded');
   });
 });
