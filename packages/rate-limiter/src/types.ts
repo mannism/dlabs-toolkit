@@ -108,7 +108,6 @@ export interface RateLimiter {
  * unavailable, actual window tail when exceeded).
  */
 export class RateLimitError extends Error {
-  override readonly name = 'RateLimitError';
   readonly kind: 'exceeded' | 'unavailable';
   readonly remaining: number;
   readonly resetMs: number;
@@ -120,6 +119,7 @@ export class RateLimitError extends Error {
     resetMs: number;
   }) {
     super(opts.message);
+    this.name = 'RateLimitError';
     this.kind = opts.kind;
     this.remaining = opts.remaining;
     this.resetMs = opts.resetMs;
