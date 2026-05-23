@@ -37,8 +37,13 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@types/node": "^25.9.0",
     "@vitest/coverage-v8": "^4.1.6",
+    "msw": "^2.14.6",
     "tsup": "^8.3.5",
     "vitest": "^4.1.6"
+  },
+  "dependencies": {
+    "@notionhq/client": "^5.22.0"
   }
 }

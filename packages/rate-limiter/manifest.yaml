@@ -1,19 +1,19 @@
 name: "@diabolicallabs/rate-limiter"
 purpose: >
-  Redis sliding-window rate limiter. Implementation uses a sorted set per key:
-  ZREMRANGEBYSCORE to evict expired entries, ZCARD to count the current window,
-  ZADD to record the request — all in a single pipeline for atomicity.
-  Fail-closed: if the Redis connection throws, the request is rejected.
-  Never default to permissive on infrastructure failure.
-  ioredis is a peerDependency — caller provides the singleton.
+  Redis sliding-window rate limiter using a Lua EVAL/EVALSHA atomic script.
+  The sorted-set algorithm (ZREMRANGEBYSCORE + ZCARD + conditional ZADD +
+  EXPIRE, all in a single Lua call) prevents race conditions that MULTI/EXEC
+  cannot. SHA pre-warmed at construction via SCRIPT LOAD; NOSCRIPT fallback
+  to EVAL + SHA reload on Redis cache flush. Structural RedisExecutor interface
+  — caller provides any Redis client with eval/evalsha/scriptLoad.
 owner: Sable
-status: scaffolded
+status: stable
 
 depends_on:
-  - name: "ioredis (peerDependency)"
-    why: "Sorted-set pipeline implementation requires an ioredis client. Listed as peerDep so consumers provide their existing singleton — no duplicate Redis connections."
+  - name: "ioredis (peerDependency, optional)"
+    why: "Structural RedisExecutor interface is satisfied by ioredis Redis instance. Listed as peerDep so consumers provide their existing singleton — no duplicate Redis connections."
   - name: "Redis"
-    why: "Sorted set sorted by timestamp. ZREMRANGEBYSCORE evicts expired entries, ZCARD counts the window, ZADD records the request."
+    why: "Sorted set per key, server-side TIME for authoritative clock. Lua atomicity requires Redis 2.6+."
 
 depended_on_by:
   - name: "FitChecker"
@@ -25,36 +25,36 @@ depended_on_by:
 
 exports:
   - "createRateLimiter(config: RateLimiterConfig): RateLimiter"
-  - "RateLimitError (class)"
-  - "Types: RateLimiterConfig, RateLimitResult, RateLimiter"
+  - "setRateLimiterLogger(logger: Logger): void"
+  - "RateLimitError (class) — kind: 'exceeded' | 'unavailable'"
+  - "Types: RateLimiterConfig, RateLimitResult, RateLimiter, RedisExecutor, Logger"
 
 contracts:
-  algorithm: "sliding window via Redis sorted set"
-  pipeline:
-    ops: ["ZREMRANGEBYSCORE", "ZCARD", "ZADD"]
-    atomicity: "single redis.multi().exec() call"
-  fail_closed:
-    trigger: "redis.multi().exec() throws"
-    check_behavior: "returns { allowed: false, remaining: 0, resetMs: windowMs }"
-    enforce_behavior: "throws RateLimitError"
+  algorithm: "sliding window via Redis sorted set, Lua EVAL atomic"
+  lua_ops: ["TIME", "ZREMRANGEBYSCORE", "ZCARD", "ZADD", "EXPIRE"]
+  atomicity: "single Lua script — no interleaving between concurrent clients"
+  evalsha_optimization: "SHA pre-warmed at construction; NOSCRIPT falls back to EVAL + SHA reload"
+  fail_policy:
+    default: "closed — Redis error → request blocked (kind: unavailable)"
+    override: "onRedisError: 'open' → request allowed, RL_REDIS_ERROR logged"
 
 failure_modes:
   - trigger: "Redis unreachable"
-    impact: "Request rejected (fail-closed). check() returns { allowed: false }. enforce() throws RateLimitError."
-    propagation: "propagated — caller receives RateLimitError"
-  - trigger: "Redis timeout"
-    impact: "Same as unreachable — fail-closed"
-    propagation: "propagated"
-  - trigger: "Rate limit exceeded normally"
+    impact: "check() returns { allowed: false, kind: unavailable }. enforce() throws RateLimitError."
+    propagation: "fail-closed by default; fail-open if onRedisError: 'open'"
+  - trigger: "Redis script cache flushed (NOSCRIPT)"
+    impact: "Automatic fallback to EVAL + SHA reload. Transparent to caller."
+    propagation: "silent — one extra round-trip"
+  - trigger: "Rate limit exceeded"
     impact: "check() returns { allowed: false, remaining: 0, resetMs: N }. enforce() throws RateLimitError."
-    propagation: "propagated"
+    propagation: "propagated — caller receives RateLimitError with kind: 'exceeded'"
 
 performance:
-  expected_latency: "~1-2ms per check (Redis RTT on same host/LAN). Three ops in one pipeline."
+  expected_latency: "~1-2ms per check (Redis RTT on same host/LAN). One Lua call per check."
   notes: "Do not call check() in a hot loop — one check per request, at the request boundary."
 
 notes: |
-  Status 'scaffolded': types and factory stub are in place; implementation
-  ships Week 5 (parallel with @diabolicallabs/notion, no cross-dependency).
-  The fail-closed default is intentional and non-negotiable — a rate limiter
-  that fails open is not a rate limiter.
+  v1.0.0: full implementation ships Week 5. Uses Lua EVAL/EVALSHA for
+  atomicity (not MULTI/EXEC). RedisExecutor is a structural interface — no
+  hard ioredis type import. 40 unit tests, 89%+ branch coverage.
+  Integration test suite gated by REDIS_URL.

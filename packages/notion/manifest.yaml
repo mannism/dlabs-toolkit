@@ -1,16 +1,16 @@
 name: "@diabolicallabs/notion"
 purpose: >
-  Notion REST API helpers. Handles the repetitive parts of the Notion API:
-  authentication headers, Notion-Version header pinning, property serialization
-  for all common property types, conflict_error retry (common on concurrent
-  page writes), and the 3-req/s rate-limit backoff. Wraps the REST API
-  directly — not the official Notion SDK — for precise control.
+  Notion REST API client wrapping @notionhq/client v5. Handles authentication,
+  Notion-Version header pinning (2025-09-03), property serialization for all
+  common property types, conflict_error retry with full-jitter exponential
+  backoff, and structured error taxonomy. Authorization headers are stripped
+  from error logs — no secret leakage.
 owner: Sable
-status: scaffolded
+status: stable
 
 depends_on:
-  - name: "Notion REST API (v1, 2022-06-28)"
-    why: "Wraps directly via fetch. Version pinned for stability."
+  - name: "@notionhq/client ^5.22.0"
+    why: "Official Notion SDK. v5 uses dataSources.query (not databases.query) and default Notion-Version 2025-09-03."
 
 depended_on_by:
   - name: "usage-parser"
@@ -23,35 +23,42 @@ depended_on_by:
 exports:
   - "createNotionClient(config: NotionClientConfig): NotionClient"
   - "createNotionClientFromEnv(overrides?): NotionClient"
-  - "Types: NotionClientConfig, NotionPropertyValue, NotionProperties, NotionPage, NotionClient"
+  - "setNotionLogger(logger: Logger): void"
+  - "Types: NotionClientConfig, NotionPropertyValue, NotionProperties, NotionPage, NotionClient, Logger"
+  - "Errors: NotionError, NotionAuthError, NotionNotFoundError, NotionValidationError, NotionRateLimitError, NotionConflictError, NotionUnavailableError"
 
 contracts:
-  notion_version: "2022-06-28 — pinned. Backwards-compatible within v1."
+  notion_version: "2025-09-03 — aligned with @notionhq/client v5 default."
   rate_limit:
-    strategy: "Notion enforces ~3 req/s average. SDK adds 333ms delay between consecutive requests when rate-limited (HTTP 429 from Notion)."
+    strategy: "SDK handles 429 retries. NotionRateLimitError thrown after maxRetries exhausted."
   conflict_error:
-    strategy: "Retry with exponential backoff. Common on concurrent writes to the same page in batch operations."
+    strategy: "Retry with full-jitter exponential backoff. Common on concurrent writes."
     max_retries_default: 3
     base_delay_ms_default: 500
+  secret_safety: "Authorization header stripped from all error logs. apiKey never logged."
 
 failure_modes:
-  - trigger: "Notion API conflict_error (concurrent write)"
+  - trigger: "Notion conflict_error (concurrent write)"
     impact: "Retried automatically. Transparent to caller."
-    propagation: "silent if retried successfully; propagated after max_retries exhausted"
+    propagation: "silent if retried successfully; NotionConflictError after max_retries exhausted"
   - trigger: "HTTP 429 from Notion (rate limited)"
-    impact: "Retried after delay. Transparent to caller."
-    propagation: "silent if retried successfully; propagated after max_retries exhausted"
+    impact: "Retried after backoff. Transparent to caller."
+    propagation: "silent if retried successfully; NotionRateLimitError after max_retries exhausted"
   - trigger: "Invalid API key (HTTP 401)"
-    impact: "Throws immediately, no retry."
+    impact: "Throws NotionAuthError immediately, no retry."
+    propagation: "propagated"
+  - trigger: "Resource not found (HTTP 404)"
+    impact: "Throws NotionNotFoundError immediately."
+    propagation: "propagated"
+  - trigger: "NOTION_API_KEY env var absent"
+    impact: "createNotionClientFromEnv throws NotionValidationError synchronously at call site."
     propagation: "propagated"
 
 performance:
-  expected_latency: "Notion API p50 ~200-400ms per request. Rate-limit backoff adds delay on sustained batch operations."
-  notes: "Not suitable for latency-sensitive paths. Background/async usage pattern recommended for batch writes."
+  expected_latency: "Notion API p50 ~200-400ms per request. Conflict retry adds delay on concurrent batch operations."
+  notes: "Not suitable for latency-sensitive synchronous paths. Background/async usage pattern recommended."
 
 notes: |
-  Status 'scaffolded': types and factory stubs are in place; implementation
-  ships Week 5. Wraps Notion REST API directly — not the @notionhq/client SDK
-  — for control over version header and retry logic.
-  Acceptance gate: usage-parser writeToNotion() can be reimplemented using
-  this package with no behavior change.
+  v1.0.0: full implementation ships Week 5. Uses @notionhq/client v5 SDK
+  (dataSources.query, Notion-Version 2025-09-03). Serializes 12 property types.
+  64 unit tests, 85%+ branch coverage. Integration test suite gated by NOTION_API_KEY.
