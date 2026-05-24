@@ -1,6 +1,6 @@
 {
   "name": "@diabolicallabs/notifier-core",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Shared Notifier interface, PlatformError taxonomy, Logger, and retryWithJitter helper for the Diabolical Labs notifier package family. Zero runtime deps. © Diabolical Labs",
   "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
   "publisher": "Diabolical Labs",
