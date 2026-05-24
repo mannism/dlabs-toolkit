@@ -1,0 +1,72 @@
+name: "@diabolicallabs/slack"
+purpose: >
+  Send-only Slack notifier wrapping @slack/web-api v7. Supports chat.postMessage
+  (bot-token path) and incoming webhooks. Named error taxonomy extending notifier-core's
+  PlatformError hierarchy. Retry with full-jitter exponential backoff. Optional
+  @diabolicallabs/rate-limiter peer-dep for proactive tier-1 gating (1 msg/s/channel).
+  Secrets never logged — token stripped from all error context.
+owner: Sable
+status: stable
+
+depends_on:
+  - name: "@diabolicallabs/notifier-core ^1.0.0"
+    why: "Notifier interface, PlatformError taxonomy, Logger interface, retryWithJitter helper."
+  - name: "@slack/web-api ^7.x"
+    why: "Official Slack SDK for chat.postMessage. v7 is the current stable release (2026)."
+  - name: "@slack/types ^2.x"
+    why: "KnownBlock and related Block Kit types — re-exported so consumers don't need a direct dep."
+
+depended_on_by:
+  - name: "claudecli-local-mcp"
+    how: "Migration target — replaces @slack/bolt for send-only notifications."
+  - name: "Routines fleet-health digest"
+    how: "Currently webhook-only; will migrate to typed postWebhook."
+  - name: "GEOAudit cost alerts"
+    how: "Planned consumer for LLM cost threshold alerts."
+  - name: "FitChecker production alerts"
+    how: "Planned consumer for production error rate alerting."
+
+exports:
+  - "createSlackNotifier(config: SlackNotifierConfig): SlackNotifier"
+  - "createSlackNotifierFromEnv(overrides?): SlackNotifier"
+  - "setSlackLogger(logger: Logger | null): void"
+  - "interface SlackNotifier extends Notifier { postMessage, postWebhook }"
+  - "interface SlackNotifierConfig { botToken?, webhookUrl?, defaultChannel?, maxRetries?, ... }"
+  - "interface PostMessageArgs { channel, text, blocks?, threadTs? }"
+  - "interface PostWebhookArgs { text, blocks?, webhookUrl? }"
+  - "Types: KnownBlock, Block, SectionBlock, RichTextBlock (re-exported from @slack/types)"
+  - "Errors: SlackError, SlackAuthError, SlackChannelNotFoundError, SlackRateLimitError, SlackValidationError, SlackUnavailableError"
+
+contracts:
+  rate_limit:
+    strategy: "Two-layer: proactive (optional rate-limiter peer-dep before send) + reactive (Retry-After respect on 429). SlackRateLimitError thrown after maxRetries exhausted."
+    tier_1_limit: "1 msg/s per channel (Slack tier-1)"
+    retry_after_source: "Retry-After header (seconds) — propagated to PlatformRateLimitError.retryAfterMs (ms)"
+  secret_safety: "Authorization headers stripped from error context. botToken and webhookUrl never logged."
+  rate_limiter_fail_open: "When rate-limiter peer-dep throws (Redis down), logs SLACK_RATELIMITER_UNAVAILABLE and sends anyway."
+
+failure_modes:
+  - trigger: "Invalid bot token (invalid_auth, not_authed)"
+    impact: "SlackAuthError thrown immediately. Not retried."
+    propagation: "propagated"
+  - trigger: "Channel not found"
+    impact: "SlackChannelNotFoundError thrown immediately. Not retried."
+    propagation: "propagated"
+  - trigger: "429 rate limit"
+    impact: "SlackRateLimitError with kind='exceeded' and retryAfterMs from Retry-After. Not retried after maxRetries."
+    propagation: "propagated"
+  - trigger: "5xx from Slack"
+    impact: "SlackUnavailableError after retries exhausted."
+    propagation: "propagated"
+  - trigger: "Missing botToken and webhookUrl"
+    impact: "SlackValidationError thrown synchronously by factory function."
+    propagation: "propagated"
+  - trigger: "Rate-limiter peer-dep Redis down"
+    impact: "Logs SLACK_RATELIMITER_UNAVAILABLE; send proceeds. Slack's own 429 is the safety net."
+    propagation: "silent (logged)"
+
+notes: |
+  v1.0.0: Ships Week 6 notifier family wave (2026-05-24). Bolt app factory,
+  slash-command parsers, and domain-specific block formatters are explicitly
+  out of v1 scope — app-specific, stay in consumer. Revisit Bolt bootstrap
+  when a second bot consumer exists.

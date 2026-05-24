@@ -1,0 +1,48 @@
+name: "@diabolicallabs/notifier-core"
+purpose: >
+  Shared contract package for the Diabolical Labs notifier family. Exports the
+  Notifier interface, NotifyMessage/NotifyResult types, Logger interface, PlatformError
+  taxonomy (5 named subclasses), and retryWithJitter helper with full-jitter exponential
+  backoff. Zero runtime dependencies. All platform notifier packages (@diabolicallabs/slack,
+  @diabolicallabs/telegram) depend on this package for their shared contracts.
+owner: Sable
+status: stable
+
+depends_on: []
+
+depended_on_by:
+  - name: "@diabolicallabs/slack"
+    how: "Imports Notifier, NotifyMessage, NotifyResult, Logger, PlatformError subclasses, retryWithJitter"
+  - name: "@diabolicallabs/telegram"
+    how: "Imports Notifier, NotifyMessage, NotifyResult, Logger, PlatformError subclasses, retryWithJitter"
+
+exports:
+  - "interface Notifier { send(message: NotifyMessage): Promise<NotifyResult> }"
+  - "interface NotifyMessage { to: string; text: string; rich?: unknown }"
+  - "interface NotifyResult { platform: string; messageId: string; deliveredAt: Date }"
+  - "interface Logger { warn(event: string, data: Record<string, unknown>): void }"
+  - "class PlatformError(message, platform, code, cause?) — base error"
+  - "class PlatformAuthError extends PlatformError — 401/403-shaped"
+  - "class PlatformNotFoundError extends PlatformError — channel/chat not found"
+  - "class PlatformRateLimitError extends PlatformError — 429; adds kind + retryAfterMs"
+  - "class PlatformValidationError extends PlatformError — bad payload, missing field"
+  - "class PlatformUnavailableError extends PlatformError — 5xx after retries exhausted"
+  - "function retryWithJitter<T>(fn, options): Promise<T> — full-jitter exponential backoff"
+  - "function computeJitter(attempt, baseDelayMs, capDelayMs): number — exported for testing"
+
+contracts:
+  retry_formula: "delay = min(capDelayMs, baseDelayMs * 2^n) * random(0, 1) — AWS Full Jitter"
+  zero_runtime_deps: "No dependencies in package.json#dependencies. Types and pure functions only."
+
+failure_modes:
+  - trigger: "retryWithJitter — isRetryable returns false"
+    impact: "Error thrown immediately, no retry attempted."
+    propagation: "propagated"
+  - trigger: "retryWithJitter — maxRetries exhausted"
+    impact: "Last error thrown after all attempts."
+    propagation: "propagated"
+
+notes: |
+  v1.0.0: Ships Week 6 notifier family wave (2026-05-24). Consolidates the Logger
+  interface copy-pasted across 5 prior packages. Going forward, new toolkit notifier
+  packages import Logger from here instead of copy-pasting.
