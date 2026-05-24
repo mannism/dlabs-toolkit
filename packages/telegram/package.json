@@ -1,0 +1,48 @@
+{
+  "name": "@diabolicallabs/telegram",
+  "version": "0.0.0",
+  "description": "Send-only Telegram notifier via native fetch against api.telegram.org. No SDK dep. Named error taxonomy, retry_after body field, pluggable logger. © Diabolical Labs",
+  "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
+  "publisher": "Diabolical Labs",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mannism/dlabs-toolkit.git",
+    "directory": "packages/telegram"
+  },
+  "homepage": "https://github.com/mannism/dlabs-toolkit#readme",
+  "bugs": {
+    "url": "https://github.com/mannism/dlabs-toolkit/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check ./src",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@diabolicallabs/notifier-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.0",
+    "@vitest/coverage-v8": "^4.1.6",
+    "tsup": "^8.3.5",
+    "vitest": "^4.1.6"
+  }
+}

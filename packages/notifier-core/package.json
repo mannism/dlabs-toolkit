@@ -1,0 +1,45 @@
+{
+  "name": "@diabolicallabs/notifier-core",
+  "version": "0.0.0",
+  "description": "Shared Notifier interface, PlatformError taxonomy, Logger, and retryWithJitter helper for the Diabolical Labs notifier package family. Zero runtime deps. © Diabolical Labs",
+  "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
+  "publisher": "Diabolical Labs",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mannism/dlabs-toolkit.git",
+    "directory": "packages/notifier-core"
+  },
+  "homepage": "https://github.com/mannism/dlabs-toolkit#readme",
+  "bugs": {
+    "url": "https://github.com/mannism/dlabs-toolkit/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check ./src",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.0",
+    "@vitest/coverage-v8": "^4.1.6",
+    "tsup": "^8.3.5",
+    "vitest": "^4.1.6"
+  }
+}

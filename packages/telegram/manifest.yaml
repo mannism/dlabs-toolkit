@@ -1,0 +1,77 @@
+name: "@diabolicallabs/telegram"
+purpose: >
+  Send-only Telegram notifier using native fetch against api.telegram.org.
+  No SDK dependency (no grammY, no telegraf). sendMessage via POST to
+  /bot{token}/sendMessage. Named error taxonomy extending notifier-core's
+  PlatformError hierarchy. retry_after value sourced from response BODY field
+  parameters.retry_after (not a header — Telegram-specific behavior). MarkdownV2
+  escape helper. Secrets never logged — token is redacted in all log lines.
+owner: Sable
+status: stable
+
+depends_on:
+  - name: "@diabolicallabs/notifier-core ^1.0.0"
+    why: "Notifier interface, PlatformError taxonomy, Logger interface, retryWithJitter helper."
+
+depended_on_by:
+  - name: "labs (telegram-digital-twin TypeScript port)"
+    how: "Migration target — replaces labs/src/lib/twin/telegram.ts with typed notifier."
+  - name: "Future cron-driven fleet notifications"
+    how: "Planned consumer for scheduled health checks and digest notifications."
+
+exports:
+  - "createTelegramNotifier(config: TelegramNotifierConfig): TelegramNotifier"
+  - "createTelegramNotifierFromEnv(overrides?): TelegramNotifier"
+  - "setTelegramLogger(logger: Logger | null): void"
+  - "function escapeMarkdownV2(text: string): string"
+  - "interface TelegramNotifier extends Notifier { sendMessage(args): Promise<NotifyResult> }"
+  - "interface TelegramNotifierConfig { botToken, defaultChatId?, maxRetries?, apiBase?, ... }"
+  - "interface SendMessageArgs { chatId, text, parseMode?, replyMarkup?, disableWebPagePreview?, replyToMessageId? }"
+  - "interface InlineKeyboardMarkup { inline_keyboard: ReadonlyArray<ReadonlyArray<InlineKeyboardButton>> }"
+  - "interface InlineKeyboardButton { text, url?, callback_data? }"
+  - "Errors: TelegramError, TelegramAuthError, TelegramChatNotFoundError, TelegramRateLimitError, TelegramValidationError, TelegramUnavailableError"
+
+contracts:
+  retry_after:
+    source: "Response BODY field parameters.retry_after (seconds) — NOT a Retry-After header. Telegram-specific behavior."
+    note: "Converted to ms and set on TelegramRateLimitError.retryAfterMs."
+  rate_limits:
+    global: "30 msg/s per bot token (all send methods)"
+    per_chat: "1 msg/s per chat"
+    http_status: "429 with body: {ok: false, error_code: 429, parameters: {retry_after: N}}"
+  secret_safety: "botToken is in the URL path — never logged. Redacted form used in all log lines: https://api.telegram.org/bot[REDACTED]/sendMessage"
+  sdk: "Native fetch only. No grammY, no telegraf, no node-telegram-bot-api. Node.js 20+ built-in fetch."
+
+failure_modes:
+  - trigger: "Invalid bot token (401 Unauthorized)"
+    impact: "TelegramAuthError thrown immediately. Not retried."
+    propagation: "propagated"
+  - trigger: "Chat not found or bot blocked (400 chat not found, 403 bot was blocked)"
+    impact: "TelegramChatNotFoundError thrown immediately. Not retried."
+    propagation: "propagated"
+  - trigger: "429 rate limit"
+    impact: "TelegramRateLimitError with kind='exceeded' and retryAfterMs from body parameters.retry_after. Not retried."
+    propagation: "propagated"
+  - trigger: "400 Bad Request (bad payload, malformed parse_mode)"
+    impact: "TelegramValidationError thrown immediately. Not retried."
+    propagation: "propagated"
+  - trigger: "5xx from Telegram"
+    impact: "TelegramUnavailableError after retries exhausted."
+    propagation: "propagated"
+  - trigger: "Missing TELEGRAM_BOT_TOKEN"
+    impact: "TelegramValidationError thrown synchronously by factory function."
+    propagation: "propagated"
+  - trigger: "Cold DM to user who hasn't messaged the bot"
+    impact: "TelegramChatNotFoundError (403 Forbidden: bot was blocked by the user or 400 chat not found)."
+    propagation: "propagated"
+
+notes: |
+  v1.0.0: Ships Week 6 notifier family wave (2026-05-24). Bot framework (webhook
+  receive, command dispatch, middleware) is explicitly out of v1 scope — revisit
+  when a second Telegram bot use case beyond labs twin appears. If/when added,
+  revisit the grammY decision then (native fetch is the right call for a send-only
+  notifier; a full bot framework is a different surface).
+
+  Cold-DM constraint: Telegram's privacy model forbids a bot from initiating a DM
+  to a user who has never messaged the bot first. Channel/group sends are unrestricted.
+  Document this in READMEs; the notifier surfaces it as TelegramChatNotFoundError.
