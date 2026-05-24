@@ -2,21 +2,33 @@
 
 Shared platform infrastructure for the Diabolical Labs and Diana Ismail project fleet. Independently-versioned TypeScript packages consumed across multiple repos. © Diabolical Labs
 
-**`llm-client` at v3.0.1; `agent-sdk` at v3.0.4; `llm-pricing` at v1.0.0 (stable).** `notion` and `rate-limiter` remain pre-1.0.
+Eight v1.0.0+ packages on npmjs.com under `@diabolicallabs`. See per-package `package.json` for current versions — `MODULES.md` carries the canonical version index.
 
 ---
 
 ## Packages
 
+### LLM platform
 | Package | Status | Description |
 |---|---|---|
-| [`@diabolicallabs/llm-client`](packages/llm-client/) | published (v3.0.1) | Unified LLM API across 5 providers — Anthropic, OpenAI (Responses API), Gemini, DeepSeek, Perplexity. `complete()` / `stream()` / `structured()` / `withTools()` / `streamStructured()`. `createClient()` is async. **Errors:** 14-kind `LlmErrorKind` taxonomy. **Structured outputs:** native Zod 4 strict mode. **Retry / timeouts / abort:** configurable retry with exponential backoff, per-call `AbortSignal`, stream stall detection. **Failover:** provider failover on `fallbackOn` kinds, pool sub-path for concurrency control. **Hooks:** `beforeCall`/`afterCall` on all 5 call types; `LlmAfterCallContext.usage` populated for all paths including streaming. **Cost:** optional cost computation via `@diabolicallabs/llm-pricing`; `pricing.remoteUrl` on `createClient()` fetches live pricing with stale-while-revalidate (24h TTL, never-throws). **Escape hatches:** `providerOptions`, Anthropic prompt cache opt-in, web-grounded citations (Perplexity), response IDs. See [`packages/llm-client/MIGRATION.md`](packages/llm-client/MIGRATION.md) for v0.x → v1.0.0 migration. |
-| [`@diabolicallabs/llm-pricing`](packages/llm-pricing/) | published (v1.0.0, stable) | Default pricing table + `computeCost()` for all 5 providers. Covers Gemini long-context tiering, Anthropic dual cache write rates, DeepSeek deprecated alias resolution, o-series and `sonar-deep-research` partial-cost flags. `versionedAt` field for staleness detection. `pnpm pricing:verify` script for monthly drift checks. Hybrid storage: `pricing/table.json` at repo root is the canonical remote source; `fetchRemoteTable()` fetches it with stale-while-revalidate cache and a never-throws fail-safe — price refreshes update the JSON directly without a release cycle. Stable public API since 1.0.0: `computeCost`, `resolveModelPricing`, `fetchRemoteTable`, `DEFAULT_PRICING_TABLE`. |
-| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | published (v3.0.4) | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. `CallRecord.tool_calls` captures `withTools()` invocations. `CallRecord.cost` propagates per-call USD cost when `llm-pricing` is installed. `CallRecord.requestedModel` on provider failover. `streamStructured()` usage capture. All 5 call types route through a single dispatch function. `@diabolicallabs/llm-pricing` peer-dep removed — type-only usage inlined; no consumer install change required. Requires `llm-client@^3.0.0`. |
-| [`@diabolicallabs/notion`](packages/notion/) | scaffolded (v0.0.2) | Notion REST API helpers — page creation, property serialization, conflict retry, rate-limit backoff. |
-| [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | scaffolded (v0.0.2) | Redis sliding-window rate limiter. Sorted-set pipeline, fail-closed on Redis outage. |
+| [`@diabolicallabs/llm-client`](packages/llm-client/) | stable | Unified LLM API across 5 providers — Anthropic, OpenAI (Responses API), Gemini, DeepSeek, Perplexity. `complete()` / `stream()` / `structured()` / `withTools()` / `streamStructured()`. `createClient()` is async. **Errors:** 14-kind `LlmErrorKind` taxonomy. **Structured outputs:** native Zod 4 strict mode. **Retry / timeouts / abort:** configurable retry with exponential backoff, per-call `AbortSignal`, stream stall detection. **Failover:** provider failover on `fallbackOn` kinds, pool sub-path for concurrency control. **Hooks:** `beforeCall`/`afterCall` on all 5 call types; `LlmAfterCallContext.usage` populated for all paths including streaming. **Cost:** optional cost computation via `@diabolicallabs/llm-pricing`; `pricing.remoteUrl` on `createClient()` fetches live pricing with stale-while-revalidate (24h TTL, never-throws). **Escape hatches:** `providerOptions`, Anthropic prompt cache opt-in, web-grounded citations (Perplexity), response IDs. Pluggable logger. |
+| [`@diabolicallabs/llm-pricing`](packages/llm-pricing/) | stable | Default pricing table + `computeCost()` for all 5 providers. Covers Gemini long-context tiering, Anthropic dual cache write rates, DeepSeek deprecated alias resolution, o-series and `sonar-deep-research` partial-cost flags. `versionedAt` field for staleness detection. `pnpm pricing:verify` script for monthly drift checks. Hybrid storage: `pricing/table.json` at repo root is the canonical remote source; `fetchRemoteTable()` fetches it with stale-while-revalidate cache and a never-throws fail-safe — price refreshes update the JSON directly without a release cycle. Pluggable `PricingLogger`. |
+| [`@diabolicallabs/agent-sdk`](packages/agent-sdk/) | stable | Cost-tracking middleware wrapping llm-client. Async fire-and-forget ingestion to Agent Spend Dashboard. `CallRecord.tool_calls` captures `withTools()` invocations. `CallRecord.cost` propagates per-call USD cost when `llm-pricing` is installed. `CallRecord.requestedModel` on provider failover. `streamStructured()` usage capture. All 5 call types route through a single dispatch function. Pluggable logger. Requires `llm-client@^4.0.0`. |
 
-See [`MODULES.md`](MODULES.md) for the full manifest index and build plan.
+### Notifier family (Wave 6 — shipped 2026-05-24)
+| Package | Status | Description |
+|---|---|---|
+| [`@diabolicallabs/notifier-core`](packages/notifier-core/) | stable | Shared `Notifier` interface, `PlatformError` taxonomy (5 named subclasses), `Logger` interface, and `retryWithJitter` helper (full-jitter exponential backoff). Zero runtime dependencies. All notifier-family packages import their contracts from here. |
+| [`@diabolicallabs/slack`](packages/slack/) | stable | Send-only Slack notifier via `@slack/web-api` v7 — `chat.postMessage` (bot-token path) and incoming webhooks. Named error taxonomy extending `notifier-core` `PlatformError`. Two-layer rate limiting (reactive `Retry-After` + optional proactive `@diabolicallabs/rate-limiter` peer-dep for tier-1 gating). Block Kit type re-exports. Secrets never logged. |
+| [`@diabolicallabs/telegram`](packages/telegram/) | stable | Send-only Telegram notifier via native `fetch` against `api.telegram.org` — no SDK dependency. `sendMessage` with `parseMode`, `InlineKeyboardMarkup`, and `MarkdownV2` escape helper. Named error taxonomy. `retry_after` sourced from response body (Telegram-specific). Bot token redacted in all log lines. |
+
+### Integrations
+| Package | Status | Description |
+|---|---|---|
+| [`@diabolicallabs/notion`](packages/notion/) | stable | Notion REST API client wrapping `@notionhq/client` v5. `createDatabasePage` / `queryDatabase` (auto-paginated via `collectPaginatedAPI`) / `getPage` / `updatePage`. Named error taxonomy (6 subclasses including `NotionValidationError`). Full-jitter 409-conflict retry. Pluggable logger. Default Notion-Version `2025-09-03`. |
+| [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | stable | Redis sliding-window rate limiter using Lua `EVAL`/`EVALSHA` for atomicity. `RateLimiterConfig.onRedisError: 'closed' \| 'open'` (default closed). `RateLimitError.kind: 'exceeded' \| 'unavailable'` discriminator. Structural `RedisExecutor` interface — works with `ioredis` out of the box, swappable to `@upstash/redis` adapters without a major bump. Pluggable logger. |
+
+See [`MODULES.md`](MODULES.md) for the canonical version index and build-plan history.
 
 ---
 
@@ -96,11 +108,14 @@ Perplexity is web-grounded — `complete()` returns `response.citations` (array 
 ```
 dlabs-toolkit/
   packages/
-    llm-client/     @diabolicallabs/llm-client
-    llm-pricing/    @diabolicallabs/llm-pricing
-    agent-sdk/      @diabolicallabs/agent-sdk
-    notion/         @diabolicallabs/notion
-    rate-limiter/   @diabolicallabs/rate-limiter
+    llm-client/      @diabolicallabs/llm-client
+    llm-pricing/     @diabolicallabs/llm-pricing
+    agent-sdk/       @diabolicallabs/agent-sdk
+    notifier-core/   @diabolicallabs/notifier-core
+    slack/           @diabolicallabs/slack
+    telegram/        @diabolicallabs/telegram
+    notion/          @diabolicallabs/notion
+    rate-limiter/    @diabolicallabs/rate-limiter
   scripts/
     integration-test.ts            manual API integration tests (not in CI)
     smoke-*.ts / smoke-*.mjs       per-provider live smoke tests — pre-publish gate

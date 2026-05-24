@@ -1,5 +1,4 @@
 name: "@diabolicallabs/llm-client"
-version: "1.7.0"
 purpose: >
   Unified LLM client across 5 providers: OpenAI (Responses API), Anthropic, Gemini
   (@google/genai v2.x), DeepSeek, and Perplexity. Provides a single LlmClient interface
