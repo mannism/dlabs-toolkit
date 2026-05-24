@@ -1,6 +1,6 @@
 {
   "name": "@diabolicallabs/slack",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Send-only Slack notifier. chat.postMessage + incoming webhook via @slack/web-api. Named error taxonomy, retry, pluggable logger, optional rate-limiter peer-dep. © Diabolical Labs",
   "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
   "publisher": "Diabolical Labs",

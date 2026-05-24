@@ -1,6 +1,6 @@
 {
   "name": "@diabolicallabs/telegram",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Send-only Telegram notifier via native fetch against api.telegram.org. No SDK dep. Named error taxonomy, retry_after body field, pluggable logger. © Diabolical Labs",
   "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
   "publisher": "Diabolical Labs",
