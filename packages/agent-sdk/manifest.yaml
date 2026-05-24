@@ -24,11 +24,13 @@ status: published
 
 depends_on:
   - name: "@diabolicallabs/llm-client"
-    version: "^1.6.0"
+    version: "^4.0.0"
     why: "Wraps LlmClient via instrumentClient(). v2.0.0 routes all 5 call types through
-          a single buildAfterCallDispatch() function. Requires v1.6.0+ for
-          LlmAfterCallContext.usage to be populated on streaming paths — this is what
-          allows the unified dispatch to read usage from afterCall on stream/streamStructured."
+          a single buildAfterCallDispatch() function. v4.x is the current major track —
+          agent-sdk@3.1.0 cascaded with llm-client@4.0.0 when the pluggable PricingLogger
+          peer-dep contract changed. LlmAfterCallContext.usage is populated on all paths
+          including streaming, which is what allows the unified dispatch to read usage from
+          afterCall on stream/streamStructured."
   - name: "@diabolicallabs/llm-pricing"
     version: "devDependency only (workspace:*)"
     why: "Dev-only — used in tests and local type resolution. NOT a peer dep as of v3.0.1.

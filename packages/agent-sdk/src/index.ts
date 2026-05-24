@@ -2,14 +2,21 @@
  * @diabolicallabs/agent-sdk
  *
  * Cost-tracking middleware that wraps @diabolicallabs/llm-client.
- * Intercepts every LLM call to capture a CallRecord and dispatches it
- * asynchronously (fire-and-forget) to the Agent Spend Dashboard ingestion API.
+ * Intercepts every LLM call (complete, stream, structured, withTools,
+ * streamStructured) to capture a CallRecord and dispatch it asynchronously
+ * (fire-and-forget) to the Agent Spend Dashboard ingestion API.
  *
  * The instrumentation is non-blocking: the LLM response is returned to the
  * caller before the ingestion request completes. If ingestion fails, the SDK
  * retries up to maxIngestionRetries, then drops the record and logs a warning.
  *
- * Implementation begins Week 4. This file exports the public type surface only.
+ * All 5 call types route through a single buildAfterCallDispatch() function.
+ * CallRecord.tool_calls captures withTools() invocations; CallRecord.cost
+ * propagates per-call USD cost when llm-client is configured with pricing.
+ * CallRecord.requestedModel preserves the originally-requested model on
+ * provider failover. Pluggable logger via setAgentSdkLogger.
+ *
+ * Requires @diabolicallabs/llm-client@^4.0.0.
  */
 
 // Pluggable logger — swap at bootstrap for custom log routing

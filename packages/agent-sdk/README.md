@@ -2,7 +2,7 @@
 
 Cost-tracking middleware for `@diabolicallabs/llm-client`. Drop-in wrapper that captures call records and dispatches them asynchronously to the Agent Spend Dashboard. © Diabolical Labs
 
-**Pre-1.0. APIs may change between minor versions.**
+**Stable.** Requires `@diabolicallabs/llm-client@^4.0.0`. Public API committed: `instrumentClient`, `CallRecord`, `setAgentSdkLogger`.
 
 ## Status
 

@@ -1,5 +1,4 @@
 name: "@diabolicallabs/llm-pricing"
-version: "0.2.0"
 purpose: >
   Pricing table + cost computation for @diabolicallabs/llm-client. Converts LlmUsage token counts
   to USD cost breakdowns across all five supported providers. Ships a bundled DEFAULT_PRICING_TABLE
@@ -9,7 +8,7 @@ purpose: >
   without requiring an npm release cycle. Maintained via monthly Perplexity drift check + quarterly
   baseline refresh (Option D — see brief-pricing-maintenance.md).
 owner: Sable
-status: active
+status: published
 
 depends_on:
   - name: "Provider pricing pages (Anthropic, OpenAI, Google, Perplexity, DeepSeek)"
