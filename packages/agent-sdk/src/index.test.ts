@@ -40,11 +40,16 @@ const mockUsage: LlmUsage = {
   totalTokens: 150,
 };
 
+// Valid UUID fixtures — required after v3.2.0 UUID validation is active.
+// Non-UUID agentId/projectId now cause instrumentClient() to flip to disabled mode.
+const VALID_AGENT_UUID = '11111111-1111-4111-8111-111111111111';
+const VALID_PROJECT_UUID = '22222222-2222-4222-8222-222222222222';
+
 const sdkConfig: AgentSdkConfig = {
   identity: {
-    agentId: 'agent-uuid-1234',
+    agentId: VALID_AGENT_UUID,
     taskLabel: 'test-task',
-    projectId: 'proj-abc',
+    projectId: VALID_PROJECT_UUID,
   },
   ingestionUrl: 'https://spend.example.com/api/ingest',
   ingestionKey: 'secret-bearer-token',
@@ -257,7 +262,7 @@ describe('complete()', () => {
   it('omits optional CallRecord fields when identity fields are absent', async () => {
     const client = makeMockClient();
     const minimalConfig: AgentSdkConfig = {
-      identity: { agentId: 'agent-min' },
+      identity: { agentId: VALID_AGENT_UUID },
       ingestionUrl: 'https://spend.example.com/api/ingest',
       ingestionKey: 'key',
     };
@@ -628,6 +633,149 @@ describe('security', () => {
 });
 
 // ---------------------------------------------------------------------------
+// UUID validation (v3.2.0) — instrumentClient() startup checks
+// ---------------------------------------------------------------------------
+
+describe('UUID validation', () => {
+  /**
+   * Spy on console.warn before each test in this suite so we can assert exactly
+   * how many times it fires and what it says. We restore in afterEach via the
+   * top-level vi.restoreAllMocks().
+   */
+
+  // AC1: valid agentId + valid projectId → enabled (no warn, fetch called)
+  it('AC1: valid agentId + valid projectId → enabled, no console.warn', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, {
+      ...sdkConfig,
+      identity: { agentId: VALID_AGENT_UUID, projectId: VALID_PROJECT_UUID },
+    });
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(instrumented.sdkConfig.disabled).toBeFalsy();
+  });
+
+  // AC2 (criterion 1): invalid agentId, valid projectId → disabled + exactly one warn naming agentId
+  it('AC2: invalid agentId → disabled, one console.warn naming agentId', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, {
+      ...sdkConfig,
+      identity: { agentId: 'fitcheck-llm', projectId: VALID_PROJECT_UUID },
+    });
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0]?.[0]).toContain('agentId');
+    expect(warnSpy.mock.calls[0]?.[0]).not.toContain('projectId');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(instrumented.sdkConfig.disabled).toBe(true);
+  });
+
+  // AC3 (criterion 2): valid agentId, invalid projectId → disabled + exactly one warn naming projectId
+  it('AC3: valid agentId + invalid projectId → disabled, one console.warn naming projectId', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, {
+      ...sdkConfig,
+      identity: { agentId: VALID_AGENT_UUID, projectId: 'fitcheckerapp' },
+    });
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0]?.[0]).toContain('projectId');
+    expect(warnSpy.mock.calls[0]?.[0]).not.toContain('agentId');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(instrumented.sdkConfig.disabled).toBe(true);
+  });
+
+  // AC4 (criterion 4): valid agentId, projectId omitted → enabled (optional field)
+  it('AC4: valid agentId + omitted projectId → enabled, no warn', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, {
+      ...sdkConfig,
+      identity: { agentId: VALID_AGENT_UUID },
+    });
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(instrumented.sdkConfig.disabled).toBeFalsy();
+  });
+
+  // AC5 (criterion 5): both agentId and projectId invalid → disabled + exactly ONE consolidated warn
+  it('AC5: both agentId and projectId invalid → disabled, exactly one consolidated console.warn', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, {
+      ...sdkConfig,
+      identity: { agentId: 'fitcheck-llm', projectId: 'fitcheckerapp' },
+    });
+
+    await instrumented.complete(mockMessages);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    // Exactly ONE warn — not two separate ones
+    expect(warnSpy).toHaveBeenCalledOnce();
+    // The single warn names both fields
+    expect(warnSpy.mock.calls[0]?.[0]).toContain('agentId');
+    expect(warnSpy.mock.calls[0]?.[0]).toContain('projectId');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(instrumented.sdkConfig.disabled).toBe(true);
+  });
+
+  // AC6 (criterion 6): structured log event emitted via getLogger() on invalid config
+  it('AC6: invalid agentId → structured log event ingestion_disabled_invalid_config with field name, not value', async () => {
+    vi.spyOn(console, 'warn');
+    const loggedEvents: Array<{ event: string; data: Record<string, unknown> }> = [];
+    const testLogger: AgentSdkLogger = {
+      warn: (event, data) => {
+        loggedEvents.push({ event, data });
+      },
+    };
+    setAgentSdkLogger(testLogger);
+
+    const client = makeMockClient();
+    instrumentClient(client, {
+      ...sdkConfig,
+      identity: { agentId: 'not-a-uuid', projectId: VALID_PROJECT_UUID },
+    });
+
+    expect(loggedEvents).toHaveLength(1);
+    expect(loggedEvents[0]?.event).toBe('ingestion_disabled_invalid_config');
+    // biome-ignore lint/complexity/useLiteralKeys: data is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(loggedEvents[0]?.data['invalidFields']).toContain('agentId');
+    // Value must never appear — PII safety
+    expect(JSON.stringify(loggedEvents[0]?.data)).not.toContain('not-a-uuid');
+  });
+
+  // AC7 (criterion 5 — disabled: true explicitly): no validation, no warn
+  it('AC7: disabled: true explicitly passed → no UUID validation, no warn', async () => {
+    const warnSpy = vi.spyOn(console, 'warn');
+    const client = makeMockClient();
+    instrumentClient(client, {
+      ...sdkConfig,
+      identity: { agentId: 'definitely-not-a-uuid', projectId: 'also-not-a-uuid' },
+      disabled: true,
+    });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // withTools()
 // ---------------------------------------------------------------------------
 
@@ -880,7 +1028,7 @@ describe('cost propagation', () => {
 
 describe('requestedModel propagation from provider failover', () => {
   const failoverSdkConfig: AgentSdkConfig = {
-    identity: { agentId: 'failover-test-agent' },
+    identity: { agentId: VALID_AGENT_UUID },
     ingestionUrl: 'https://spend.example.com/api/ingest',
     ingestionKey: 'test-key',
     maxIngestionRetries: 0,

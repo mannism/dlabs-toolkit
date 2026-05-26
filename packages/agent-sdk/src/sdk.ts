@@ -69,6 +69,25 @@ import { getLogger } from './logger.js';
 import type { AgentSdkConfig, CallRecord, InstrumentedLlmClient, LlmCost } from './types.js';
 
 // ---------------------------------------------------------------------------
+// UUID validation (v3.2.0)
+// ---------------------------------------------------------------------------
+
+/**
+ * RFC 4122 UUID shape validator.
+ * Matches any 8-4-4-4-12 hex group (case-insensitive). No version/variant
+ * constraint — we are validating the shape the dashboard's Zod schema accepts,
+ * not the cryptographic properties of the UUID.
+ *
+ * Mirrors the guard in FitCheckerApp/lib/llm/index.ts (Fix #10) which was
+ * the origin of this pattern.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+// ---------------------------------------------------------------------------
 // CallRecord builder
 // ---------------------------------------------------------------------------
 
@@ -252,13 +271,47 @@ function buildAfterCallDispatch(sdkConfig: AgentSdkConfig) {
  * with sdkConfig attached — no instrumentation overhead, no fetch calls.
  */
 export function instrumentClient(client: LlmClient, config: AgentSdkConfig): InstrumentedLlmClient {
+  // UUID validation — runs before the disabled check so callers who accidentally
+  // pass a non-UUID agentId get a clear warning at call site, not a silent drop
+  // 4 retries later. If disabled is already true, skip entirely — caller opted out.
+  let effectiveConfig = config;
+  if (config.disabled !== true) {
+    const invalidFields: string[] = [];
+    if (!isValidUuid(config.identity.agentId)) {
+      invalidFields.push('agentId');
+    }
+    if (config.identity.projectId !== undefined && !isValidUuid(config.identity.projectId)) {
+      invalidFields.push('projectId');
+    }
+    if (invalidFields.length > 0) {
+      const fieldList = invalidFields.join(', ');
+      // console.warn — lands in the consumer's runtime logs without requiring
+      // them to wire up the SDK's pluggable logger. Actionable hint included.
+      console.warn(
+        `[agent-sdk] instrumentClient() called with non-UUID identity field(s): ${fieldList}. ` +
+          'Register this agent in the Spend Dashboard to get a valid UUID for each field. ' +
+          'Instrumentation is disabled until valid UUIDs are supplied — no records will be dispatched.'
+      );
+      // Structured log — goes through the pluggable logger so observability
+      // tooling (Railway log ingesters, Datadog adapters) can key on this event.
+      // Field names only — never log the actual values (may contain PII or leaked secrets).
+      getLogger().warn('ingestion_disabled_invalid_config', {
+        invalidFields: fieldList,
+        message: `instrumentClient() called with non-UUID identity field(s): ${fieldList}. Instrumentation disabled.`,
+      });
+      // Synthesize a disabled config — the existing disabled-mode return path
+      // below handles the zero-overhead no-op correctly.
+      effectiveConfig = { ...config, disabled: true };
+    }
+  }
+
   // Disabled mode: skip all instrumentation, expose underlying client directly
-  if (config.disabled === true) {
-    return { ...client, sdkConfig: config };
+  if (effectiveConfig.disabled === true) {
+    return { ...client, sdkConfig: effectiveConfig };
   }
 
   // Shared afterCall dispatch handler — used by all 5 call types uniformly
-  const dispatch = buildAfterCallDispatch(config);
+  const dispatch = buildAfterCallDispatch(effectiveConfig);
 
   // complete() — non-streaming, usage available on the response
   async function complete(...args: Parameters<LlmClient['complete']>): Promise<LlmResponse> {
@@ -368,7 +421,7 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
 
   return {
     config: client.config,
-    sdkConfig: config,
+    sdkConfig: effectiveConfig,
     complete,
     stream,
     structured,

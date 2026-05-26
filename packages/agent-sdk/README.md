@@ -6,7 +6,9 @@ Cost-tracking middleware for `@diabolicallabs/llm-client`. Drop-in wrapper that 
 
 ## Status
 
-**Published — v3.0.1.** `instrumentClient()` wraps all five `LlmClient` methods: `complete()`, `stream()`, `structured()`, `streamStructured()`, `withTools()`. Cost propagation (v1.1.0), failover `requestedModel` tracking (v1.2.0), and `streamStructured()` (v1.3.0) are included.
+**Published — v3.2.0.** `instrumentClient()` wraps all five `LlmClient` methods: `complete()`, `stream()`, `structured()`, `streamStructured()`, `withTools()`. Cost propagation (v1.1.0), failover `requestedModel` tracking (v1.2.0), and `streamStructured()` (v1.3.0) are included.
+
+**v3.2.0 — UUID validation at startup:** `instrumentClient()` now validates `identity.agentId` (required UUID) and `identity.projectId` (optional — validated if present) at call time. Non-UUID values emit a `console.warn` with the offending field names and flip the returned client to no-op/disabled mode rather than silently dispatching records that the dashboard will reject. See [Common pitfalls](#common-pitfalls).
 
 **v2.0.0 — architecture migration complete:** all 5 call types now route through a single `buildAfterCallDispatch()` function. The `stream()` and `streamStructured()` bespoke usage-capture wrappers retained in v1.4.0 are deleted. `LlmAfterCallContext.usage` is now populated by `llm-client@1.6.0` for streaming paths, so `agent-sdk` no longer needs its own generator iteration for usage capture. Public API is unchanged.
 
@@ -56,9 +58,9 @@ Wraps any `LlmClient` with cost-tracking middleware. The returned `InstrumentedL
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `identity.agentId` | `string` | required | UUID from Spend Dashboard agent registry |
+| `identity.agentId` | `string` | required | **Must be a UUID** from the Spend Dashboard agent registry. Non-UUID values flip the client to disabled mode with a `console.warn` at call time. |
 | `identity.taskLabel` | `string?` | — | Optional label for this call (max 200 chars) |
-| `identity.projectId` | `string?` | — | Optional project override |
+| `identity.projectId` | `string?` | — | Optional project override. **Must be a UUID** if supplied; non-UUID values flip the client to disabled mode with a `console.warn`. |
 | `ingestionUrl` | `string` | required | Agent Spend Dashboard `/api/ingest` endpoint |
 | `ingestionKey` | `string` | required | Agent-scoped bearer token |
 | `maxIngestionRetries` | `number` | `3` | Retries before dropping the record |
@@ -133,3 +135,11 @@ Ingestion failures are **always silent** — they never surface to the LLM calle
 - Endpoint down or slow: retried up to `maxIngestionRetries` with exponential backoff
 - Retries exhausted: record dropped, structured warning logged (includes `call_id` for audit)
 - `disabled: true`: all instrumentation skipped, underlying client returned directly
+
+## Common pitfalls
+
+### Non-UUID `agentId` or `projectId` — zero records appear in the dashboard
+
+Before v3.2.0, if you passed a non-UUID `agentId` (for example a slug like `"fitcheck-llm"`) or a non-UUID `projectId`, the SDK silently dispatched records to the dashboard, which rejected them with HTTP 400 `VALIDATION_ERROR`. The SDK retried 4 times and dropped the record — the only signal was a JSON-formatted `warn` on stdout that was easy to miss in Railway logs.
+
+From v3.2.0, `instrumentClient()` validates both fields at call time. If either is not a valid UUID, the SDK emits a `console.warn` naming the malformed field(s) and flips the returned client to no-op mode immediately — no records are dispatched. Register your agent in the Spend Dashboard to obtain the correct UUIDs, then set them via environment variables (for example `AGENT_SPEND_AGENT_ID` and `AGENT_SPEND_PROJECT_ID`).
