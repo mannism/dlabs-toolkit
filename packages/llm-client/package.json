@@ -50,7 +50,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
     "@google/genai": "^2.5.0",
-    "openai": "^6.38.0",
+    "openai": "^6.39.0",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
