@@ -22,7 +22,7 @@
 import type { PricingTable } from './types.js';
 
 export const DEFAULT_PRICING_TABLE: PricingTable = {
-  versionedAt: '2026-05-18',
+  versionedAt: '2026-06-04',
 
   anthropic: {
     'claude-haiku-3': {
@@ -31,8 +31,8 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheWritePer1M: 0.3125,
       inputPer1M: 0.25,
       outputPer1M: 1.25,
-      sourceUrl: 'https://platform.claude.com/docs/en/docs/about-claude/pricing',
-      verifiedAt: '2026-05-13',
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-06-04',
     },
     'claude-haiku-3-5': {
       cacheReadPer1M: 0.08,
@@ -40,8 +40,8 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheWritePer1M: 1,
       inputPer1M: 0.8,
       outputPer1M: 4,
-      sourceUrl: 'https://platform.claude.com/docs/en/docs/about-claude/pricing',
-      verifiedAt: '2026-05-13',
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-06-04',
     },
     'claude-haiku-4-5': {
       cacheReadPer1M: 0.1,
@@ -49,8 +49,8 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheWritePer1M: 1.25,
       inputPer1M: 1,
       outputPer1M: 5,
-      sourceUrl: 'https://platform.claude.com/docs/en/docs/about-claude/pricing',
-      verifiedAt: '2026-05-13',
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-06-04',
     },
     'claude-haiku-4-5-20251001': {
       cacheReadPer1M: 0.1,
@@ -58,8 +58,8 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheWritePer1M: 1.25,
       inputPer1M: 1,
       outputPer1M: 5,
-      sourceUrl: 'https://platform.claude.com/docs/en/docs/about-claude/pricing',
-      verifiedAt: '2026-05-13',
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-06-04',
     },
     'claude-opus-4-5': {
       cacheReadPer1M: 0.5,
@@ -76,8 +76,8 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheWritePer1M: 6.25,
       inputPer1M: 5,
       outputPer1M: 25,
-      sourceUrl: 'https://platform.claude.com/docs/en/docs/about-claude/pricing',
-      verifiedAt: '2026-05-13',
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-06-04',
     },
     'claude-opus-4-7': {
       cacheReadPer1M: 0.5,
@@ -85,8 +85,17 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheWritePer1M: 6.25,
       inputPer1M: 5,
       outputPer1M: 25,
-      sourceUrl: 'https://platform.claude.com/docs/en/docs/about-claude/pricing',
-      verifiedAt: '2026-05-13',
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-06-04',
+    },
+    'claude-opus-4-8': {
+      cacheReadPer1M: 0.5,
+      cacheWrite1hPer1M: 10,
+      cacheWritePer1M: 6.25,
+      inputPer1M: 5,
+      outputPer1M: 25,
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-06-04',
     },
     'claude-sonnet-4-5': {
       cacheReadPer1M: 0.3,
@@ -103,8 +112,8 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheWritePer1M: 3.75,
       inputPer1M: 3,
       outputPer1M: 15,
-      sourceUrl: 'https://platform.claude.com/docs/en/docs/about-claude/pricing',
-      verifiedAt: '2026-05-13',
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-06-04',
     },
     'claude-sonnet-4-6': {
       cacheReadPer1M: 0.3,
@@ -112,8 +121,8 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheWritePer1M: 3.75,
       inputPer1M: 3,
       outputPer1M: 15,
-      sourceUrl: 'https://platform.claude.com/docs/en/docs/about-claude/pricing',
-      verifiedAt: '2026-05-13',
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-06-04',
     },
   },
 
@@ -338,6 +347,13 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       outputPer1M: 12,
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
       verifiedAt: '2026-05-13',
+    },
+    'gemini-3.5-flash': {
+      cacheReadPer1M: 0.15,
+      inputPer1M: 1.5,
+      outputPer1M: 9,
+      sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
+      verifiedAt: '2026-06-04',
     },
   },
 
