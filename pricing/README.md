@@ -38,6 +38,12 @@ const client = await createClient({
 });
 ```
 
+### Drift detection (automation)
+
+A monthly n8n workflow (`automation/llm-pricing-drift-check.n8n.json`) runs on the 1st of each month, fetches the live `table.json`, queries Perplexity for current prices and latest GA models, and writes a ✅/⚠️ row to the Scheduled Work Notion DB. It is the front-end that triggers the refresh flow documented above — it never edits `table.json` directly.
+
+See [`automation/README.md`](automation/README.md) for install instructions and the full triage path.
+
 ## Editing prices
 
 1. Edit `pricing/table.json` directly in GitHub or clone + edit locally.

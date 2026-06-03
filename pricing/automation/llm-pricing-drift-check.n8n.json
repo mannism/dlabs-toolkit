@@ -1,0 +1,250 @@
+{
+  "name": "llm-pricing drift check (monthly)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "triggerAtDayOfMonth": 1,
+              "triggerAtHour": 7,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "node-schedule",
+      "name": "Monthly 07:30 SGT",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -80,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.json",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "node-fetch",
+      "name": "Fetch live table.json",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        160,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build evergreen Perplexity prompts from the live fetched pricing table.\n// Nothing about the table is hardcoded — the model list derives from the fetch at runtime.\nconst raw = $input.first().json;\nconst table = typeof raw === 'string' ? JSON.parse(raw)\n  : (typeof raw.data === 'string' ? JSON.parse(raw.data) : raw);\n\nconst SKIP = new Set(['$schema', 'versionedAt']);\nconst providers = Object.keys(table).filter(k => !SKIP.has(k) && table[k] && typeof table[k] === 'object');\n\nconst lineup = {};\nfor (const p of providers) lineup[p] = Object.keys(table[p]);\n\nconst today = new Date().toISOString().slice(0, 10);\n\nconst modelLines = providers.map(p => p + ': ' + lineup[p].join(', ')).join('\\n');\nconst driftPrompt =\n  'Today is ' + today + '. Return ONLY a JSON object (no prose, no markdown) giving the CURRENT official list ' +\n  'price in USD per 1,000,000 tokens for each model below. Shape exactly: ' +\n  '{\"provider\":{\"model-id\":{\"input\":<number>,\"output\":<number>}}}. ' +\n  'If you cannot find a reliable current price for a model, set its value to null. Models:\\n' + modelLines;\n\nconst newModelsPrompt =\n  'Today is ' + today + '. List the latest GENERALLY-AVAILABLE flagship and workhorse LLMs and their ' +\n  'per-1,000,000-token USD input/output pricing from these providers: ' + providers.join(', ') + '. ' +\n  'Return ONLY a JSON object of shape {\"provider\":{\"model-id\":{\"input\":<number>,\"output\":<number>}}}. ' +\n  'Include only models that are generally available today.';\n\nreturn [{ json: { table, providers, lineup, today, driftPrompt, newModelsPrompt } }];"
+      },
+      "id": "node-build",
+      "name": "Build queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.perplexity.ai/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "perplexityApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"sonar\", messages: [ { role: \"user\", content: $('Build queries').first().json.driftPrompt } ] }) }}",
+        "options": {}
+      },
+      "id": "node-ppx-drift",
+      "name": "Perplexity — drift",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        200
+      ],
+      "credentials": {
+        "perplexityApi": {
+          "id": "REPLACE_WITH_PERPLEXITY_CRED",
+          "name": "Perplexity API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.perplexity.ai/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "perplexityApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"sonar\", messages: [ { role: \"user\", content: $('Build queries').first().json.newModelsPrompt } ] }) }}",
+        "options": {}
+      },
+      "id": "node-ppx-new",
+      "name": "Perplexity — new models",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        400
+      ],
+      "credentials": {
+        "perplexityApi": {
+          "id": "REPLACE_WITH_PERPLEXITY_CRED",
+          "name": "Perplexity API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deterministic comparison — NO LLM. Iterates EVERY model key in the fetched table (old + new alike).\nconst THRESHOLD = 5; // percent, on input OR output\nconst bq = $('Build queries').first().json;\nconst table = bq.table;\nconst providers = bq.providers;\nconst today = bq.today;\n\n// Robust JSON extraction from a probabilistic Perplexity text response.\nfunction extractJson(content){\n  if (content == null) return {};\n  if (typeof content === 'object') return content;\n  const s = String(content);\n  const a = s.indexOf('{');\n  const b = s.lastIndexOf('}');\n  if (a === -1 || b === -1) return {};\n  try { return JSON.parse(s.slice(a, b + 1)); } catch (e) { return {}; }\n}\n\nconst detected = extractJson($('Perplexity — drift').first().json?.choices?.[0]?.message?.content);\nconst newLineup = extractJson($('Perplexity — new models').first().json?.choices?.[0]?.message?.content);\n\nconst results = [];\nfor (const provider of providers){\n  for (const model of Object.keys(table[provider])){\n    const t = table[provider][model];\n    const tIn = t.inputPer1M;\n    const tOut = t.outputPer1M;\n    const d = detected?.[provider]?.[model];\n    if (!d || d.input == null || d.output == null){\n      results.push({ provider, model, classification: 'UNVERIFIABLE', tIn, tOut });\n      continue;\n    }\n    const dIn = Number(d.input);\n    const dOut = Number(d.output);\n    const deltaIn = tIn ? Math.abs(dIn - tIn) / tIn * 100 : 0;\n    const deltaOut = tOut ? Math.abs(dOut - tOut) / tOut * 100 : 0;\n    const drift = deltaIn >= THRESHOLD || deltaOut >= THRESHOLD;\n    results.push({ provider, model, classification: drift ? 'DRIFT' : 'MATCH',\n      tIn, tOut, dIn, dOut, deltaIn: +deltaIn.toFixed(1), deltaOut: +deltaOut.toFixed(1) });\n  }\n}\n\n// New-model candidates: present in Perplexity's current lineup, absent as a key in the table.\nconst candidates = [];\nfor (const provider of Object.keys(newLineup || {})){\n  const known = table[provider] || {};\n  for (const model of Object.keys(newLineup[provider] || {})){\n    if (!(model in known)){\n      const p = newLineup[provider][model] || {};\n      candidates.push({ provider, model, input: p.input ?? null, output: p.output ?? null });\n    }\n  }\n}\n\nconst drifted = results.filter(r => r.classification === 'DRIFT');\nconst unverifiable = results.filter(r => r.classification === 'UNVERIFIABLE');\nconst verified = results.filter(r => r.classification === 'MATCH');\nconst action = drifted.length > 0 || candidates.length > 0;\n\nconst emoji = action ? '⚠️' : '✅';\nconst status = action ? 'Pending' : 'Completed';\nconst title = action\n  ? emoji + ' llm-pricing drift ' + today + ' — drift / new models (' + (drifted.length + candidates.length) + ')'\n  : emoji + ' llm-pricing drift ' + today + ' — no drift';\nconst summary = 'versionedAt ' + table.versionedAt + '; ' + verified.length + ' verified, ' +\n  unverifiable.length + ' unverifiable; ' + drifted.length + ' drifted; ' + candidates.length + ' new';\n\nlet body = '';\nif (drifted.length){\n  body += 'DRIFTED MODELS (provider / model / table in→out / detected in→out / delta%)\\n';\n  for (const r of drifted)\n    body += r.provider + ' / ' + r.model + ' / $' + r.tIn + '->$' + r.tOut + ' / $' + r.dIn + '->$' + r.dOut +\n      ' / in ' + r.deltaIn + '% out ' + r.deltaOut + '%\\n';\n  body += '\\n';\n}\nif (candidates.length){\n  body += 'NEW-MODEL CANDIDATES (provider / model / detected in->out)\\n';\n  for (const c of candidates) body += c.provider + ' / ' + c.model + ' / $' + c.input + '->$' + c.output + '\\n';\n  body += '\\n';\n}\nif (unverifiable.length)\n  body += 'UNVERIFIABLE: ' + unverifiable.map(u => u.provider + '/' + u.model).join(', ') + '\\n\\n';\n\nbody += 'Back-compat: table updates never delete existing model keys — older models stay supported and are ' +\n  'repriced (not removed) when they drift. Perplexity pricing is probabilistic — verify against official ' +\n  'provider pages before any table edit.';\n\nreturn [{ json: {\n  title,\n  status,\n  project: 'dlabs-toolkit',\n  job: 'llm-pricing drift',\n  details: summary + '\\n\\n' + body\n} }];"
+      },
+      "id": "node-compare",
+      "name": "Compare (deterministic)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "3501040c-1cf4-8030-a8d5-ca733ea635a6",
+          "mode": "id",
+          "cachedResultName": "Scheduled Work"
+        },
+        "title": "={{ $json.title }}",
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Job|select",
+              "selectValue": "llm-pricing drift"
+            },
+            {
+              "key": "Project Name|select",
+              "selectValue": "dlabs-toolkit"
+            },
+            {
+              "key": "Status|status",
+              "statusValue": "={{ $json.status }}"
+            },
+            {
+              "key": "Long form issue details|rich_text",
+              "textContent": "={{ $json.details }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-notion",
+      "name": "Create Scheduled Work row",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        300
+      ],
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_NOTION_CRED",
+          "name": "Notion API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Monthly 07:30 SGT": {
+      "main": [
+        [
+          {
+            "node": "Fetch live table.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch live table.json": {
+      "main": [
+        [
+          {
+            "node": "Build queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build queries": {
+      "main": [
+        [
+          {
+            "node": "Perplexity — drift",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perplexity — drift": {
+      "main": [
+        [
+          {
+            "node": "Perplexity — new models",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perplexity — new models": {
+      "main": [
+        [
+          {
+            "node": "Compare (deterministic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare (deterministic)": {
+      "main": [
+        [
+          {
+            "node": "Create Scheduled Work row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Singapore"
+  },
+  "meta": {
+    "templateId": "llm-pricing-drift-check"
+  },
+  "tags": []
+}

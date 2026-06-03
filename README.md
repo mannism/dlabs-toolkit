@@ -116,6 +116,9 @@ dlabs-toolkit/
     telegram/        @diabolicallabs/telegram
     notion/          @diabolicallabs/notion
     rate-limiter/    @diabolicallabs/rate-limiter
+  pricing/
+    table.json                      canonical remote pricing source
+    automation/                     n8n drift-check workflow + install docs
   scripts/
     integration-test.ts            manual API integration tests (not in CI)
     smoke-*.ts / smoke-*.mjs       per-provider live smoke tests — pre-publish gate
