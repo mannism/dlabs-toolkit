@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.schema.json",
-  "versionedAt": "2026-05-18",
+  "versionedAt": "2026-06-04",
   "anthropic": {
     "claude-opus-4-5": {
       "inputPer1M": 5.0,
@@ -17,8 +17,8 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-05-13",
-      "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/pricing"
+      "verifiedAt": "2026-06-04",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-sonnet-4-5": {
       "inputPer1M": 3.0,
@@ -35,8 +35,8 @@
       "cacheReadPer1M": 0.3,
       "cacheWritePer1M": 3.75,
       "cacheWrite1hPer1M": 6.0,
-      "verifiedAt": "2026-05-13",
-      "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/pricing"
+      "verifiedAt": "2026-06-04",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-haiku-4-5": {
       "inputPer1M": 1.0,
@@ -44,8 +44,8 @@
       "cacheReadPer1M": 0.1,
       "cacheWritePer1M": 1.25,
       "cacheWrite1hPer1M": 2.0,
-      "verifiedAt": "2026-05-13",
-      "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/pricing"
+      "verifiedAt": "2026-06-04",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-haiku-4-5-20251001": {
       "inputPer1M": 1.0,
@@ -53,8 +53,8 @@
       "cacheReadPer1M": 0.1,
       "cacheWritePer1M": 1.25,
       "cacheWrite1hPer1M": 2.0,
-      "verifiedAt": "2026-05-13",
-      "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/pricing"
+      "verifiedAt": "2026-06-04",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-opus-4-6": {
       "inputPer1M": 5.0,
@@ -62,8 +62,8 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-05-13",
-      "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/pricing"
+      "verifiedAt": "2026-06-04",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-sonnet-4-5-20250929": {
       "inputPer1M": 3.0,
@@ -71,8 +71,8 @@
       "cacheReadPer1M": 0.3,
       "cacheWritePer1M": 3.75,
       "cacheWrite1hPer1M": 6.0,
-      "verifiedAt": "2026-05-13",
-      "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/pricing"
+      "verifiedAt": "2026-06-04",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-haiku-3-5": {
       "inputPer1M": 0.8,
@@ -80,8 +80,8 @@
       "cacheReadPer1M": 0.08,
       "cacheWritePer1M": 1.0,
       "cacheWrite1hPer1M": 1.6,
-      "verifiedAt": "2026-05-13",
-      "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/pricing"
+      "verifiedAt": "2026-06-04",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-haiku-3": {
       "inputPer1M": 0.25,
@@ -89,8 +89,17 @@
       "cacheReadPer1M": 0.03,
       "cacheWritePer1M": 0.3125,
       "cacheWrite1hPer1M": 0.5,
-      "verifiedAt": "2026-05-13",
-      "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/pricing"
+      "verifiedAt": "2026-06-04",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    "claude-opus-4-8": {
+      "inputPer1M": 5.0,
+      "outputPer1M": 25.0,
+      "cacheReadPer1M": 0.5,
+      "cacheWritePer1M": 6.25,
+      "cacheWrite1hPer1M": 10.0,
+      "verifiedAt": "2026-06-04",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     }
   },
   "openai": {
@@ -312,6 +321,13 @@
       "outputPer1M": 0.40,
       "cacheReadPer1M": 0.01,
       "verifiedAt": "2026-05-18",
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    "gemini-3.5-flash": {
+      "inputPer1M": 1.5,
+      "outputPer1M": 9.0,
+      "cacheReadPer1M": 0.15,
+      "verifiedAt": "2026-06-04",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     }
   },
