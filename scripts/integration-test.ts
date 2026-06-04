@@ -83,9 +83,9 @@ async function main(): Promise<void> {
   // ───────────────────────────────────────────────────────────────────────────
   // ANTHROPIC
   // ───────────────────────────────────────────────────────────────────────────
-  section('Anthropic — claude-3-5-haiku-20241022');
+  section('Anthropic — claude-haiku-4-5');
 
-  const anthropic = await createClientFromEnv('anthropic', 'claude-3-5-haiku-20241022', {
+  const anthropic = await createClientFromEnv('anthropic', 'claude-haiku-4-5', {
     maxTokens: 256,
     maxRetries: 2,
   });
@@ -235,12 +235,12 @@ async function main(): Promise<void> {
   // ───────────────────────────────────────────────────────────────────────────
   // GEMINI (skipped if GOOGLE_AI_API_KEY is absent)
   // ───────────────────────────────────────────────────────────────────────────
-  section('Gemini — gemini-2.0-flash');
+  section('Gemini — gemini-2.5-flash');
 
   if (!process.env['GOOGLE_AI_API_KEY']) {
     skipSection('gemini', 'GOOGLE_AI_API_KEY not set');
   } else {
-    const gemini = await createClientFromEnv('gemini', 'gemini-2.0-flash', {
+    const gemini = await createClientFromEnv('gemini', 'gemini-2.5-flash', {
       maxTokens: 256,
       maxRetries: 2,
     });
