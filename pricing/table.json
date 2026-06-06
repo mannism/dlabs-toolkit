@@ -154,7 +154,7 @@
       "sourceUrl": "https://pricepertoken.com/pricing-page/provider/openai"
     },
     "gpt-5.4-nano": {
-      "inputPer1M": 0.20,
+      "inputPer1M": 0.2,
       "outputPer1M": 1.25,
       "cacheReadPer1M": 0.02,
       "verifiedAt": "2026-05-18",
@@ -167,8 +167,8 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing"
     },
     "o3-mini": {
-      "inputPer1M": 1.10,
-      "outputPer1M": 4.40,
+      "inputPer1M": 1.1,
+      "outputPer1M": 4.4,
       "cacheReadPer1M": 0.55,
       "hasInvisibleReasoningTokens": true,
       "verifiedAt": "2026-05-18",
@@ -184,21 +184,21 @@
     "o1": {
       "inputPer1M": 15.0,
       "outputPer1M": 60.0,
-      "cacheReadPer1M": 7.50,
+      "cacheReadPer1M": 7.5,
       "hasInvisibleReasoningTokens": true,
       "verifiedAt": "2026-05-18",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing"
     },
     "o1-mini": {
       "inputPer1M": 0.55,
-      "outputPer1M": 2.20,
+      "outputPer1M": 2.2,
       "cacheReadPer1M": 0.55,
       "hasInvisibleReasoningTokens": true,
       "verifiedAt": "2026-05-18",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing"
     },
     "gpt-4o": {
-      "inputPer1M": 2.50,
+      "inputPer1M": 2.5,
       "outputPer1M": 10.0,
       "cacheReadPer1M": 1.25,
       "verifiedAt": "2026-05-18",
@@ -206,7 +206,7 @@
     },
     "gpt-4o-mini": {
       "inputPer1M": 0.15,
-      "outputPer1M": 0.60,
+      "outputPer1M": 0.6,
       "cacheReadPer1M": 0.075,
       "verifiedAt": "2026-05-18",
       "sourceUrl": "https://pricepertoken.com/pricing-page/model/openai-gpt-4o-mini"
@@ -301,24 +301,24 @@
     "gemini-3.1-pro": {
       "inputPer1M": 2.0,
       "outputPer1M": 12.0,
-      "cacheReadPer1M": 0.20,
+      "cacheReadPer1M": 0.2,
       "longContextThreshold": 200000,
       "longContextInputPer1M": 4.0,
       "longContextOutputPer1M": 18.0,
-      "longContextCacheReadPer1M": 0.40,
+      "longContextCacheReadPer1M": 0.4,
       "verifiedAt": "2026-05-18",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-3-flash-preview": {
-      "inputPer1M": 0.50,
+      "inputPer1M": 0.5,
       "outputPer1M": 3.0,
       "cacheReadPer1M": 0.05,
       "verifiedAt": "2026-05-18",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-2.5-flash-lite": {
-      "inputPer1M": 0.10,
-      "outputPer1M": 0.40,
+      "inputPer1M": 0.1,
+      "outputPer1M": 0.4,
       "cacheReadPer1M": 0.01,
       "verifiedAt": "2026-05-18",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"

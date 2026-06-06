@@ -36,7 +36,9 @@ try {
   console.log('[smoke-deepseek] Success');
   console.log(`  model:   ${result.model}`);
   console.log(`  content: ${result.content.slice(0, 80)}`);
-  console.log(`  usage:   in=${result.usage.inputTokens} out=${result.usage.outputTokens} total=${result.usage.totalTokens}`);
+  console.log(
+    `  usage:   in=${result.usage.inputTokens} out=${result.usage.outputTokens} total=${result.usage.totalTokens}`
+  );
   console.log(`  latency: ${latency}ms`);
 } catch (err) {
   console.error('[smoke-deepseek] FAILED:', err);
