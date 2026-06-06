@@ -52,6 +52,21 @@ pnpm release              # build + changeset publish
 - **No package ships without tests.**
 - **Manifest files per package** following the global manifest schema at `/Users/mann/Documents/Claude/manifest-schema.md`.
 
+### Naming case
+
+| Surface | Convention | Examples |
+|---|---|---|
+| Types, interfaces, classes | PascalCase | `LlmContentBlock`, `CallRecord`, `AgentIdentity` |
+| Functions, variables, options | camelCase | `computeCost`, `instrumentClient`, `timeoutMs` |
+| Constants | UPPER_SNAKE_CASE | `DEFAULT_PRICING_TABLE`, `MAX_RETRIES` |
+| Filenames | kebab-case | `content-blocks.ts`, `extract-json.ts` |
+| Env vars | UPPER_SNAKE_CASE | `ANTHROPIC_API_KEY`, `SLACK_BOT_TOKEN` |
+| REST wire payloads | snake_case | `agent_id`, `prompt_tokens`, `chat_id` |
+
+**Two-tier rule:** in-process objects use camelCase; REST wire payloads (ingestion API bodies, third-party HTTP APIs like Telegram Bot API) use snake_case. Mappers at the boundary perform the conversion — do not leak wire-shaped types into application code.
+
+**Why no lint enforcement:** Biome's `useNamingConvention` rule cannot express this split without per-symbol overrides. Turning it on would flag every field of `CallRecord` (`agent_id`, `prompt_tokens`, …) and every Telegram body literal (`chat_id`, `parse_mode`). Convention is held by PR review instead.
+
 ## Brand and legal
 
 - **Published under:** Diabolical Labs (Diana Ismail's sole proprietor trade name).
