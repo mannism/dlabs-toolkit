@@ -1,5 +1,100 @@
 # @diabolicallabs/llm-client — Migration Guide
 
+## v4.1.x → v4.2.0 — Provider-neutral multimodal content blocks
+
+### What changed
+
+`LlmMessage.content` now accepts `string | LlmContentBlock[]`. String content works unchanged on all providers — no call-site changes required for existing consumers.
+
+Array content enables multimodal input (images and PDFs) where the provider supports them:
+
+| Provider | Supported block types |
+|---|---|
+| Anthropic | text, image (base64 + url), document (pdf base64) |
+| OpenAI | text, image (base64 + url), document (pdf base64) |
+| Gemini | text, image (base64 only), document (pdf base64) |
+| Perplexity | text only — media blocks rejected with `bad_request` (v4.2.0) |
+| DeepSeek | text only — media blocks rejected with `bad_request` |
+
+### New exports
+
+```typescript
+import type { LlmContentBlock, LlmDocumentMediaType, LlmImageMediaType } from '@diabolicallabs/llm-client';
+```
+
+### Capability matrix additions
+
+`getModelCapabilities(provider, model)` now returns a `mediaInput` field:
+
+```typescript
+caps.mediaInput.image.base64    // boolean
+caps.mediaInput.image.url       // boolean
+caps.mediaInput.document.pdfBase64 // boolean
+```
+
+### Positive example — multimodal user message
+
+```typescript
+import { type LlmContentBlock } from '@diabolicallabs/llm-client';
+
+const blocks: LlmContentBlock[] = [
+  {
+    type: 'document',
+    source: { type: 'base64', mediaType: 'application/pdf', data: pdfBase64 },
+  },
+  {
+    type: 'image',
+    source: { type: 'base64', mediaType: 'image/jpeg', data: jpegBase64 },
+  },
+  { type: 'text', text: 'Summarize these materials.' },
+];
+
+const response = await client.complete([
+  { role: 'system', content: systemPrompt },
+  { role: 'user', content: blocks },
+]);
+```
+
+### Negative example — sending a PDF URL to Gemini throws `bad_request`
+
+Gemini's `inlineData` only accepts base64 bytes, not URLs. Attempting to pass an image URL to Gemini throws `LlmError({ kind: 'bad_request' })` **before any network call**:
+
+```typescript
+// This will throw before any SDK call:
+await geminiClient.complete([
+  {
+    role: 'user',
+    content: [
+      // image.url is not supported on Gemini
+      { type: 'image', source: { type: 'url', url: 'https://example.com/photo.jpg' } },
+    ],
+  },
+]);
+// LlmError: [llm-client] Provider 'gemini' does not support image content with source 'url'
+//   in LlmMessage.content. Use a supported provider/model or convert the attachment to text
+//   before calling this provider.
+// kind: 'bad_request', retryable: false
+
+// Correct approach for Gemini — use base64:
+await geminiClient.complete([
+  {
+    role: 'user',
+    content: [
+      {
+        type: 'image',
+        source: { type: 'base64', mediaType: 'image/jpeg', data: jpegBase64 },
+      },
+    ],
+  },
+]);
+```
+
+### Note on toolkit identifier casing
+
+The toolkit uses `mediaType` (camelCase) in `LlmContentBlock`, not the provider-specific `media_type` (snake_case). The mappers in each provider file perform the conversion. Do not leak provider SDK types into application code.
+
+---
+
 ## v0.x → v1.0.0
 
 ### Breaking change 1 — Refined `LlmErrorKind` taxonomy

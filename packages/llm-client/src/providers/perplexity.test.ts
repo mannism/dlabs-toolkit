@@ -1267,3 +1267,97 @@ describe('Perplexity provider — response IDs (v1.4.0)', () => {
     expect(result.idSource).toBe('provider');
   });
 });
+
+// ─── Multimodal content blocks (v4.2.0) — Option B: defer + reject ────────────
+
+describe('Perplexity provider — multimodal content blocks (v4.2.0)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('passes string content unchanged (backward compat)', async () => {
+    const client = createPerplexityProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hello' }]);
+    expect(result.content).toBe('ok');
+    expect(mockCreate).toHaveBeenCalledOnce();
+  });
+
+  it('rejects image.base64 with bad_request before any SDK call', async () => {
+    const client = createPerplexityProvider(TEST_CONFIG);
+    await expect(
+      client.complete([
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', mediaType: 'image/jpeg', data: 'abc' } },
+          ],
+        },
+      ])
+    ).rejects.toMatchObject({ kind: 'bad_request', retryable: false });
+
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects image.url with bad_request before any SDK call', async () => {
+    const client = createPerplexityProvider(TEST_CONFIG);
+    await expect(
+      client.complete([
+        {
+          role: 'user',
+          content: [{ type: 'image', source: { type: 'url', url: 'https://example.com/img.jpg' } }],
+        },
+      ])
+    ).rejects.toMatchObject({ kind: 'bad_request', retryable: false });
+
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects document.base64 with bad_request before any SDK call', async () => {
+    const client = createPerplexityProvider(TEST_CONFIG);
+    await expect(
+      client.complete([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfbytes' },
+            },
+          ],
+        },
+      ])
+    ).rejects.toMatchObject({ kind: 'bad_request', retryable: false });
+
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('error message names provider and block type', async () => {
+    const client = createPerplexityProvider(TEST_CONFIG);
+    try {
+      await client.complete([
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', mediaType: 'image/jpeg', data: 'abc' } },
+          ],
+        },
+      ]);
+    } catch (err) {
+      const { LlmError: LE } = await import('../types.js');
+      expect(err).toBeInstanceOf(LE);
+      const e = err as InstanceType<typeof LE>;
+      expect(e.message).toContain("Provider 'perplexity'");
+      expect(e.kind).toBe('bad_request');
+    }
+  });
+});

@@ -1425,3 +1425,97 @@ describe('OpenAI provider — response IDs (v1.4.0)', () => {
     expect(result.idSource).toBe('provider');
   });
 });
+
+// ─── Multimodal content blocks (v4.2.0) ─────────────────────────────────────
+
+describe('OpenAI provider — multimodal content blocks (v4.2.0)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockResponse('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('passes string content unchanged (backward compat)', async () => {
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.complete([{ role: 'user', content: 'Hello' }]);
+
+    const callArgs = mockCreate.mock
+      .calls[0]?.[0] as OpenAI.Responses.ResponseCreateParamsNonStreaming;
+    const input = callArgs.input as OpenAI.Responses.EasyInputMessage[];
+    expect(input[0]?.content).toBe('Hello');
+  });
+
+  it('maps image.base64 to input_image with data URL', async () => {
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', mediaType: 'image/png', data: 'pngdata' } },
+        ],
+      },
+    ]);
+
+    const callArgs = mockCreate.mock
+      .calls[0]?.[0] as OpenAI.Responses.ResponseCreateParamsNonStreaming;
+    const input = callArgs.input as { role: string; content: unknown[] }[];
+    const content = input[0]?.content as { type: string; image_url?: string; detail?: string }[];
+    expect(content).toBeDefined();
+    expect(content[0]).toMatchObject({
+      type: 'input_image',
+      image_url: 'data:image/png;base64,pngdata',
+      detail: 'auto',
+    });
+  });
+
+  it('maps image.url to input_image with URL string', async () => {
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [{ type: 'image', source: { type: 'url', url: 'https://example.com/img.jpg' } }],
+      },
+    ]);
+
+    const callArgs = mockCreate.mock
+      .calls[0]?.[0] as OpenAI.Responses.ResponseCreateParamsNonStreaming;
+    const input = callArgs.input as { role: string; content: unknown[] }[];
+    const content = input[0]?.content as { type: string; image_url?: string }[];
+    expect(content[0]).toMatchObject({
+      type: 'input_image',
+      image_url: 'https://example.com/img.jpg',
+    });
+  });
+
+  it('maps document.base64 to input_file with data URI', async () => {
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfbytes' },
+          },
+        ],
+      },
+    ]);
+
+    const callArgs = mockCreate.mock
+      .calls[0]?.[0] as OpenAI.Responses.ResponseCreateParamsNonStreaming;
+    const input = callArgs.input as { role: string; content: unknown[] }[];
+    const content = input[0]?.content as { type: string; file_data?: string }[];
+    expect(content[0]).toMatchObject({
+      type: 'input_file',
+      file_data: 'data:application/pdf;base64,pdfbytes',
+    });
+  });
+});

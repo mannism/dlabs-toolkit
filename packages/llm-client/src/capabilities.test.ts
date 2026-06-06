@@ -117,4 +117,60 @@ describe('getModelCapabilities', () => {
     expect(CAPABILITIES_VERSIONED_AT).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(new Date(CAPABILITIES_VERSIONED_AT).getTime()).not.toBeNaN();
   });
+
+  // ── mediaInput capabilities (v4.2.0) ──────────────────────────────────────
+
+  it('Anthropic claude-sonnet-4-6: full media support', () => {
+    const caps = getModelCapabilities('anthropic', 'claude-sonnet-4-6');
+    expect(caps).not.toBeNull();
+    const c = caps as ModelCapabilities;
+    expect(c.mediaInput.image.base64).toBe(true);
+    expect(c.mediaInput.image.url).toBe(true);
+    expect(c.mediaInput.document.pdfBase64).toBe(true);
+  });
+
+  it('Anthropic claude-haiku-3: no media support', () => {
+    const caps = getModelCapabilities('anthropic', 'claude-haiku-3');
+    expect(caps).not.toBeNull();
+    const c = caps as ModelCapabilities;
+    expect(c.mediaInput.image.base64).toBe(false);
+    expect(c.mediaInput.image.url).toBe(false);
+    expect(c.mediaInput.document.pdfBase64).toBe(false);
+  });
+
+  it('OpenAI gpt-4.1: full media support', () => {
+    const caps = getModelCapabilities('openai', 'gpt-4.1');
+    expect(caps).not.toBeNull();
+    const c = caps as ModelCapabilities;
+    expect(c.mediaInput.image.base64).toBe(true);
+    expect(c.mediaInput.image.url).toBe(true);
+    expect(c.mediaInput.document.pdfBase64).toBe(true);
+  });
+
+  it('Gemini gemini-2.5-flash: base64 yes, URL no', () => {
+    const caps = getModelCapabilities('gemini', 'gemini-2.5-flash');
+    expect(caps).not.toBeNull();
+    const c = caps as ModelCapabilities;
+    expect(c.mediaInput.image.base64).toBe(true);
+    expect(c.mediaInput.image.url).toBe(false);
+    expect(c.mediaInput.document.pdfBase64).toBe(true);
+  });
+
+  it('Perplexity sonar-pro: no media support (smoke deferred)', () => {
+    const caps = getModelCapabilities('perplexity', 'sonar-pro');
+    expect(caps).not.toBeNull();
+    const c = caps as ModelCapabilities;
+    expect(c.mediaInput.image.base64).toBe(false);
+    expect(c.mediaInput.image.url).toBe(false);
+    expect(c.mediaInput.document.pdfBase64).toBe(false);
+  });
+
+  it('DeepSeek deepseek-v4-flash: no media support', () => {
+    const caps = getModelCapabilities('deepseek', 'deepseek-v4-flash');
+    expect(caps).not.toBeNull();
+    const c = caps as ModelCapabilities;
+    expect(c.mediaInput.image.base64).toBe(false);
+    expect(c.mediaInput.image.url).toBe(false);
+    expect(c.mediaInput.document.pdfBase64).toBe(false);
+  });
 });

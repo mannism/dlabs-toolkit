@@ -76,6 +76,7 @@ import type {
   LlmUsage,
 } from '../types.js';
 import { LlmError } from '../types.js';
+import { assertBlocksSupported } from './content-blocks.js';
 
 const PROVIDER = 'perplexity';
 const PERPLEXITY_BASE_URL = 'https://api.perplexity.ai';
@@ -99,12 +100,42 @@ function normalizeUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUs
   };
 }
 
-/** Convert LlmMessages to OpenAI-format chat message params. */
+/**
+ * Convert LlmMessages to OpenAI-format chat message params.
+ *
+ * v4.2.0 multimodal: Perplexity does not support image or document content blocks.
+ * The Sonar Chat Completions path (current provider implementation) was not verified
+ * to accept image_url-style blocks — PERPLEXITY_API_KEY was absent during the
+ * mandatory smoke test (2026-06-06). Per the spec: default to Option B (defer + reject).
+ *
+ * All non-text LlmContentBlock[] content is rejected with bad_request before any SDK call.
+ * Text-only block arrays (e.g. [{ type: 'text', text: 'hello' }]) are coerced to strings.
+ * Image support may be implemented in a future version after empirical smoke confirmation.
+ * See brief-llm-client-multimodal-content-blocks.md — Provider Reality table.
+ */
 function buildMessages(messages: LlmMessage[]): OpenAI.Chat.ChatCompletionMessageParam[] {
-  return messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  // Pre-flight guard: reject all image and document blocks (Option B — smoke not run).
+  // Perplexity does not support image or document input in v4.2.0.
+  assertBlocksSupported(messages, PROVIDER, {
+    textBlock: true,
+    imageBase64: false,
+    imageUrl: false,
+    documentBase64: false,
+  });
+
+  return messages.map((m) => {
+    // Coerce text-only block arrays to string — the Chat Completions API expects string content.
+    // assertBlocksSupported() above ensures no image/document blocks reach here.
+    const content = Array.isArray(m.content)
+      ? m.content
+          .filter(
+            (b): b is Extract<(typeof m.content)[number], { type: 'text' }> => b.type === 'text'
+          )
+          .map((b) => b.text)
+          .join('')
+      : m.content;
+    return { role: m.role, content };
+  });
 }
 
 /**

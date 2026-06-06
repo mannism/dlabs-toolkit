@@ -135,15 +135,64 @@ export interface RetryConfig {
   retryOn?: LlmErrorKind[];
 }
 
+// ─── Multimodal content block types (v4.2.0) ─────────────────────────────────
+
+/**
+ * Image media types supported by LlmContentBlock.
+ * Corresponds to the MIME types accepted by Anthropic, OpenAI, and Gemini vision APIs.
+ */
+export type LlmImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
+/**
+ * Document media types supported by LlmContentBlock.
+ * Only PDF is supported in v4.2.0 — URL source for documents is not generalized
+ * across providers and is excluded from this type surface.
+ */
+export type LlmDocumentMediaType = 'application/pdf';
+
+/**
+ * Provider-neutral multimodal content block for LlmMessage.content (v4.2.0+).
+ *
+ * Replaces (or augments) a string message with typed blocks that map to each
+ * provider's native request schema:
+ *
+ *   Anthropic — text/image/document all natively supported.
+ *   OpenAI    — text/image/document via Responses API input items.
+ *   Gemini    — text/image(base64)/document(base64) via inlineData parts.
+ *               URL images are not supported — use base64 source only.
+ *   Perplexity — all media blocks rejected with bad_request (v4.2.0).
+ *                Image support is deferred pending live smoke confirmation.
+ *   DeepSeek  — all media blocks rejected with bad_request.
+ *
+ * Use toolkit identifier `mediaType` (camelCase), not the provider-specific `media_type`.
+ * Use `type: 'url'` source only for images — document URL support is out of scope.
+ */
+export type LlmContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'image';
+      source:
+        | { type: 'base64'; mediaType: LlmImageMediaType; data: string }
+        | { type: 'url'; url: string };
+    }
+  | {
+      type: 'document';
+      source: { type: 'base64'; mediaType: LlmDocumentMediaType; data: string; filename?: string };
+    };
+
 /**
  * A single conversation turn passed to complete(), stream(), structured(), and withTools().
  * The 'system' role sets the model's behavioral instructions; 'user' and 'assistant' form
  * the conversation history. All providers normalize to this three-role shape regardless of
  * their native message format.
+ *
+ * v4.2.0: content now accepts `string | LlmContentBlock[]`. String content is unchanged
+ * on all providers. Array content enables multimodal input (images, PDFs) where supported.
+ * Unsupported media throws LlmError({ kind: 'bad_request' }) before any network call.
  */
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | LlmContentBlock[];
 }
 
 /**

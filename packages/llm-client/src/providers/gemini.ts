@@ -49,6 +49,7 @@ import {
   type GenerateContentResponse,
   type GenerateContentResponseUsageMetadata,
   GoogleGenAI,
+  type Part,
   type ToolConfig,
 } from '@google/genai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
@@ -82,6 +83,7 @@ import type {
   LlmUsage,
 } from '../types.js';
 import { LlmError } from '../types.js';
+import { assertBlocksSupported, mapGeminiParts } from './content-blocks.js';
 
 const PROVIDER = 'gemini';
 
@@ -100,21 +102,73 @@ function normalizeUsage(meta: GenerateContentResponseUsageMetadata | undefined):
  * Convert LlmMessages to Gemini's Content array format.
  * Extracts system message — Gemini treats system instructions separately from contents.
  * Role mapping: 'user' → 'user', 'assistant' → 'model' (Gemini API requires 'model').
+ *
+ * v4.2.0 multimodal support:
+ *   - String content is passed through as a text part (unchanged behavior).
+ *   - LlmContentBlock[] content is mapped to Gemini Part[] via mapGeminiParts().
+ *   - Pre-flight assertBlocksSupported() is called before mapping to guarantee that
+ *     unsupported block types (notably image.url) are rejected before any SDK call.
+ *
+ * Gemini supports: text, image (base64 only), document (base64 PDF via inlineData).
+ * Gemini does NOT accept URL images via inlineData — use inline base64 bytes only.
+ * image.url is rejected with bad_request before the SDK call.
+ *
+ * System message: Gemini accepts a plain string for systemInstruction.
+ * When a system message carries LlmContentBlock[], extract text blocks only.
+ * Image/document blocks in system are silently dropped (same policy as Anthropic).
  */
 function buildGeminiContents(messages: LlmMessage[]): {
   system: string | undefined;
   contents: Content[];
 } {
+  // Pre-flight: Gemini supports text, image.base64, document.base64.
+  // image.url is NOT supported — Gemini inlineData requires inline bytes.
+  assertBlocksSupported(messages, PROVIDER, {
+    textBlock: true,
+    imageBase64: true,
+    imageUrl: false,
+    documentBase64: true,
+  });
+
   const systemMessages = messages.filter((m) => m.role === 'system');
   const conversationMessages = messages.filter((m) => m.role !== 'system');
 
-  const system =
-    systemMessages.length > 0 ? systemMessages.map((m) => m.content).join('\n') : undefined;
+  let system: string | undefined;
+  if (systemMessages.length > 0) {
+    const parts: string[] = [];
+    for (const msg of systemMessages) {
+      if (Array.isArray(msg.content)) {
+        // Extract text only; silently drop image/document blocks in system messages.
+        parts.push(
+          msg.content
+            .filter(
+              (
+                b
+              ): b is Extract<(typeof msg.content)[number] & { type: 'text' }, { type: 'text' }> =>
+                b.type === 'text'
+            )
+            .map((b) => b.text)
+            .join('')
+        );
+      } else {
+        parts.push(msg.content);
+      }
+    }
+    system = parts.join('\n') || undefined;
+  }
 
-  const contents: Content[] = conversationMessages.map((m) => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: m.content }],
-  }));
+  const contents: Content[] = conversationMessages.map((m) => {
+    if (Array.isArray(m.content)) {
+      return {
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: mapGeminiParts(m.content) as Part[],
+      };
+    }
+    return {
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    };
+  });
 
   return { system, contents };
 }

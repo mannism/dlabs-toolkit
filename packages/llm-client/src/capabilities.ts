@@ -44,6 +44,11 @@ export type LlmProvider = LlmClientConfig['provider'];
  *                        'synthesized' = toolkit generates a UUID v7-style id (time-sortable).
  *   streamStructured   — supports streamStructured() (v1.3.0+).
  *                        false for Gemini and Perplexity.
+ *   mediaInput         — multimodal content block support (v4.2.0+).
+ *                        image.base64    — accepts LlmContentBlock image with source.type 'base64'.
+ *                        image.url       — accepts LlmContentBlock image with source.type 'url'.
+ *                        document.pdfBase64 — accepts LlmContentBlock document with base64 PDF.
+ *                        All false for providers that reject media blocks before any SDK call.
  */
 export interface ModelCapabilities {
   contextWindow: number;
@@ -55,6 +60,16 @@ export interface ModelCapabilities {
   structuredOutput: 'tool-use' | 'json-schema' | 'response-schema' | null;
   responseIds: 'provider' | 'synthesized';
   streamStructured: boolean;
+  /**
+   * Multimodal content block capability matrix (v4.2.0+).
+   * Indicates which LlmContentBlock source types the model + provider pair accepts.
+   * Callers can check this before constructing a multimodal LlmMessage to avoid
+   * the pre-flight bad_request error when the provider does not support the block type.
+   */
+  mediaInput: {
+    image: { base64: boolean; url: boolean };
+    document: { pdfBase64: boolean };
+  };
 }
 
 // ─── Capability table ─────────────────────────────────────────────────────────
@@ -63,7 +78,7 @@ export interface ModelCapabilities {
  * ISO 8601 date the capability table was last verified against provider documentation.
  * Compare against Date.now() to detect staleness.
  */
-export const CAPABILITIES_VERSIONED_AT = '2026-05-13';
+export const CAPABILITIES_VERSIONED_AT = '2026-06-06';
 
 /** Provider-keyed, model-keyed capability lookup table. */
 const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> = {
@@ -88,6 +103,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'claude-opus-4-6': {
       contextWindow: 200_000,
@@ -99,6 +115,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'claude-sonnet-4-6': {
       contextWindow: 200_000,
@@ -110,6 +127,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'claude-sonnet-4-5-20250929': {
       contextWindow: 200_000,
@@ -121,6 +139,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'claude-haiku-4-5': {
       contextWindow: 200_000,
@@ -132,6 +151,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'claude-haiku-4-5-20251001': {
       contextWindow: 200_000,
@@ -143,6 +163,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'claude-haiku-3-5': {
       contextWindow: 200_000,
@@ -154,6 +175,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'claude-haiku-3': {
       contextWindow: 200_000,
@@ -165,6 +187,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
+      // claude-haiku-3 does not support vision or document input
+      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
     },
   },
 
@@ -190,6 +214,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'gpt-5.5-pro': {
       contextWindow: 1_000_000,
@@ -201,6 +226,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'gpt-5.4': {
       contextWindow: 256_000,
@@ -212,6 +238,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'gpt-5.4-mini': {
       contextWindow: 256_000,
@@ -223,6 +250,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'gpt-4.1': {
       contextWindow: 1_000_000,
@@ -234,6 +262,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     o3: {
       contextWindow: 200_000,
@@ -245,6 +274,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      // o3 is a reasoning model — vision support documented by OpenAI as supported.
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
     },
     'o4-mini': {
       contextWindow: 200_000,
@@ -256,6 +287,9 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      // o4-mini is a reasoning model. OpenAI docs list vision support for o4-mini.
+      // Set based on published capability docs (June 2026); reverify if model updates.
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: false } },
     },
   },
 
@@ -282,6 +316,9 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
+      // Gemini accepts image/PDF via inlineData (base64 bytes only).
+      // image.url is false — Gemini inlineData does not accept URLs; use base64 bytes only.
+      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
     },
     'gemini-2.5-pro': {
       contextWindow: 1_000_000,
@@ -293,6 +330,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
+      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
     },
     'gemini-2.5-flash': {
       contextWindow: 1_000_000,
@@ -304,6 +342,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
+      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
     },
     'gemini-3.1-flash-lite': {
       contextWindow: 1_000_000,
@@ -315,6 +354,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
+      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
     },
   },
 
@@ -341,6 +381,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      // DeepSeek does not support vision or document input (June 2026).
+      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
     },
     'deepseek-v4-pro': {
       contextWindow: 64_000,
@@ -352,6 +394,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
     },
     // Deprecated aliases — same capabilities as their canonical counterparts.
     // deepseek-reasoner (R1) note: tool-calling support is limited and may not
@@ -366,6 +409,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
     },
     'deepseek-reasoner': {
       contextWindow: 64_000,
@@ -377,6 +421,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
+      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
     },
   },
 
@@ -400,6 +445,9 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: null,
       responseIds: 'provider',
       streamStructured: false,
+      // Perplexity image support deferred (smoke test not run — PERPLEXITY_API_KEY absent 2026-06-06).
+      // All media blocks rejected with bad_request in v4.2.0. Documents always unsupported.
+      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
     },
     'sonar-pro': {
       contextWindow: 200_000,
@@ -411,6 +459,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: null,
       responseIds: 'provider',
       streamStructured: false,
+      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
     },
     'sonar-reasoning-pro': {
       contextWindow: 127_072,
@@ -422,6 +471,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: null,
       responseIds: 'provider',
       streamStructured: false,
+      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
     },
     'sonar-deep-research': {
       contextWindow: 127_072,
@@ -433,6 +483,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: null,
       responseIds: 'provider',
       streamStructured: false,
+      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
     },
   },
 };

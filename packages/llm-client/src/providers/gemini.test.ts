@@ -1001,3 +1001,112 @@ describe('Gemini provider — response IDs (v1.4.0)', () => {
     expect(result.idSource).toBe('synthesized');
   });
 });
+
+// ─── Multimodal content blocks (v4.2.0) ─────────────────────────────────────
+
+describe('Gemini provider — multimodal content blocks (v4.2.0)', () => {
+  let mockGenerateContent: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateContent = vi.fn().mockResolvedValue(mockGeminiResponse());
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: vi.fn(),
+        },
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('passes string content unchanged (backward compat)', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.complete([{ role: 'user', content: 'Hello' }]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      contents: { parts: { text?: string }[] }[];
+    };
+    expect(callArgs.contents[0]?.parts[0]?.text).toBe('Hello');
+  });
+
+  it('maps image.base64 to inlineData part', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', mediaType: 'image/png', data: 'pngdata' } },
+          { type: 'text', text: 'What is in this image?' },
+        ],
+      },
+    ]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      contents: { parts: { inlineData?: { mimeType: string; data: string }; text?: string }[] }[];
+    };
+    const parts = callArgs.contents[0]?.parts ?? [];
+    expect(parts[0]).toMatchObject({ inlineData: { mimeType: 'image/png', data: 'pngdata' } });
+    expect(parts[1]).toMatchObject({ text: 'What is in this image?' });
+  });
+
+  it('maps document.base64 to inlineData PDF part', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfdatahere' },
+          },
+          { type: 'text', text: 'Summarize this PDF.' },
+        ],
+      },
+    ]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      contents: { parts: { inlineData?: { mimeType: string; data: string } }[] }[];
+    };
+    const parts = callArgs.contents[0]?.parts ?? [];
+    expect(parts[0]).toMatchObject({
+      inlineData: { mimeType: 'application/pdf', data: 'pdfdatahere' },
+    });
+  });
+
+  it('rejects image.url with bad_request before any SDK call', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await expect(
+      client.complete([
+        {
+          role: 'user',
+          content: [{ type: 'image', source: { type: 'url', url: 'https://example.com/img.jpg' } }],
+        },
+      ])
+    ).rejects.toMatchObject({ kind: 'bad_request', retryable: false });
+
+    // SDK must NOT have been called
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+
+  it('error message for image.url rejection names provider and source type', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    try {
+      await client.complete([
+        {
+          role: 'user',
+          content: [{ type: 'image', source: { type: 'url', url: 'https://example.com/img.jpg' } }],
+        },
+      ]);
+    } catch (err) {
+      expect(err).toBeInstanceOf(LlmError);
+      const e = err as LlmError;
+      expect(e.message).toContain("Provider 'gemini'");
+      expect(e.message).toContain('url');
+    }
+  });
+});

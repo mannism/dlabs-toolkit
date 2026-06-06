@@ -48,6 +48,7 @@ export { classifyHttpStatus } from './retry.js';
 // Client config, usage, response, streaming, error types
 // Error kind type — consumers use this to branch without parsing message strings
 // RetryConfig / RetryStrategy — configurable retry (v1.2.0+)
+// Multimodal content block types — v4.2.0+
 export type {
   LlmAfterCallContext,
   LlmBeforeCallResult,
@@ -57,8 +58,11 @@ export type {
   LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
+  LlmContentBlock,
+  LlmDocumentMediaType,
   LlmErrorKind,
   LlmHooks,
+  LlmImageMediaType,
   LlmMessage,
   LlmResponse,
   LlmSkipResult,
