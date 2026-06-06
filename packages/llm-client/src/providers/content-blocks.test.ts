@@ -324,7 +324,7 @@ describe('mapOpenAIContent()', () => {
     });
   });
 
-  it('maps document.base64 to input_file with data URI', () => {
+  it('maps document.base64 to input_file with data URI and default filename', () => {
     const blocks: LlmContentBlock[] = [
       {
         type: 'document',
@@ -335,6 +335,22 @@ describe('mapOpenAIContent()', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
       type: 'input_file',
+      filename: 'document.pdf',
+      file_data: 'data:application/pdf;base64,pdfbytes',
+    });
+  });
+
+  it('maps document.base64 with explicit filename', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'document',
+        source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfbytes', filename: 'brief.pdf' },
+      },
+    ];
+    const result = mapOpenAIContent(blocks);
+    expect(result[0]).toMatchObject({
+      type: 'input_file',
+      filename: 'brief.pdf',
       file_data: 'data:application/pdf;base64,pdfbytes',
     });
   });

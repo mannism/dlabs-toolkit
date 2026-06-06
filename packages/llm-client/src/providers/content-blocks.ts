@@ -182,14 +182,15 @@ export function mapAnthropicContent(blocks: LlmContentBlock[]): Anthropic.Conten
  *   { type: 'text' }        → { type: 'input_text', text }
  *   image.base64            → { type: 'input_image', image_url: 'data:<mediaType>;base64,<data>', detail: 'auto' }
  *   image.url               → { type: 'input_image', image_url: url, detail: 'auto' }
- *   document.base64         → { type: 'input_file', file_data: 'data:application/pdf;base64,<data>' }
+ *   document.base64         → { type: 'input_file', filename, file_data: 'data:application/pdf;base64,<data>' }
  *
  * Note on detail: OpenAI detail accepts 'low' | 'high' | 'original' | 'auto'.
  * Hardcoded to 'auto' in v4.2.0; surfacing caller control is a follow-up item.
  *
- * Note on input_file.filename: not verified in current OpenAI Responses API docs.
- * OPENAI_API_KEY was absent during implementation (2026-06-06 smoke not run).
- * The field is omitted in v4.2.0 pending live verification (Acceptance Criteria #14).
+ * Note on input_file.filename: REQUIRED by the Responses API — a 400 is returned without it.
+ * Verified via live smoke test 2026-06-06: omitting filename → HTTP 400 "Missing required parameter";
+ * including filename → HTTP 200. Defaults to 'document.pdf' when LlmContentBlock.source.filename
+ * is not supplied by the caller.
  */
 export function mapOpenAIContent(
   blocks: LlmContentBlock[]
@@ -223,11 +224,9 @@ export function mapOpenAIContent(
 
     if (block.type === 'document') {
       const dataUrl = `data:application/pdf;base64,${block.source.data}`;
-      // filename field is unverified in OpenAI Responses API docs.
-      // Smoke test with OPENAI_API_KEY was not run (key absent 2026-06-06).
-      // The field is omitted here pending live verification — see Acceptance Criteria #14.
       result.push({
         type: 'input_file',
+        filename: block.source.filename ?? 'document.pdf',
         file_data: dataUrl,
       } as OpenAI.Responses.ResponseInputContent);
     }
