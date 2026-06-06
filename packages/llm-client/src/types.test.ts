@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { LlmContentBlock } from './types.js';
 import { LlmError } from './types.js';
 
 describe('LlmError', () => {
@@ -67,5 +68,45 @@ describe('LlmError', () => {
       caught = e;
     }
     expect(caught).toBeInstanceOf(LlmError);
+  });
+});
+
+// ─── Multimodal content block types (v4.2.0) ─────────────────────────────────
+
+describe('LlmContentBlock type exports', () => {
+  it('LlmContentBlock is importable from the package index (type-level test)', async () => {
+    // Dynamic import verifies the module exports correctly at runtime.
+    // TypeScript type checking handles the shape — this just confirms the export is present.
+    const mod = await import('./index.js');
+    // LlmContentBlock is a type-only export; verify the module loads without errors.
+    // We also verify LlmError (a value export) as a proxy for the module being valid.
+    expect(typeof mod.LlmError).toBe('function');
+  });
+
+  it('LlmContentBlock text block can be constructed with correct shape', () => {
+    const block: LlmContentBlock = { type: 'text', text: 'Hello' };
+    expect(block).toMatchObject({ type: 'text', text: 'Hello' });
+  });
+
+  it('LlmContentBlock image.base64 block has correct shape', () => {
+    const block: LlmContentBlock = {
+      type: 'image',
+      source: { type: 'base64', mediaType: 'image/jpeg', data: 'abc123' },
+    };
+    expect(block).toMatchObject({
+      type: 'image',
+      source: { type: 'base64', mediaType: 'image/jpeg', data: 'abc123' },
+    });
+  });
+
+  it('LlmContentBlock document block has correct shape', () => {
+    const block: LlmContentBlock = {
+      type: 'document',
+      source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfbytes' },
+    };
+    expect(block).toMatchObject({
+      type: 'document',
+      source: { type: 'base64', mediaType: 'application/pdf' },
+    });
   });
 });

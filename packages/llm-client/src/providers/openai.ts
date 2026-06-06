@@ -56,6 +56,7 @@ import type {
   LlmUsage,
 } from '../types.js';
 import { LlmError } from '../types.js';
+import { assertBlocksSupported, mapOpenAIContent } from './content-blocks.js';
 
 const PROVIDER = 'openai';
 
@@ -76,12 +77,36 @@ function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined | null
  * The Responses API accepts a flat array of input items. System messages become
  * a 'system' role input; user/assistant messages become 'user'/'assistant'.
  * Unlike Chat Completions, the Responses API uses `input` not `messages`.
+ *
+ * v4.2.0 multimodal support:
+ *   - String content is passed through unchanged (all existing callers unaffected).
+ *   - LlmContentBlock[] content is mapped to Responses API content items via mapOpenAIContent().
+ *   - Pre-flight assertBlocksSupported() runs before message construction to guarantee
+ *     no unsupported block type reaches the SDK call site.
+ *
+ * OpenAI Responses API supports: text, image (base64 + url), document (base64 PDF).
  */
 function buildResponsesInput(messages: LlmMessage[]): OpenAI.Responses.EasyInputMessage[] {
-  return messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  // Pre-flight: assert all blocks in this message set are supported by OpenAI Responses API.
+  assertBlocksSupported(messages, PROVIDER, {
+    textBlock: true,
+    imageBase64: true,
+    imageUrl: true,
+    documentBase64: true,
+  });
+
+  return messages.map((m) => {
+    if (Array.isArray(m.content)) {
+      return {
+        role: m.role,
+        content: mapOpenAIContent(m.content),
+      } as OpenAI.Responses.EasyInputMessage;
+    }
+    return {
+      role: m.role,
+      content: m.content,
+    } as OpenAI.Responses.EasyInputMessage;
+  });
 }
 
 /**

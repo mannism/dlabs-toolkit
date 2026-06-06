@@ -49,6 +49,7 @@ import type {
   LlmUsage,
 } from '../types.js';
 import { LlmError } from '../types.js';
+import { assertBlocksSupported } from './content-blocks.js';
 
 const PROVIDER = 'deepseek';
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
@@ -64,12 +65,38 @@ function normalizeUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUs
   };
 }
 
-/** Convert LlmMessages to OpenAI-format chat message params (compatible with DeepSeek). */
+/**
+ * Convert LlmMessages to OpenAI-format chat message params (compatible with DeepSeek).
+ *
+ * v4.2.0 multimodal: DeepSeek's official Chat Completion schema does not document image
+ * or document input. deepseek-v4-flash and deepseek-v4-pro have no production vision
+ * endpoint as of June 2026.
+ *
+ * All non-text LlmContentBlock[] content is rejected with bad_request before any SDK call.
+ * Text-only block arrays are coerced to string for Chat Completions compatibility.
+ */
 function buildMessages(messages: LlmMessage[]): OpenAI.Chat.ChatCompletionMessageParam[] {
-  return messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  // Pre-flight guard: reject all image and document blocks.
+  // DeepSeek does not support media input in v4.2.0.
+  assertBlocksSupported(messages, PROVIDER, {
+    textBlock: true,
+    imageBase64: false,
+    imageUrl: false,
+    documentBase64: false,
+  });
+
+  return messages.map((m) => {
+    // Coerce text-only block arrays to string — Chat Completions API expects string content.
+    const content = Array.isArray(m.content)
+      ? m.content
+          .filter(
+            (b): b is Extract<(typeof m.content)[number], { type: 'text' }> => b.type === 'text'
+          )
+          .map((b) => b.text)
+          .join('')
+      : m.content;
+    return { role: m.role, content };
+  });
 }
 
 /**

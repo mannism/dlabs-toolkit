@@ -883,6 +883,70 @@ Use **[`@diabolicallabs/agent-sdk`](../agent-sdk/README.md)** when you want inge
 
 Both compose: `instrumentClient()` merges its `afterCall` handler with any hooks already set on the client config.
 
+## Multimodal content blocks (v4.2.0)
+
+`LlmMessage.content` now accepts `string | LlmContentBlock[]`. String content is backward-compatible across all providers. Array content enables images and PDFs for the providers that support them.
+
+### Provider support table
+
+| Provider | image.base64 | image.url | document.pdfBase64 |
+|---|---|---|---|
+| Anthropic (claude-3.5+ / claude-opus-4 / claude-sonnet-4 / claude-haiku-4-5+) | Yes | Yes | Yes |
+| Anthropic claude-haiku-3 | No | No | No |
+| OpenAI (gpt-5.5 / gpt-5.5-pro / gpt-5.4 / gpt-5.4-mini / gpt-4.1) | Yes | Yes | Yes |
+| OpenAI o4-mini | Yes (image) | Yes (image) | No |
+| Gemini (all) | Yes | No | Yes |
+| Perplexity (all) | No — deferred | No — deferred | No |
+| DeepSeek (all) | No | No | No |
+
+Gemini only accepts images via `inlineData` (base64 bytes). Image URL source is not supported on Gemini — the toolkit throws `LlmError({ kind: 'bad_request' })` before making any SDK call.
+
+Use `getModelCapabilities(provider, model).mediaInput` to check support programmatically before constructing a multimodal message.
+
+### Usage example
+
+```typescript
+import { type LlmContentBlock, type LlmMessage, createClient } from '@diabolicallabs/llm-client';
+
+const client = createClient({
+  provider: 'anthropic',
+  model: 'claude-sonnet-4-6',
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+});
+
+const blocks: LlmContentBlock[] = [
+  {
+    type: 'document',
+    source: { type: 'base64', mediaType: 'application/pdf', data: pdfBase64 },
+  },
+  {
+    type: 'image',
+    source: { type: 'base64', mediaType: 'image/jpeg', data: jpegBase64 },
+  },
+  { type: 'text', text: 'Summarize these materials.' },
+];
+
+const response = await client.complete([
+  { role: 'system', content: 'You are a brand strategist.' },
+  { role: 'user', content: blocks },
+]);
+```
+
+### Known limits (API-enforced, not toolkit-validated)
+
+- Anthropic: max 20 MB per image; PDFs via base64 source (no URL PDFs in v4.2.0).
+- Gemini: max ~50 MB total inline data per request; PDFs up to 1000 pages via `inlineData`.
+- OpenAI: standard Responses API file limits apply.
+
+### Unsupported media behavior
+
+Providers that don't support a block type throw `LlmError({ kind: 'bad_request', retryable: false })` **before any network call**. The error message names the provider and the unsupported block/source type:
+
+```
+[llm-client] Provider 'gemini' does not support image content with source 'url' in LlmMessage.content.
+Use a supported provider/model or convert the attachment to text before calling this provider.
+```
+
 ## Token normalization
 
 All providers return `LlmUsage` in a consistent shape regardless of the underlying API's field names:

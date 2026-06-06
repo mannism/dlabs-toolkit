@@ -51,6 +51,11 @@ import type {
   LlmUsage,
 } from '../types.js';
 import { LlmError } from '../types.js';
+import {
+  assertBlocksSupported,
+  extractTextFromBlocks,
+  mapAnthropicContent,
+} from './content-blocks.js';
 
 const PROVIDER = 'anthropic';
 
@@ -71,21 +76,70 @@ function normalizeUsage(usage: Anthropic.Usage | undefined): LlmUsage {
   };
 }
 
-/** Convert LlmMessages to Anthropic's message format. Extracts system prompt. */
+/**
+ * Convert LlmMessages to Anthropic's message format. Extracts system prompt.
+ *
+ * v4.2.0 multimodal support:
+ *   - System messages: Anthropic's `system` parameter accepts `string | TextBlockParam[]`
+ *     but NOT image or document blocks. When a system message carries LlmContentBlock[]
+ *     content, only text blocks are extracted and joined into a plain string.
+ *     Image and document blocks in system messages are silently dropped.
+ *     This behavior is intentional: the primary multimodal intake use case always sends
+ *     visual content in user messages, not system. A future feature can emit TextBlockParam[]
+ *     to enable per-block cache_control on system content.
+ *
+ *   - User/assistant messages: LlmContentBlock[] is mapped to Anthropic's native block array
+ *     via mapAnthropicContent(). String content is passed through unchanged.
+ *
+ * Pre-flight guard (assertBlocksSupported) is called before building messages to ensure
+ * no unsupported block type reaches the SDK. The Anthropic provider supports all block
+ * types that exist in v4.2.0 (text, image.base64, image.url, document.base64).
+ */
 function buildAnthropicMessages(messages: LlmMessage[]): {
   system: string | undefined;
   messages: Anthropic.MessageParam[];
 } {
+  // Pre-flight: assert all blocks in this message set are supported by Anthropic.
+  // Anthropic supports text, image (base64 + url), and document (base64) in v4.2.0.
+  assertBlocksSupported(messages, PROVIDER, {
+    textBlock: true,
+    imageBase64: true,
+    imageUrl: true,
+    documentBase64: true,
+  });
+
   const systemMessages = messages.filter((m) => m.role === 'system');
   const conversationMessages = messages.filter((m) => m.role !== 'system');
 
-  const system =
-    systemMessages.length > 0 ? systemMessages.map((m) => m.content).join('\n') : undefined;
+  // System parameter: Anthropic accepts string | TextBlockParam[], but NOT image/document blocks.
+  // When a system message carries LlmContentBlock[], extract only text blocks and join as a string.
+  // Image and document blocks in system are silently dropped (intentional — see JSDoc above).
+  let system: string | undefined;
+  if (systemMessages.length > 0) {
+    const parts: string[] = [];
+    for (const msg of systemMessages) {
+      if (Array.isArray(msg.content)) {
+        // Extract text-only; silently drop image/document blocks in system messages.
+        parts.push(extractTextFromBlocks(msg.content));
+      } else {
+        parts.push(msg.content);
+      }
+    }
+    system = parts.join('\n') || undefined;
+  }
 
-  const anthropicMessages: Anthropic.MessageParam[] = conversationMessages.map((m) => ({
-    role: m.role as 'user' | 'assistant',
-    content: m.content,
-  }));
+  const anthropicMessages: Anthropic.MessageParam[] = conversationMessages.map((m) => {
+    if (Array.isArray(m.content)) {
+      return {
+        role: m.role as 'user' | 'assistant',
+        content: mapAnthropicContent(m.content),
+      };
+    }
+    return {
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    };
+  });
 
   return { system, messages: anthropicMessages };
 }

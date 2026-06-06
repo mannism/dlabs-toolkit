@@ -1674,3 +1674,138 @@ describe('Anthropic provider — response IDs (v1.4.0)', () => {
     expect(result.idSource).toBe('provider');
   });
 });
+
+// ─── Multimodal content blocks (v4.2.0) ─────────────────────────────────────
+
+describe('Anthropic provider — multimodal content blocks (v4.2.0)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockMessageResponse());
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('passes string content unchanged (backward compat)', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.complete([{ role: 'user', content: 'Hello' }]);
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    expect(callArgs.messages[0]?.content).toBe('Hello');
+  });
+
+  it('maps text block in user message', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.complete([{ role: 'user', content: [{ type: 'text', text: 'Describe this.' }] }]);
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    const content = callArgs.messages[0]?.content;
+    expect(Array.isArray(content)).toBe(true);
+    if (Array.isArray(content)) {
+      expect(content[0]).toMatchObject({ type: 'text', text: 'Describe this.' });
+    }
+  });
+
+  it('maps image.base64 block to Anthropic base64 image source', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', mediaType: 'image/jpeg', data: 'abc123' } },
+          { type: 'text', text: 'What is in this image?' },
+        ],
+      },
+    ]);
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    const content = callArgs.messages[0]?.content;
+    expect(Array.isArray(content)).toBe(true);
+    if (Array.isArray(content)) {
+      expect(content[0]).toMatchObject({
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/jpeg', data: 'abc123' },
+      });
+      expect(content[1]).toMatchObject({ type: 'text', text: 'What is in this image?' });
+    }
+  });
+
+  it('maps image.url block to Anthropic URL image source', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'url', url: 'https://example.com/photo.jpg' },
+          },
+        ],
+      },
+    ]);
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    const content = callArgs.messages[0]?.content;
+    expect(Array.isArray(content)).toBe(true);
+    if (Array.isArray(content)) {
+      expect(content[0]).toMatchObject({
+        type: 'image',
+        source: { type: 'url', url: 'https://example.com/photo.jpg' },
+      });
+    }
+  });
+
+  it('maps document.base64 block to Anthropic document source', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfbytes' },
+          },
+          { type: 'text', text: 'Summarize this PDF.' },
+        ],
+      },
+    ]);
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    const content = callArgs.messages[0]?.content;
+    expect(Array.isArray(content)).toBe(true);
+    if (Array.isArray(content)) {
+      expect(content[0]).toMatchObject({
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: 'pdfbytes' },
+      });
+    }
+  });
+
+  it('extracts only text from system LlmContentBlock[] — silently drops image blocks', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'system',
+        content: [
+          { type: 'text', text: 'You are a helpful assistant.' },
+          // Image block in system — must be silently dropped
+          { type: 'image', source: { type: 'base64', mediaType: 'image/jpeg', data: 'img' } },
+          { type: 'text', text: ' Be concise.' },
+        ],
+      },
+      { role: 'user', content: 'Hello' },
+    ]);
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    // system must be a string with only the text blocks joined
+    expect(callArgs.system).toBe('You are a helpful assistant. Be concise.');
+  });
+});
