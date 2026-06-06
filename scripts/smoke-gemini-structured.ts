@@ -45,8 +45,7 @@ async function runSmoke(): Promise<void> {
       [
         {
           role: 'user',
-          content:
-            'Return an empty JSON object. Do not include any fields, just return {}.',
+          content: 'Return an empty JSON object. Do not include any fields, just return {}.',
         },
       ],
       emptySchema
@@ -142,8 +141,7 @@ async function runSmoke(): Promise<void> {
       [
         {
           role: 'user',
-          content:
-            'Return a JSON object with name "Bob", no nickname field, and score 42.',
+          content: 'Return a JSON object with name "Bob", no nickname field, and score 42.',
         },
       ],
       optionalSchema
@@ -170,8 +168,7 @@ async function runSmoke(): Promise<void> {
       [
         {
           role: 'user',
-          content:
-            'Return a JSON object with status "active" and priority "high".',
+          content: 'Return a JSON object with status "active" and priority "high".',
         },
       ],
       enumSchema
@@ -198,8 +195,7 @@ async function runSmoke(): Promise<void> {
       [
         {
           role: 'user',
-          content:
-            'Return a JSON object with result equal to 42 and label "answer".',
+          content: 'Return a JSON object with result equal to 42 and label "answer".',
         },
       ],
       unionSchema

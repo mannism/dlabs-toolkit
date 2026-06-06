@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * sync-bundled.mjs
  *
@@ -14,9 +15,9 @@
  * CI can run --check to guard against accidental drift.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { resolve, dirname } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -108,9 +109,7 @@ function renderProvider(providerName, models, baseIndent) {
 }
 
 // Build the full table literal
-const providerBlocks = REQUIRED_PROVIDERS.map((p) =>
-  renderProvider(p, data[p], 2)
-).join('\n\n');
+const providerBlocks = REQUIRED_PROVIDERS.map((p) => renderProvider(p, data[p], 2)).join('\n\n');
 
 const generated = `\
 /**
@@ -162,8 +161,8 @@ if (checkMode) {
   if (generatedHash !== currentHash) {
     console.error(
       'sync-bundled --check: FAIL — packages/llm-pricing/src/table.ts is out of date.\n' +
-      'Run: node pricing/sync-bundled.mjs\n' +
-      'Then commit both pricing/table.json and packages/llm-pricing/src/table.ts together.'
+        'Run: node pricing/sync-bundled.mjs\n' +
+        'Then commit both pricing/table.json and packages/llm-pricing/src/table.ts together.'
     );
     process.exit(1);
   }

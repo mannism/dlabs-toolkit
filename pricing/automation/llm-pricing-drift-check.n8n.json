@@ -18,10 +18,7 @@
       "name": "Monthly 07:30 SGT",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        -80,
-        300
-      ]
+      "position": [-80, 300]
     },
     {
       "parameters": {
@@ -38,10 +35,7 @@
       "name": "Fetch live table.json",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        160,
-        300
-      ]
+      "position": [160, 300]
     },
     {
       "parameters": {
@@ -51,10 +45,7 @@
       "name": "Build queries",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        400,
-        300
-      ]
+      "position": [400, 300]
     },
     {
       "parameters": {
@@ -71,10 +62,7 @@
       "name": "Perplexity — drift",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        640,
-        200
-      ],
+      "position": [640, 200],
       "credentials": {
         "perplexityApi": {
           "id": "REPLACE_WITH_PERPLEXITY_CRED",
@@ -97,10 +85,7 @@
       "name": "Perplexity — new models",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        640,
-        400
-      ],
+      "position": [640, 400],
       "credentials": {
         "perplexityApi": {
           "id": "REPLACE_WITH_PERPLEXITY_CRED",
@@ -116,10 +101,7 @@
       "name": "Compare (deterministic)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        880,
-        300
-      ]
+      "position": [880, 300]
     },
     {
       "parameters": {
@@ -158,10 +140,7 @@
       "name": "Create Scheduled Work row",
       "type": "n8n-nodes-base.notion",
       "typeVersion": 2.2,
-      "position": [
-        1120,
-        300
-      ],
+      "position": [1120, 300],
       "credentials": {
         "notionApi": {
           "id": "REPLACE_WITH_NOTION_CRED",

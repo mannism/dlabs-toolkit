@@ -71,9 +71,7 @@ async function runSmoke(): Promise<void> {
   console.log('  PASS\n');
 
   // ─── Test 4: search_domain_filter ────────────────────────────────────────
-  console.log(
-    "Test 4: complete() with providerOptions: { search_domain_filter: ['example.com'] }"
-  );
+  console.log("Test 4: complete() with providerOptions: { search_domain_filter: ['example.com'] }");
   const client4 = await createClientFromEnv('perplexity', 'sonar');
   const result4 = await client4.complete(
     [{ role: 'user', content: 'Tell me about example.com — what is it used for?' }],

@@ -38,7 +38,9 @@ async function runSmoke(): Promise<void> {
   // gpt-5.x rejects max_tokens outright. If the toolkit sends max_tokens instead of
   // max_completion_tokens, the API returns a 400 with "unsupported parameter: max_tokens".
   // A clean response here confirms the rename in openai.ts:145 is functioning.
-  console.log(`Test 1: complete() with ${MODEL} and maxTokens: 256 — proves max_completion_tokens rename`);
+  console.log(
+    `Test 1: complete() with ${MODEL} and maxTokens: 256 — proves max_completion_tokens rename`
+  );
   const client1 = await createClientFromEnv('openai', MODEL);
   const result1 = await client1.complete(
     [

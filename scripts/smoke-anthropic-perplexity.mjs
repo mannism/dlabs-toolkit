@@ -1,6 +1,7 @@
 import { createClient } from '../packages/llm-client/dist/index.js';
 
-const PROMPT = 'What are the three most notable features introduced in TypeScript 5.7, and when was it released? Be concise.';
+const PROMPT =
+  'What are the three most notable features introduced in TypeScript 5.7, and when was it released? Be concise.';
 
 async function run(label, client) {
   console.log(`\n===== ${label} =====`);
@@ -53,7 +54,7 @@ console.log('--- Case (a): timeoutMs:1 per-call override (expect kind:timeout) -
 try {
   await anthropicNoRetry.complete(
     [{ role: 'user', content: 'Hello' }],
-    { timeoutMs: 1 }  // 1ms — fires before the SDK even makes a network round-trip
+    { timeoutMs: 1 } // 1ms — fires before the SDK even makes a network round-trip
   );
   console.log('UNEXPECTED: call succeeded (should have timed out)');
 } catch (err) {
@@ -71,10 +72,7 @@ console.log('\n--- Case (b): pre-aborted AbortSignal (expect kind:cancelled) ---
 try {
   const ac = new AbortController();
   ac.abort('manual cancel');
-  await anthropic.complete(
-    [{ role: 'user', content: 'Hello' }],
-    { signal: ac.signal }
-  );
+  await anthropic.complete([{ role: 'user', content: 'Hello' }], { signal: ac.signal });
   console.log('UNEXPECTED: call succeeded (should have been cancelled)');
 } catch (err) {
   const kind = err?.kind;
@@ -93,11 +91,13 @@ try {
   const chunks = [];
   for await (const chunk of perplexity.stream(
     [{ role: 'user', content: 'Say the word "hello".' }],
-    { streamStallTimeoutMs: 50 }  // very short — may or may not fire depending on latency
+    { streamStallTimeoutMs: 50 } // very short — may or may not fire depending on latency
   )) {
     if (chunk.token) chunks.push(chunk.token);
   }
-  console.log(`PASS (completed cleanly — no stall within 50ms)  chunks:${chunks.length}  content:"${chunks.join('').slice(0, 60)}"`);
+  console.log(
+    `PASS (completed cleanly — no stall within 50ms)  chunks:${chunks.length}  content:"${chunks.join('').slice(0, 60)}"`
+  );
 } catch (err) {
   const kind = err?.kind;
   if (kind === 'stream_stall') {
@@ -122,7 +122,13 @@ console.log('\n\n========== v0.4.0 STRUCTURED OUTPUT SMOKE ==========\n');
 console.log('--- Case (d): Anthropic strict tool-use structured (Zod 4 schema) ---');
 try {
   const result = await anthropic.structured(
-    [{ role: 'user', content: 'Give me a JSON object with a "topic" field (string) describing TypeScript 5.7, and a "bullets" field (array of strings) with 2 key features.' }],
+    [
+      {
+        role: 'user',
+        content:
+          'Give me a JSON object with a "topic" field (string) describing TypeScript 5.7, and a "bullets" field (array of strings) with 2 key features.',
+      },
+    ],
     STRUCTURED_SCHEMA
   );
   const hasTopic = typeof result.data.topic === 'string' && result.data.topic.length > 0;
@@ -130,7 +136,9 @@ try {
   const hasModel = typeof result.model === 'string' && result.model.length > 0;
   const hasId = typeof result.id === 'string' && result.id.length > 0;
   if (hasTopic && hasBullets && hasModel && hasId) {
-    console.log(`PASS  topic:"${result.data.topic.slice(0, 40)}"  bullets:${result.data.bullets.length}  model:${result.model}  id:${result.id.slice(0, 20)}...`);
+    console.log(
+      `PASS  topic:"${result.data.topic.slice(0, 40)}"  bullets:${result.data.bullets.length}  model:${result.model}  id:${result.id.slice(0, 20)}...`
+    );
   } else {
     console.error(`FAIL  data shape unexpected: ${JSON.stringify(result.data)}`);
     console.error(`      model:"${result.model}"  id:"${result.id}"`);
@@ -144,14 +152,22 @@ try {
 console.log('\n--- Case (e): Perplexity structured prompt-fallback (Zod 4 schema) ---');
 try {
   const result = await perplexity.structured(
-    [{ role: 'user', content: 'Give me a JSON object with a "topic" field (string) describing Perplexity AI, and a "bullets" field (array of strings) with 2 key features.' }],
+    [
+      {
+        role: 'user',
+        content:
+          'Give me a JSON object with a "topic" field (string) describing Perplexity AI, and a "bullets" field (array of strings) with 2 key features.',
+      },
+    ],
     STRUCTURED_SCHEMA
   );
   const hasTopic = typeof result.data.topic === 'string' && result.data.topic.length > 0;
   const hasBullets = Array.isArray(result.data.bullets) && result.data.bullets.length > 0;
   const hasModel = typeof result.model === 'string' && result.model.length > 0;
   if (hasTopic && hasBullets && hasModel) {
-    console.log(`PASS  topic:"${result.data.topic.slice(0, 40)}"  bullets:${result.data.bullets.length}  model:${result.model}`);
+    console.log(
+      `PASS  topic:"${result.data.topic.slice(0, 40)}"  bullets:${result.data.bullets.length}  model:${result.model}`
+    );
     if (result.citations?.length) {
       console.log(`      citations:${result.citations.length}  first:${result.citations[0]?.url}`);
     } else {

@@ -98,7 +98,10 @@ function collectModels(): ModelEntry[] {
   for (const [provider, models] of Object.entries(DEFAULT_PRICING_TABLE)) {
     if (provider === 'versionedAt') continue;
     for (const [model, pricing] of Object.entries(
-      models as Record<string, { deprecatedAliasFor?: string; inputPer1M: number; outputPer1M: number }>
+      models as Record<
+        string,
+        { deprecatedAliasFor?: string; inputPer1M: number; outputPer1M: number }
+      >
     )) {
       // Skip deprecated aliases — they share rates with the canonical model
       if (pricing.deprecatedAliasFor !== undefined) continue;
@@ -133,10 +136,7 @@ interface PerplexityPriceResult {
 }
 
 /** Query Perplexity for current prices of a batch of models from one provider. */
-async function queryProviderPrices(
-  provider: string,
-  models: ModelEntry[]
-): Promise<DriftRecord[]> {
+async function queryProviderPrices(provider: string, models: ModelEntry[]): Promise<DriftRecord[]> {
   const modelList = models.map((m) => m.model).join(', ');
   const today = new Date().toISOString().split('T')[0];
 
@@ -177,7 +177,9 @@ async function queryProviderPrices(
     const parsed: unknown = JSON.parse(cleaned);
     results = Array.isArray(parsed) ? (parsed as PerplexityPriceResult[]) : [];
   } catch {
-    console.warn(`  [warning] Could not parse Perplexity response for '${provider}'. Raw: ${cleaned.slice(0, 200)}`);
+    console.warn(
+      `  [warning] Could not parse Perplexity response for '${provider}'. Raw: ${cleaned.slice(0, 200)}`
+    );
     results = [];
   }
 
@@ -202,9 +204,7 @@ async function queryProviderPrices(
     const detectedOutput = detected.outputPer1M ?? m.tableOutputPer1M;
 
     const inputDelta =
-      m.tableInputPer1M !== 0
-        ? ((detectedInput - m.tableInputPer1M) / m.tableInputPer1M) * 100
-        : 0;
+      m.tableInputPer1M !== 0 ? ((detectedInput - m.tableInputPer1M) / m.tableInputPer1M) * 100 : 0;
     const outputDelta =
       m.tableOutputPer1M !== 0
         ? ((detectedOutput - m.tableOutputPer1M) / m.tableOutputPer1M) * 100
@@ -270,12 +270,16 @@ for (const row of allDrift) {
   const detOut =
     row.detectedOutputPer1M === 'unverifiable' ? '?' : `$${row.detectedOutputPer1M.toFixed(4)}`;
   const dIn =
-    row.inputDeltaPercent === 'unverifiable' ? '?' : `${row.inputDeltaPercent > 0 ? '+' : ''}${row.inputDeltaPercent}%`;
+    row.inputDeltaPercent === 'unverifiable'
+      ? '?'
+      : `${row.inputDeltaPercent > 0 ? '+' : ''}${row.inputDeltaPercent}%`;
   const dOut =
-    row.outputDeltaPercent === 'unverifiable' ? '?' : `${row.outputDeltaPercent > 0 ? '+' : ''}${row.outputDeltaPercent}%`;
+    row.outputDeltaPercent === 'unverifiable'
+      ? '?'
+      : `${row.outputDeltaPercent > 0 ? '+' : ''}${row.outputDeltaPercent}%`;
 
   console.log(
-    `${row.provider.padEnd(12)} ${row.model.padEnd(32)} ${'$' + row.tableInputPer1M.toFixed(4).padStart(9)} ${detIn.padStart(12)} ${dIn.padStart(8)} ${'$' + row.tableOutputPer1M.toFixed(4).padStart(9)} ${detOut.padStart(12)} ${dOut.padStart(8)} ${flag.padStart(6)}`
+    `${row.provider.padEnd(12)} ${row.model.padEnd(32)} ${`$${row.tableInputPer1M.toFixed(4).padStart(9)}`} ${detIn.padStart(12)} ${dIn.padStart(8)} ${`$${row.tableOutputPer1M.toFixed(4).padStart(9)}`} ${detOut.padStart(12)} ${dOut.padStart(8)} ${flag.padStart(6)}`
   );
 }
 
