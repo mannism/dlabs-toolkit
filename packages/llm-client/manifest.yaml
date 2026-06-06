@@ -2,7 +2,10 @@ name: "@diabolicallabs/llm-client"
 purpose: >
   Unified LLM client across 5 providers: OpenAI (Responses API), Anthropic, Gemini
   (@google/genai v2.x), DeepSeek, and Perplexity. Provides a single LlmClient interface
-  with complete(), stream(), structured(), withTools(), and streamStructured() (v1.3.0+).
+  with complete(), stream(), structured(), withTools(), and streamStructured().
+  Provider-neutral multimodal content blocks (v4.2.0+): LlmContentBlock[] in LlmMessage.content
+  for images (base64 + URL) and PDFs (base64) — Anthropic full, OpenAI full, Gemini base64 only,
+  Perplexity/DeepSeek reject with bad_request. Per-provider mediaInput capability flags.
   Error normalization into 14-kind LlmError taxonomy with retryability and status-code
   classification. Token usage normalization into consistent LlmUsage shape regardless of
   provider. Configurable retry with 4 strategies (exponential, linear, fixed, none).
@@ -10,34 +13,24 @@ purpose: >
   Optional cost tracking via @diabolicallabs/llm-pricing peer dep (LlmClientConfig.pricing).
   Strict structured outputs: OpenAI json_schema, Anthropic tool-use, Gemini responseSchema,
   DeepSeek/Perplexity prompt-fallback. Per-call timeout, AbortSignal, stream stall detection.
-  Optional semaphore + rate-limiter via @diabolicallabs/llm-client/pool sub-path (v1.2.0+).
-  v1.4.0 additions: capability matrix (getModelCapabilities), linkedAbortController fan-out
-  helper, and response IDs (id + idSource) on all three response types.
-  v1.5.0 additions: pre-call hooks API (LlmHooks) — beforeCall (mutation + short-circuit)
-  and afterCall (informational) on all 5 call types. Hooks fire once per public method
-  invocation, not per retry. beforeCall errors propagate as bad_request; afterCall errors
-  are logged and dropped. Streaming paths fire afterCall after generator exhaustion;
-  ctx.response is undefined for streaming (no buffered response object).
-  v1.6.0 additions: LlmAfterCallContext.usage populated for all 5 call types including
-  streaming — stream() captures from terminal chunk, streamStructured() from done event.
-  v1.7.0 additions: pricing.remoteUrl + pricing.cacheTtlMs on LlmClientConfig — wire
-  fetchRemoteTable() for live pricing with stale-while-revalidate cache (24h TTL default,
-  never-throws). createClient() and createClientFromEnv() are now async (Promise<LlmClient>).
-  Structured log event pricing_source emitted on init.
+  Optional semaphore + rate-limiter via @diabolicallabs/llm-client/pool sub-path.
+  Capability matrix (getModelCapabilities) with mediaInput fields. linkedAbortController fan-out
+  helper. Pre-call hooks API (LlmHooks) — beforeCall (mutation + short-circuit) and afterCall
+  (informational) on all 5 call types. Pluggable logger. Remote pricing table via pricing.remoteUrl.
 owner: Sable
 status: published
 
 depends_on:
   - name: "@anthropic-ai/sdk"
-    version: "^0.95.2"
+    version: "^0.100.1"
     why: "Anthropic Claude provider — messages API with streaming and prompt cache support"
   - name: "openai"
-    version: "^6.37.0"
+    version: "^6.39.1"
     why: "OpenAI Responses API provider; also used by DeepSeek and Perplexity with baseURL override"
   - name: "zod"
     why: "Structured output schema validation. Used in structured() and streamStructured() to parse and validate JSON responses."
   - name: "@google/genai"
-    version: "^2.2.0"
+    version: "^2.7.0"
     why: "Google Gemini provider — generateContent + streaming via v2.x SDK"
   - name: "deepseek (openai SDK with baseURL override)"
     why: "DeepSeek's API is OpenAI Chat Completions-compatible; uses the openai SDK pointed at api.deepseek.com"
@@ -70,9 +63,12 @@ exports:
   - "LlmSkipResult (type) — named union for the skip field; all valid response shapes (v1.5.0+)"
   - "LlmAfterCallContext (type) — context passed to afterCall hooks: request, response, usage, error, latencyMs; usage populated for all 5 call types (v1.5.0+, usage field v1.6.0+)"
   - "LlmHooks (type) — { beforeCall?, afterCall? } interface; pass as hooks? on LlmClientConfig (v1.5.0+)"
-  - "getModelCapabilities(provider, model): ModelCapabilities | null — provider capability lookup (v1.4.0+)"
-  - "ModelCapabilities (type) — capability descriptor returned by getModelCapabilities"
+  - "getModelCapabilities(provider, model): ModelCapabilities | null — provider capability lookup"
+  - "ModelCapabilities (type) — capability descriptor including mediaInput: { image: { base64, url }, document: { pdfBase64 } } (v4.2.0+)"
   - "CAPABILITIES_VERSIONED_AT (constant) — ISO date of last capability table update"
+  - "LlmContentBlock (type) — provider-neutral content block: text | image (base64/url) | document (base64) (v4.2.0+)"
+  - "LlmImageMediaType (type) — 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' (v4.2.0+)"
+  - "LlmDocumentMediaType (type) — 'application/pdf' (v4.2.0+)"
   - "linkedAbortController(parentSignal, opts?): LinkedAbortHandle — fan-out AbortController with optional per-child timeout (v1.4.0+)"
   - "LinkedAbortHandle, LinkedAbortControllerOptions (types)"
   - "withTools() — native tool calling on LlmClient (all providers except Perplexity)"
@@ -153,6 +149,15 @@ notes: |
           cache, 24h TTL, never-throws fail-safe. pricing.cacheTtlMs — override cache TTL.
           createClient() and createClientFromEnv() are now async (Promise<LlmClient>).
           Structured log event pricing_source emitted on init.
+  v4.1.0: pluggable setLlmClientLogger(); default = structured JSON to stdout. Six diagnostic
+          console.warn sites migrated to event-named logger calls; four stable event names.
+  v4.2.0 (PR #149, merged 2026-06-06): provider-neutral multimodal content blocks.
+          LlmMessage.content widened to string | LlmContentBlock[]. Three new exported types:
+          LlmContentBlock, LlmImageMediaType, LlmDocumentMediaType. New internal module
+          providers/content-blocks.ts with shared mapper/guard helpers. Anthropic: image+PDF full
+          support. OpenAI Responses API: image+PDF full support (filename required on input_file —
+          live-verified). Gemini: base64 only (image URL rejects). Perplexity/DeepSeek: reject all
+          media with bad_request. mediaInput capability fields added to all model rows.
   Provider SDKs are devDependencies — bundled into dist at build time via tsup.
   Consumers do not need to install provider SDKs directly.
   Published to npmjs.com under @diabolicallabs scope. GEOAudit is the live pilot consumer.
