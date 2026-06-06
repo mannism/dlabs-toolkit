@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { LlmContentBlock } from './types.js';
 import { LlmError } from './types.js';
 
 describe('LlmError', () => {
@@ -83,33 +84,29 @@ describe('LlmContentBlock type exports', () => {
   });
 
   it('LlmContentBlock text block can be constructed with correct shape', () => {
-    // Runtime shape test — validates the type is usable without TS compile errors.
-    // biome-ignore lint/suspicious/noExplicitAny: testing runtime shape construction
-    const block: Record<string, unknown> = { type: 'text', text: 'Hello' };
-    expect(block['type']).toBe('text');
-    expect(block['text']).toBe('Hello');
+    const block: LlmContentBlock = { type: 'text', text: 'Hello' };
+    expect(block).toMatchObject({ type: 'text', text: 'Hello' });
   });
 
   it('LlmContentBlock image.base64 block has correct shape', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: testing runtime shape construction
-    const block: Record<string, unknown> = {
+    const block: LlmContentBlock = {
       type: 'image',
       source: { type: 'base64', mediaType: 'image/jpeg', data: 'abc123' },
     };
-    expect(block['type']).toBe('image');
-    const source = block['source'] as Record<string, unknown>;
-    expect(source['type']).toBe('base64');
-    expect(source['mediaType']).toBe('image/jpeg');
+    expect(block).toMatchObject({
+      type: 'image',
+      source: { type: 'base64', mediaType: 'image/jpeg', data: 'abc123' },
+    });
   });
 
   it('LlmContentBlock document block has correct shape', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: testing runtime shape construction
-    const block: Record<string, unknown> = {
+    const block: LlmContentBlock = {
       type: 'document',
       source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfbytes' },
     };
-    expect(block['type']).toBe('document');
-    const source = block['source'] as Record<string, unknown>;
-    expect(source['mediaType']).toBe('application/pdf');
+    expect(block).toMatchObject({
+      type: 'document',
+      source: { type: 'base64', mediaType: 'application/pdf' },
+    });
   });
 });

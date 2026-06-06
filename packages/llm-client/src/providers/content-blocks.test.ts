@@ -344,7 +344,12 @@ describe('mapOpenAIContent()', () => {
     const blocks: LlmContentBlock[] = [
       {
         type: 'document',
-        source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfbytes', filename: 'brief.pdf' },
+        source: {
+          type: 'base64',
+          mediaType: 'application/pdf',
+          data: 'pdfbytes',
+          filename: 'brief.pdf',
+        },
       },
     ];
     const result = mapOpenAIContent(blocks);

@@ -92,7 +92,6 @@ export function assertBlocksSupported(
         if (block.source.type === 'base64' && !support.documentBase64) {
           throwUnsupportedBlock(provider, 'document', 'base64');
         }
-        continue;
       }
     }
   }
