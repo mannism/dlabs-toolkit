@@ -55,12 +55,7 @@ import {
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { parseJsonOrThrow } from '../extract-json.js';
 import { synthesizeId } from '../id-helpers.js';
-import {
-  isZodSchema,
-  type JsonNode,
-  stripGeminiSentinel,
-  toProviderSchema,
-} from '../json-schema.js';
+import { isZodSchema, stripGeminiSentinel, toProviderSchema } from '../json-schema.js';
 import {
   classifyHttpStatus,
   mergeRetryOptsWithSignal,
@@ -566,14 +561,30 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     const start = Date.now();
 
     // Build Gemini FunctionDeclaration array using parametersJsonSchema (plain JSON Schema)
+    // Gemini uses OpenAPI 3.0 dialect; switch on the LlmToolSchema kind discriminant
     const functionDeclarations: FunctionDeclaration[] = tools.map((t) => {
-      const parametersSchema = isZodSchema(t.inputSchema)
-        ? toProviderSchema(t.inputSchema as import('zod').ZodType, 'gemini')
-        : (t.inputSchema as unknown as JsonNode);
+      let schemaForProvider: unknown;
+      switch (t.inputSchema.kind) {
+        case 'zod':
+          schemaForProvider = toProviderSchema(t.inputSchema.schema, 'gemini');
+          break;
+        case 'jsonSchema':
+          schemaForProvider = t.inputSchema.schema;
+          break;
+        default: {
+          // Legacy-shape guard: catches old { parse: fn } callers post-v5 upgrade
+          throw new LlmError({
+            kind: 'tool_schema_invalid',
+            message: `LlmTool "${(t as { name: string }).name}": inputSchema must have kind 'zod' or 'jsonSchema' (v5 migration: wrap Zod schemas as { kind: 'zod', schema } and JSON Schema objects as { kind: 'jsonSchema', schema })`,
+            provider: PROVIDER,
+            retryable: false,
+          });
+        }
+      }
       return {
         name: t.name,
         description: t.description,
-        parametersJsonSchema: parametersSchema as unknown,
+        parametersJsonSchema: schemaForProvider,
       };
     });
 
@@ -634,7 +645,12 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           const tool = tools.find((t) => t.name === fc.name);
           if (tool !== undefined) {
             try {
-              parsedArgs = tool.inputSchema.parse(fc.args ?? {});
+              parsedArgs =
+                tool.inputSchema.kind === 'zod'
+                  ? tool.inputSchema.schema.parse(fc.args ?? {})
+                  : tool.inputSchema.validate
+                    ? tool.inputSchema.validate(fc.args ?? {})
+                    : (fc.args ?? {});
             } catch (err) {
               throw new LlmError({
                 message: `Gemini withTools: arguments for tool '${fc.name ?? ''}' failed schema validation. ${String(err)}`,
