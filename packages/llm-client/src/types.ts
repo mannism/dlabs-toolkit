@@ -488,7 +488,7 @@ export interface LlmStreamChunk {
  * | context_length         | no                | Input exceeded model context window                |
  * | tool_arguments_invalid | no                | Tool call arguments failed Zod parse               |
  * | structured_parse_failed| no                | structured() output failed Zod parse               |
- * | tool_schema_invalid    | no                | LlmTool.inputSchema missing kind field — legacy shape or mis-formed object |
+ * | tool_schema_invalid    | no                | LlmTool.inputSchema is missing or has an unrecognized kind — legacy { parse: fn } shape or malformed object passed to withTools() |
  * | cancelled              | no                | AbortSignal fired (caller-initiated)               |
  * | http                   | no                | Residual fallback for unclassified HTTP errors     |
  * | unknown                | yes               | Catch-all; should be empty for instrumented paths  |
@@ -608,40 +608,85 @@ export type LlmStructuredResponse<T> = {
 };
 
 /**
- * Discriminated union describing a tool's input schema.
+ * Discriminated union describing the input schema attached to an LlmTool (v5.0.0+).
  *
- * Two variants:
- *   kind: 'zod'        — a Zod 4 schema. The toolkit calls schema.parse() for validation
- *                        and converts the schema to the provider's JSON Schema dialect for
- *                        the wire call.
- *   kind: 'jsonSchema' — a plain JSON Schema object. Passed directly to the provider.
- *                        An optional validate() function is called for validation; when
- *                        omitted the raw model output is returned without validation.
+ * Required on every LlmTool passed to withTools(). Two variants:
  *
- * v5 migration:
- *   Old: `{ parse: (d) => d }`
- *   New (Zod): `{ kind: 'zod', schema: z.object({ ... }) }`
- *   New (JSON Schema): `{ kind: 'jsonSchema', schema: { type: 'object', ... }, validate?: fn }`
+ *   kind: 'zod'
+ *     Pass a Zod 4 `ZodType`. The toolkit calls `schema.parse()` for argument
+ *     validation after the model returns its arguments, and converts the schema
+ *     to the provider's JSON Schema dialect automatically for the wire call.
+ *     No separate `validate` function is needed — Zod handles both directions.
  *
- * Passing an object without a recognized `kind` field throws
- * LlmError({ kind: 'tool_schema_invalid' }) at runtime.
+ *     @example
+ *     ```ts
+ *     const weatherTool: LlmTool = {
+ *       name: 'get_weather',
+ *       description: 'Get the weather for a city.',
+ *       inputSchema: { kind: 'zod', schema: z.object({ city: z.string() }) },
+ *     };
+ *     ```
+ *
+ *   kind: 'jsonSchema'
+ *     Pass a plain JSON Schema object. The `schema` is sent to the provider
+ *     verbatim (no conversion). An optional `validate` function is called on
+ *     the raw model output for validation; when omitted, the output is returned
+ *     as-is without type checking.
+ *
+ *     @example
+ *     ```ts
+ *     const weatherTool: LlmTool = {
+ *       name: 'get_weather',
+ *       description: 'Get the weather for a city.',
+ *       inputSchema: {
+ *         kind: 'jsonSchema',
+ *         schema: {
+ *           type: 'object',
+ *           properties: { city: { type: 'string' } },
+ *           required: ['city'],
+ *         },
+ *         validate: (d) => {
+ *           if (typeof (d as { city?: unknown }).city !== 'string') {
+ *             throw new Error('city must be a string');
+ *           }
+ *           return d as { city: string };
+ *         },
+ *       },
+ *     };
+ *     ```
+ *
+ * v5.0.0 migration:
+ *   Before (v4.x): `inputSchema: { parse: (d) => d }`
+ *   After  (Zod):  `inputSchema: { kind: 'zod', schema: z.object({ ... }) }`
+ *   After  (JSON): `inputSchema: { kind: 'jsonSchema', schema: { ... }, validate?: fn }`
+ *
+ * Passing an object without a recognized `kind` field (e.g. the legacy `{ parse: fn }`
+ * shape) throws `LlmError({ kind: 'tool_schema_invalid' })` at runtime. Not retryable.
  */
 export type LlmToolSchema =
   | { kind: 'zod'; schema: z.ZodType }
   | { kind: 'jsonSchema'; schema: Record<string, unknown>; validate?: (d: unknown) => unknown };
 
 /**
- * Tool declaration — passed to withTools() to describe a callable function.
+ * Tool declaration passed to withTools() to describe a callable function.
  *
- * inputSchema must be an LlmToolSchema discriminated union (v5+).
- * Use { kind: 'zod', schema } for Zod-validated tools, or
- * { kind: 'jsonSchema', schema, validate? } for plain JSON Schema tools.
- * The toolkit calls the validation function after the model returns arguments,
- * then puts the result in LlmToolCall.arguments. Validation failure throws
- * LlmError with kind:'tool_arguments_invalid'.
+ * `inputSchema` must be an LlmToolSchema discriminated union (v5.0.0+).
  *
- * Passing the legacy bare `{ parse: fn }` shape throws
- * LlmError with kind:'tool_schema_invalid' (v5 migration required).
+ * - `{ kind: 'zod', schema: ZodType }` — Zod 4 schema. The toolkit converts it to
+ *   the provider's JSON Schema dialect for the wire call and calls `schema.parse()`
+ *   to validate the model's returned arguments. Recommended for type-safe tools.
+ *
+ * - `{ kind: 'jsonSchema', schema: JsonSchema, validate?: fn }` — plain JSON Schema
+ *   sent verbatim to the provider. The optional `validate` function is called on the
+ *   raw model output; when omitted, the output is returned without validation.
+ *
+ * After validation succeeds, the result is placed in LlmToolCall.arguments.
+ * Validation failure (from Zod or from `validate`) throws LlmError with
+ * kind: 'tool_arguments_invalid', retryable: false.
+ *
+ * Passing the legacy v4.x `{ parse: fn }` shape (missing `kind`) throws
+ * LlmError with kind: 'tool_schema_invalid', retryable: false.
+ * See LlmToolSchema for migration examples.
  */
 export interface LlmTool {
   name: string;

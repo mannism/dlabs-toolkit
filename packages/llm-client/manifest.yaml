@@ -6,7 +6,7 @@ purpose: >
   Provider-neutral multimodal content blocks (v4.2.0+): LlmContentBlock[] in LlmMessage.content
   for images (base64 + URL) and PDFs (base64) — Anthropic full, OpenAI full, Gemini base64 only,
   Perplexity/DeepSeek reject with bad_request. Per-provider mediaInput capability flags.
-  Error normalization into 14-kind LlmError taxonomy with retryability and status-code
+  Error normalization into 15-kind LlmError taxonomy with retryability and status-code
   classification. Token usage normalization into consistent LlmUsage shape regardless of
   provider. Configurable retry with 4 strategies (exponential, linear, fixed, none).
   Provider failover via model: string[] — tries each model in order on configured error kinds.
@@ -54,7 +54,8 @@ exports:
   - "createClient(config: LlmClientConfig): Promise<LlmClient>  — async as of v1.7.0"
   - "createClientFromEnv(provider, model, overrides?): Promise<LlmClient>  — async as of v1.7.0"
   - "LlmError (class)"
-  - "LlmErrorKind (type) — 14-kind discriminated union"
+  - "LlmErrorKind (type) — 15-kind discriminated union"
+  - "LlmToolSchema (type) — discriminated union for LlmTool.inputSchema: { kind:'zod'; schema: ZodType } | { kind:'jsonSchema'; schema: Record<string,unknown>; validate?: fn } (v5.0.0+)"
   - "Types: LlmMessage, LlmClientConfig, LlmCallOptions, LlmUsage, LlmResponse, LlmStreamChunk, LlmStructuredResponse, LlmToolResponse, LlmClient, LlmCost"
   - "RetryConfig, RetryStrategy (types)"
   - "LlmCallType (type) — 'complete' | 'stream' | 'structured' | 'withTools' | 'streamStructured' (v1.5.0+)"
@@ -87,7 +88,7 @@ contracts:
     strategy: "exponential backoff with full jitter (default); also linear, fixed, none"
     formula: "delay = random(0, baseDelayMs * 2^attempt)"
     retryable_conditions: ["HTTP 429", "HTTP 502", "HTTP 503", "HTTP 504", "ECONNRESET", "ETIMEDOUT", "timeout"]
-    non_retryable_conditions: ["HTTP 400", "HTTP 401", "HTTP 403", "HTTP 404", "cancelled", "stream_stall"]
+    non_retryable_conditions: ["HTTP 400", "HTTP 401", "HTTP 403", "HTTP 404", "cancelled", "stream_stall", "tool_schema_invalid"]
     max_retries_default: 3
   timeout_default_ms: 30000
   cancellation:
@@ -151,6 +152,15 @@ notes: |
           Structured log event pricing_source emitted on init.
   v4.1.0: pluggable setLlmClientLogger(); default = structured JSON to stdout. Six diagnostic
           console.warn sites migrated to event-named logger calls; four stable event names.
+  v5.0.0 (BREAKING — PR #154): LlmToolSchema discriminated union replaces the bare
+          { parse: fn } shape for LlmTool.inputSchema. Two variants:
+          { kind:'zod'; schema: ZodType } — Zod 4 schema; toolkit handles JSON Schema
+          conversion and parse() validation automatically.
+          { kind:'jsonSchema'; schema: Record<string,unknown>; validate?: fn } — JSON
+          Schema passed verbatim to the provider; optional validate() for argument checking.
+          Passing the legacy { parse: fn } shape throws LlmError({ kind:'tool_schema_invalid' }),
+          retryable: false. New error kind 'tool_schema_invalid' added to LlmErrorKind (now 15
+          kinds). LlmToolSchema exported from package root.
   v4.2.0 (PR #149, merged 2026-06-06): provider-neutral multimodal content blocks.
           LlmMessage.content widened to string | LlmContentBlock[]. Three new exported types:
           LlmContentBlock, LlmImageMediaType, LlmDocumentMediaType. New internal module
