@@ -1308,11 +1308,34 @@ function mockToolUseResponse(
 describe('Anthropic provider — withTools()', () => {
   let mockCreate: MockInstance;
 
+  // kind:'zod' fixture — standard path
   const weatherTool = {
     name: 'get_weather',
     description: 'Get the current weather for a city.',
     inputSchema: {
-      parse: (d: unknown) => d as { city: string },
+      kind: 'zod' as const,
+      schema: z.object({ city: z.string() }),
+    },
+  };
+
+  // kind:'jsonSchema' with validate — used in jsonSchema-path tests
+  const weatherToolJsonSchemaValidate = {
+    name: 'get_weather',
+    description: 'Get the current weather for a city.',
+    inputSchema: {
+      kind: 'jsonSchema' as const,
+      schema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+      validate: (d: unknown) => d as { city: string },
+    },
+  };
+
+  // kind:'jsonSchema' without validate — pass-through path
+  const weatherToolJsonSchema = {
+    name: 'get_weather',
+    description: 'Get the current weather for a city.',
+    inputSchema: {
+      kind: 'jsonSchema' as const,
+      schema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
     },
   };
 
@@ -1405,17 +1428,13 @@ describe('Anthropic provider — withTools()', () => {
     expect(callArgs.tool_choice).toEqual({ type: 'tool', name: 'get_weather' });
   });
 
-  it('throws kind:tool_arguments_invalid when schema validation fails', async () => {
+  it('throws kind:tool_arguments_invalid when schema validation fails (kind:zod)', async () => {
     const strictTool = {
       name: 'strict_tool',
       description: 'Strict.',
       inputSchema: {
-        parse: (d: unknown) => {
-          if (typeof (d as { value?: unknown }).value !== 'number') {
-            throw new Error('Expected number');
-          }
-          return d as { value: number };
-        },
+        kind: 'zod' as const,
+        schema: z.object({ value: z.number() }),
       },
     };
 
@@ -1432,6 +1451,47 @@ describe('Anthropic provider — withTools()', () => {
     if (thrown instanceof LlmError) {
       expect(thrown.kind).toBe('tool_arguments_invalid');
       expect(thrown.retryable).toBe(false);
+    }
+  });
+
+  it('validates with kind:jsonSchema validate function when present', async () => {
+    mockCreate.mockResolvedValue(mockToolUseResponse('get_weather', { city: 'Rome' }));
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.withTools(
+      [{ role: 'user', content: 'Weather in Rome?' }],
+      [weatherToolJsonSchemaValidate]
+    );
+    expect(result.toolCalls[0]?.arguments).toEqual({ city: 'Rome' });
+  });
+
+  it('passes raw args through when kind:jsonSchema has no validate function', async () => {
+    mockCreate.mockResolvedValue(mockToolUseResponse('get_weather', { city: 'Vienna' }));
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.withTools(
+      [{ role: 'user', content: 'Weather in Vienna?' }],
+      [weatherToolJsonSchema]
+    );
+    expect(result.toolCalls[0]?.arguments).toEqual({ city: 'Vienna' });
+  });
+
+  it('throws kind:tool_schema_invalid for legacy bare { parse: fn } inputSchema', async () => {
+    const legacyTool = {
+      name: 'legacy_tool',
+      description: 'Legacy.',
+      // biome-ignore lint/suspicious/noExplicitAny: intentionally testing legacy shape rejection
+      inputSchema: { parse: (d: unknown) => d } as any,
+    };
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const thrown = await client
+      .withTools([{ role: 'user', content: 'Hi' }], [legacyTool])
+      .catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('tool_schema_invalid');
+      expect(thrown.retryable).toBe(false);
+      expect(thrown.message).toContain('v5 migration');
     }
   });
 

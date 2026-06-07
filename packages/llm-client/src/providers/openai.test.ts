@@ -1020,11 +1020,34 @@ function mockResponseTextOnly(text: string): OpenAI.Responses.Response {
 }
 
 describe('OpenAI provider (Responses API) — withTools()', () => {
+  // kind:'zod' fixture — standard path
   const weatherTool = {
     name: 'get_weather',
     description: 'Get the current weather for a city.',
     inputSchema: {
-      parse: (d: unknown) => d as { city: string },
+      kind: 'zod' as const,
+      schema: z.object({ city: z.string() }),
+    },
+  };
+
+  // kind:'jsonSchema' with validate
+  const weatherToolJsonSchemaValidate = {
+    name: 'get_weather',
+    description: 'Get the current weather for a city.',
+    inputSchema: {
+      kind: 'jsonSchema' as const,
+      schema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+      validate: (d: unknown) => d as { city: string },
+    },
+  };
+
+  // kind:'jsonSchema' without validate
+  const weatherToolJsonSchema = {
+    name: 'get_weather',
+    description: 'Get the current weather for a city.',
+    inputSchema: {
+      kind: 'jsonSchema' as const,
+      schema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
     },
   };
 
@@ -1140,17 +1163,13 @@ describe('OpenAI provider (Responses API) — withTools()', () => {
     expect(callParams.parallel_tool_calls).toBe(false);
   });
 
-  it('throws kind:tool_arguments_invalid when schema validation fails', async () => {
+  it('throws kind:tool_arguments_invalid when schema validation fails (kind:zod)', async () => {
     const strictTool = {
       name: 'strict_tool',
       description: 'Strict input required.',
       inputSchema: {
-        parse: (d: unknown) => {
-          if (typeof (d as { value?: unknown }).value !== 'number') {
-            throw new Error('Expected number');
-          }
-          return d as { value: number };
-        },
+        kind: 'zod' as const,
+        schema: z.object({ value: z.number() }),
       },
     };
 
@@ -1170,6 +1189,62 @@ describe('OpenAI provider (Responses API) — withTools()', () => {
     if (thrown instanceof LlmError) {
       expect(thrown.kind).toBe('tool_arguments_invalid');
       expect(thrown.retryable).toBe(false);
+    }
+  });
+
+  it('validates with kind:jsonSchema validate function when present', async () => {
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(mockResponseWithToolCall('get_weather', { city: 'Madrid' }));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.withTools(
+      [{ role: 'user', content: 'Weather in Madrid?' }],
+      [weatherToolJsonSchemaValidate]
+    );
+    expect(result.toolCalls[0]?.arguments).toEqual({ city: 'Madrid' });
+  });
+
+  it('passes raw args through when kind:jsonSchema has no validate function', async () => {
+    const mockCreate = vi
+      .fn()
+      .mockResolvedValue(mockResponseWithToolCall('get_weather', { city: 'Oslo' }));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.withTools(
+      [{ role: 'user', content: 'Weather in Oslo?' }],
+      [weatherToolJsonSchema]
+    );
+    expect(result.toolCalls[0]?.arguments).toEqual({ city: 'Oslo' });
+  });
+
+  it('throws kind:tool_schema_invalid for legacy bare { parse: fn } inputSchema', async () => {
+    const legacyTool = {
+      name: 'legacy_tool',
+      description: 'Legacy.',
+      // biome-ignore lint/suspicious/noExplicitAny: intentionally testing legacy shape rejection
+      inputSchema: { parse: (d: unknown) => d } as any,
+    };
+
+    const mockCreate = vi.fn().mockResolvedValue(mockResponseTextOnly('ok'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const thrown = await client
+      .withTools([{ role: 'user', content: 'Hi' }], [legacyTool])
+      .catch((e: unknown) => e);
+
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('tool_schema_invalid');
+      expect(thrown.retryable).toBe(false);
+      expect(thrown.message).toContain('v5 migration');
     }
   });
 

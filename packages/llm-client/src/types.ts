@@ -85,9 +85,18 @@
  *   LlmStructuredResponse.cost — same.
  *   LlmToolResponse.cost    — same.
  *   Requires @diabolicallabs/llm-pricing to be installed (optional peer dep).
+ *
+ * v5.0.0 additions (BREAKING — tool schema discriminated union):
+ *   LlmToolSchema           — new discriminated union type for LlmTool.inputSchema.
+ *                             Variants: { kind:'zod'; schema: ZodType } and
+ *                             { kind:'jsonSchema'; schema: Record<string,unknown>; validate?: fn }.
+ *   LlmTool.inputSchema     — changed from { parse(d): unknown } to LlmToolSchema.
+ *                             Bare { parse: fn } objects now throw tool_schema_invalid at runtime.
+ *   LlmErrorKind            — added 'tool_schema_invalid' (not retryable).
  */
 
 import type { LlmCost, PricingTable } from '@diabolicallabs/llm-pricing';
+import type { z } from 'zod';
 
 // ─── RetryConfig ─────────────────────────────────────────────────────────────
 
@@ -479,6 +488,7 @@ export interface LlmStreamChunk {
  * | context_length         | no                | Input exceeded model context window                |
  * | tool_arguments_invalid | no                | Tool call arguments failed Zod parse               |
  * | structured_parse_failed| no                | structured() output failed Zod parse               |
+ * | tool_schema_invalid    | no                | LlmTool.inputSchema missing kind field — legacy shape or mis-formed object |
  * | cancelled              | no                | AbortSignal fired (caller-initiated)               |
  * | http                   | no                | Residual fallback for unclassified HTTP errors     |
  * | unknown                | yes               | Catch-all; should be empty for instrumented paths  |
@@ -496,6 +506,7 @@ export type LlmErrorKind =
   | 'context_length'
   | 'tool_arguments_invalid'
   | 'structured_parse_failed'
+  | 'tool_schema_invalid'
   | 'cancelled'
   | 'http'
   | 'unknown';
@@ -597,18 +608,45 @@ export type LlmStructuredResponse<T> = {
 };
 
 /**
+ * Discriminated union describing a tool's input schema.
+ *
+ * Two variants:
+ *   kind: 'zod'        — a Zod 4 schema. The toolkit calls schema.parse() for validation
+ *                        and converts the schema to the provider's JSON Schema dialect for
+ *                        the wire call.
+ *   kind: 'jsonSchema' — a plain JSON Schema object. Passed directly to the provider.
+ *                        An optional validate() function is called for validation; when
+ *                        omitted the raw model output is returned without validation.
+ *
+ * v5 migration:
+ *   Old: `{ parse: (d) => d }`
+ *   New (Zod): `{ kind: 'zod', schema: z.object({ ... }) }`
+ *   New (JSON Schema): `{ kind: 'jsonSchema', schema: { type: 'object', ... }, validate?: fn }`
+ *
+ * Passing an object without a recognized `kind` field throws
+ * LlmError({ kind: 'tool_schema_invalid' }) at runtime.
+ */
+export type LlmToolSchema =
+  | { kind: 'zod'; schema: z.ZodType }
+  | { kind: 'jsonSchema'; schema: Record<string, unknown>; validate?: (d: unknown) => unknown };
+
+/**
  * Tool declaration — passed to withTools() to describe a callable function.
  *
- * inputSchema is a Zod-compatible schema (must have a `parse` function).
- * The toolkit calls inputSchema.parse(arguments) on the model's returned arguments
- * before putting them in LlmToolCall.arguments. If parse throws, the toolkit
- * throws LlmError with kind:'tool_arguments_invalid'.
+ * inputSchema must be an LlmToolSchema discriminated union (v5+).
+ * Use { kind: 'zod', schema } for Zod-validated tools, or
+ * { kind: 'jsonSchema', schema, validate? } for plain JSON Schema tools.
+ * The toolkit calls the validation function after the model returns arguments,
+ * then puts the result in LlmToolCall.arguments. Validation failure throws
+ * LlmError with kind:'tool_arguments_invalid'.
+ *
+ * Passing the legacy bare `{ parse: fn }` shape throws
+ * LlmError with kind:'tool_schema_invalid' (v5 migration required).
  */
 export interface LlmTool {
   name: string;
   description: string;
-  /** Zod-compatible schema. Same narrow interface as structured()'s schema param. */
-  inputSchema: { parse(d: unknown): unknown };
+  inputSchema: LlmToolSchema;
 }
 
 /**

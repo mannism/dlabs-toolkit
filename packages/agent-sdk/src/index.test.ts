@@ -783,7 +783,10 @@ describe('withTools()', () => {
   const mockTool = {
     name: 'get_weather',
     description: 'Get weather.',
-    inputSchema: { parse: (d: unknown) => d as { city: string } },
+    inputSchema: {
+      kind: 'jsonSchema' as const,
+      schema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+    },
   };
 
   it('returns the LlmToolResponse from the underlying client', async () => {
@@ -971,7 +974,10 @@ describe('cost propagation', () => {
     const mockTool = {
       name: 'get_weather',
       description: 'Get weather.',
-      inputSchema: { parse: (d: unknown) => d as { city: string } },
+      inputSchema: {
+        kind: 'jsonSchema' as const,
+        schema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+      },
     };
     const client = makeMockClient({
       withTools: vi.fn().mockResolvedValue({

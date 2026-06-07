@@ -678,19 +678,35 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     const start = Date.now();
 
     // Build Responses API FunctionTool array — flat shape (no nested function key)
+    // Switch on the LlmToolSchema kind discriminant; 'openai' profile strips incompatible
+    // keywords and enforces required[]
     const responseApiTools: OpenAI.Responses.FunctionTool[] = tools.map((t) => {
-      // Use openai profile for schema — strips incompatible keywords and enforces required[]
-      const parameters = isZodSchema(t.inputSchema)
-        ? (toProviderSchema(t.inputSchema as import('zod').ZodType, 'openai') as Record<
+      let schemaForProvider: Record<string, unknown>;
+      switch (t.inputSchema.kind) {
+        case 'zod':
+          schemaForProvider = toProviderSchema(t.inputSchema.schema, 'openai') as Record<
             string,
             unknown
-          >)
-        : (t.inputSchema as unknown as Record<string, unknown>);
+          >;
+          break;
+        case 'jsonSchema':
+          schemaForProvider = t.inputSchema.schema;
+          break;
+        default: {
+          // Legacy-shape guard: catches old { parse: fn } callers post-v5 upgrade
+          throw new LlmError({
+            kind: 'tool_schema_invalid',
+            message: `LlmTool "${(t as { name: string }).name}": inputSchema must have kind 'zod' or 'jsonSchema' (v5 migration: wrap Zod schemas as { kind: 'zod', schema } and JSON Schema objects as { kind: 'jsonSchema', schema })`,
+            provider: PROVIDER,
+            retryable: false,
+          });
+        }
+      }
       return {
         type: 'function',
         name: t.name,
         description: t.description,
-        parameters: parameters as { [key: string]: unknown } | null,
+        parameters: schemaForProvider as { [key: string]: unknown } | null,
         strict: null,
       };
     });
@@ -771,7 +787,12 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
         const tool = tools.find((t) => t.name === item.name);
         if (tool !== undefined) {
           try {
-            parsedArgs = tool.inputSchema.parse(parsedArgs);
+            parsedArgs =
+              tool.inputSchema.kind === 'zod'
+                ? tool.inputSchema.schema.parse(parsedArgs)
+                : tool.inputSchema.validate
+                  ? tool.inputSchema.validate(parsedArgs)
+                  : parsedArgs;
           } catch (err) {
             throw new LlmError({
               message: `OpenAI withTools: arguments for tool '${item.name}' failed schema validation. ${String(err)}`,

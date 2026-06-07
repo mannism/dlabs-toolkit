@@ -72,6 +72,7 @@ export type {
   LlmTool,
   LlmToolCall,
   LlmToolResponse,
+  LlmToolSchema,
   LlmUsage,
   RetryConfig,
   RetryStrategy,

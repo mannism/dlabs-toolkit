@@ -26,7 +26,7 @@
 import OpenAI from 'openai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { parseJsonOrThrow } from '../extract-json.js';
-import { isZodSchema, type JsonNode, toProviderSchema } from '../json-schema.js';
+import { type JsonNode, toProviderSchema } from '../json-schema.js';
 import {
   classifyHttpStatus,
   mergeRetryOptsWithSignal,
@@ -381,16 +381,32 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     const start = Date.now();
 
     // Build Chat Completions tool array — nested function key (NOT Responses API flat shape)
+    // Switch on the LlmToolSchema kind discriminant; 'openai' profile for JSON Schema conversion
     const chatTools: OpenAI.Chat.ChatCompletionTool[] = tools.map((t) => {
-      const parameters = isZodSchema(t.inputSchema)
-        ? (toProviderSchema(t.inputSchema as import('zod').ZodType, 'openai') as JsonNode)
-        : (t.inputSchema as unknown as JsonNode);
+      let schemaForProvider: JsonNode;
+      switch (t.inputSchema.kind) {
+        case 'zod':
+          schemaForProvider = toProviderSchema(t.inputSchema.schema, 'openai') as JsonNode;
+          break;
+        case 'jsonSchema':
+          schemaForProvider = t.inputSchema.schema as JsonNode;
+          break;
+        default: {
+          // Legacy-shape guard: catches old { parse: fn } callers post-v5 upgrade
+          throw new LlmError({
+            kind: 'tool_schema_invalid',
+            message: `LlmTool "${(t as { name: string }).name}": inputSchema must have kind 'zod' or 'jsonSchema' (v5 migration: wrap Zod schemas as { kind: 'zod', schema } and JSON Schema objects as { kind: 'jsonSchema', schema })`,
+            provider: PROVIDER,
+            retryable: false,
+          });
+        }
+      }
       return {
         type: 'function',
         function: {
           name: t.name,
           description: t.description,
-          parameters: parameters as Record<string, unknown>,
+          parameters: schemaForProvider as Record<string, unknown>,
         },
       };
     });
@@ -461,7 +477,12 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
       const tool = tools.find((t) => t.name === fn.name);
       if (tool !== undefined) {
         try {
-          parsedArgs = tool.inputSchema.parse(parsedArgs);
+          parsedArgs =
+            tool.inputSchema.kind === 'zod'
+              ? tool.inputSchema.schema.parse(parsedArgs)
+              : tool.inputSchema.validate
+                ? tool.inputSchema.validate(parsedArgs)
+                : parsedArgs;
         } catch (err) {
           throw new LlmError({
             message: `DeepSeek withTools: arguments for tool '${fn.name}' failed schema validation. ${String(err)}`,

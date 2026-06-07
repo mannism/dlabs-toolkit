@@ -18,6 +18,7 @@
 
 import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { z } from 'zod';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createPerplexityProvider, normalizePerplexityError } from './perplexity.js';
@@ -1174,7 +1175,8 @@ describe('Perplexity provider — withTools()', () => {
     name: 'get_weather',
     description: 'Get the current weather for a city.',
     inputSchema: {
-      parse: (d: unknown) => d as { city: string },
+      kind: 'zod' as const,
+      schema: z.object({ city: z.string() }),
     },
   };
 

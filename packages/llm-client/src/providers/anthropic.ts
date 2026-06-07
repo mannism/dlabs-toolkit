@@ -723,15 +723,30 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
 
-    // Build Anthropic tool definitions
+    // Build Anthropic tool definitions — switch on the LlmToolSchema kind discriminant
     const anthropicTools: Anthropic.Tool[] = tools.map((t) => {
-      const inputSchema = isZodSchema(t.inputSchema)
-        ? (toProviderSchema(t.inputSchema as import('zod').ZodType, 'anthropic') as JsonNode)
-        : (t.inputSchema as unknown as JsonNode);
+      let schemaForProvider: JsonNode;
+      switch (t.inputSchema.kind) {
+        case 'zod':
+          schemaForProvider = toProviderSchema(t.inputSchema.schema, 'anthropic') as JsonNode;
+          break;
+        case 'jsonSchema':
+          schemaForProvider = t.inputSchema.schema as JsonNode;
+          break;
+        default: {
+          // Legacy-shape guard: catches old { parse: fn } callers post-v5 upgrade
+          throw new LlmError({
+            kind: 'tool_schema_invalid',
+            message: `LlmTool "${(t as { name: string }).name}": inputSchema must have kind 'zod' or 'jsonSchema' (v5 migration: wrap Zod schemas as { kind: 'zod', schema } and JSON Schema objects as { kind: 'jsonSchema', schema })`,
+            provider: PROVIDER,
+            retryable: false,
+          });
+        }
+      }
       return {
         name: t.name,
         description: t.description,
-        input_schema: inputSchema as Anthropic.Tool['input_schema'],
+        input_schema: schemaForProvider as Anthropic.Tool['input_schema'],
       };
     });
 
@@ -801,7 +816,12 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
         const tool = tools.find((t) => t.name === block.name);
         if (tool !== undefined) {
           try {
-            parsedArgs = tool.inputSchema.parse(block.input);
+            parsedArgs =
+              tool.inputSchema.kind === 'zod'
+                ? tool.inputSchema.schema.parse(block.input)
+                : tool.inputSchema.validate
+                  ? tool.inputSchema.validate(block.input)
+                  : block.input;
           } catch (err) {
             throw new LlmError({
               message: `Anthropic withTools: arguments for tool '${block.name}' failed schema validation. ${String(err)}`,
