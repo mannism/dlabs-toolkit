@@ -4,9 +4,10 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**v1.7.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
+**v5.0.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
 
 Highlights:
+- **v5.0.0** — **Breaking.** `LlmTool.inputSchema` now requires an `LlmToolSchema` discriminated union (`{ kind: 'zod', schema }` or `{ kind: 'jsonSchema', schema, validate? }`). The legacy `{ parse: fn }` shape throws `LlmError({ kind: 'tool_schema_invalid' })` at runtime. `LlmToolSchema` is exported from the package root. New `tool_schema_invalid` error kind added. See [Tool calling](#tool-calling-v100) for migration examples.
 - **v1.7.0** — `createClient()` is now `async`. `pricing.remoteUrl` config option fetches a remote `PricingTable` on init (stale-while-revalidate cache, 24h default TTL). `pricing.cacheTtlMs` controls the TTL. Structured `pricing_source` log on every `createClient()` with pricing config. Requires `@diabolicallabs/llm-pricing@^0.2.0`.
 - **v1.6.0** — `LlmAfterCallContext` now carries `usage?: LlmUsage` for all 5 call types. Non-streaming paths mirror `response.usage`; `stream()` captures from the terminal chunk; `streamStructured()` from the `done` event. The v1.5.0 caveat ("usage not surfaced for streaming in afterCall") is removed. `agent-sdk` v2.0.0 uses this to complete its architecture migration.
 - **v1.5.0** — Pre-call hooks API (`hooks?: LlmHooks` on `createClient`). `beforeCall` for request mutation and short-circuit caching; `afterCall` for custom logging and observability. Fires on all 5 call types. Cross-reference: [`@diabolicallabs/agent-sdk`](../agent-sdk/README.md) uses hooks internally.
@@ -312,16 +313,69 @@ interface LlmCallOptions {
 
 `withTools()` enables native function calling across all supported providers. The toolkit handles provider-specific tool shapes, stop-reason mapping, and argument validation internally.
 
+### `LlmToolSchema` — tool input schema (v5.0.0, breaking)
+
+Every `LlmTool.inputSchema` must be an `LlmToolSchema` discriminated union. There are two variants:
+
+**Zod variant** (`kind: 'zod'`) — recommended for type-safe tools. Pass a Zod 4 schema. The toolkit converts it to JSON Schema for the wire call and calls `schema.parse()` to validate the model's returned arguments automatically.
+
 ```typescript
 import { z } from 'zod';
-import { createClientFromEnv } from '@diabolicallabs/llm-client';
+import { type LlmTool, createClientFromEnv } from '@diabolicallabs/llm-client';
 
-const client = createClientFromEnv('anthropic', 'claude-sonnet-4-6');
-
-const weatherTool = {
+const weatherTool: LlmTool = {
   name: 'get_weather',
   description: 'Get the current weather for a city.',
-  inputSchema: z.object({ city: z.string() }),
+  inputSchema: {
+    kind: 'zod',
+    schema: z.object({ city: z.string() }),
+  },
+};
+```
+
+**JSON Schema variant** (`kind: 'jsonSchema'`) — use when you already have a JSON Schema or want to avoid a Zod dependency. The `schema` object is sent verbatim to the provider. The optional `validate` function is called for argument validation; when omitted, the raw model output is returned without validation.
+
+```typescript
+import { type LlmTool, createClientFromEnv } from '@diabolicallabs/llm-client';
+
+const weatherTool: LlmTool = {
+  name: 'get_weather',
+  description: 'Get the current weather for a city.',
+  inputSchema: {
+    kind: 'jsonSchema',
+    schema: {
+      type: 'object',
+      properties: { city: { type: 'string' } },
+      required: ['city'],
+    },
+    // validate is optional — omit if you don't need runtime argument checking
+    validate: (d) => {
+      if (typeof (d as { city?: unknown }).city !== 'string') {
+        throw new Error('city must be a string');
+      }
+      return d as { city: string };
+    },
+  },
+};
+```
+
+> **v5 migration:** The v4.x `inputSchema: { parse: fn }` shape (including a bare Zod schema passed directly as `inputSchema`) no longer works. It throws `LlmError({ kind: 'tool_schema_invalid' })` at runtime. Replace it with one of the two variants above.
+
+### Basic usage
+
+```typescript
+import { z } from 'zod';
+import { type LlmTool, createClientFromEnv } from '@diabolicallabs/llm-client';
+
+const client = await createClientFromEnv('anthropic', 'claude-sonnet-4-6');
+
+const weatherTool: LlmTool = {
+  name: 'get_weather',
+  description: 'Get the current weather for a city.',
+  inputSchema: {
+    kind: 'zod',
+    schema: z.object({ city: z.string() }),
+  },
 };
 
 const result = await client.withTools(
@@ -337,8 +391,8 @@ const result = await client.withTools(
 
 if (result.stopReason === 'tool_use') {
   for (const call of result.toolCalls) {
-    console.log(call.toolName, call.arguments); // arguments is validated by inputSchema
-    console.log(call.id);         // use as tool_call_id in the follow-up message
+    console.log(call.toolName, call.arguments); // arguments validated by inputSchema
+    console.log(call.id);           // use as tool_call_id in the follow-up message
     console.log(call.rawArguments); // original JSON string from the model
   }
 }
@@ -373,7 +427,12 @@ interface LlmCallWithToolsOptions extends LlmCallOptions {
 
 ### Argument validation
 
-Each `LlmTool.inputSchema` must expose a `.parse(data: unknown)` method. If the model returns arguments that fail validation, `withTools()` throws `LlmError` with `kind: 'tool_arguments_invalid'`, `retryable: false`. A Zod 4 schema satisfies this interface automatically.
+After the model returns its arguments, the toolkit validates them against the tool's `inputSchema`:
+
+- **`kind: 'zod'`** — calls `schema.parse(args)`. Throws `LlmError({ kind: 'tool_arguments_invalid' })` if validation fails.
+- **`kind: 'jsonSchema'`** — calls `validate(args)` when provided. If `validate` throws or returns a rejected promise, `withTools()` throws `LlmError({ kind: 'tool_arguments_invalid' })`. When `validate` is omitted, the raw output is returned without checking.
+
+Passing an `inputSchema` that has no `kind` field (e.g. the legacy `{ parse: fn }` shape from v4.x) throws `LlmError({ kind: 'tool_schema_invalid' })`, `retryable: false` — before any provider call is made.
 
 ### Gemini ID synthesis
 
@@ -624,21 +683,22 @@ try {
 ```typescript
 // Full taxonomy — all providers emit one of these kinds
 type LlmErrorKind =
-  | 'rate_limit'           // 429
-  | 'server_error'         // 5xx
-  | 'auth'                 // 401, 403
-  | 'not_found'            // 404
-  | 'bad_request'          // 400
-  | 'content_filter'       // model refused, safety block
-  | 'context_length'       // prompt too long
-  | 'tool_arguments_invalid' // withTools() schema validation failure
+  | 'rate_limit'              // 429
+  | 'server_error'            // 5xx
+  | 'auth'                    // 401, 403
+  | 'not_found'               // 404
+  | 'bad_request'             // 400
+  | 'content_filter'          // model refused, safety block
+  | 'context_length'          // prompt too long
+  | 'tool_arguments_invalid'  // withTools() argument validation failure (Zod or validate())
+  | 'tool_schema_invalid'     // withTools() — inputSchema missing kind field; legacy shape (v5+)
   | 'structured_parse_failed' // structured() JSON parse or Zod validation failure
-  | 'network'              // ECONNRESET, ETIMEDOUT, etc.
-  | 'timeout'              // per-call timeout
-  | 'stream_stall'         // stream silence exceeded streamStallTimeoutMs
-  | 'cancelled'            // AbortSignal fired
-  | 'http'                 // residual unclassified 4xx
-  | 'unknown';             // catch-all
+  | 'network'                 // ECONNRESET, ETIMEDOUT, etc.
+  | 'timeout'                 // per-call timeout
+  | 'stream_stall'            // stream silence exceeded streamStallTimeoutMs
+  | 'cancelled'               // AbortSignal fired
+  | 'http'                    // residual unclassified 4xx
+  | 'unknown';                // catch-all
 
 class LlmError extends Error {
   readonly provider: string;
