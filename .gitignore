@@ -37,6 +37,7 @@ lerna-debug.log*
 
 # Editors / OS
 .DS_Store
+**/.DS_Store
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
