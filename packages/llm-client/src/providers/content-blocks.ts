@@ -239,7 +239,10 @@ export function mapAnthropicContent(blocks: LlmContentBlock[]): Anthropic.Conten
         // variant in the TypeScript definitions (Files beta).
         result.push({
           type: 'image',
-          source: { type: 'file', file_id: ref.id } as unknown as Anthropic.ImageBlockParam['source'],
+          source: {
+            type: 'file',
+            file_id: ref.id,
+          } as unknown as Anthropic.ImageBlockParam['source'],
         } as Anthropic.ContentBlockParam);
       } else {
         // video/* — Anthropic does not support video inputs.

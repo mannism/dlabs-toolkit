@@ -923,10 +923,7 @@ function normalizeGeminiFilesError(err: unknown, operation: string): LlmError {
   if (err instanceof LlmError) return err;
 
   if (err instanceof ApiError) {
-    const kind =
-      err.status >= 500
-        ? ('server_error' as const)
-        : classifyHttpStatus(err.status);
+    const kind = err.status >= 500 ? ('server_error' as const) : classifyHttpStatus(err.status);
     return new LlmError({
       message: `[llm-client] Files API server error: ${err.message} (${operation})`,
       provider: PROVIDER,

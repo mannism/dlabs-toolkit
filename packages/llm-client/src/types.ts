@@ -290,7 +290,7 @@ export interface LlmFilesApi {
    */
   waitForActive(
     ref: LlmFileRef,
-    opts?: { timeoutMs?: number; intervalMs?: number },
+    opts?: { timeoutMs?: number; intervalMs?: number }
   ): Promise<LlmFileRef>;
 
   /**
