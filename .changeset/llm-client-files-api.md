@@ -1,5 +1,6 @@
 ---
 "@diabolicallabs/llm-client": minor
+"@diabolicallabs/agent-sdk": patch
 ---
 
 feat(llm-client): Files API — video and large-file inputs (v5.1.0)
@@ -28,3 +29,5 @@ assets to the provider's file store and referencing them in messages.
 **No breaking changes.** v5.0.0 callers using `text | image | document` blocks are unaffected. This also fixes the manifest's stale "15-kind LlmError taxonomy" count → 16 (pre-existing drift from when `stream_stall` was added).
 
 **Consumer migration (brand-compliance-saas):** deferred to a separate consumer brief filed post-publish.
+
+**agent-sdk patch:** adds `files` passthrough on `InstrumentedLlmClient` to forward the new `client.files` namespace from llm-client v5.1.0. File operations bypass instrumentation (no CallRecord — correct, since uploads are not LLM calls).

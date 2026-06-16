@@ -1091,6 +1091,28 @@ describe('requestedModel propagation from provider failover', () => {
     expect(body['requestedModel']).toBeUndefined();
   });
 
+  it('structured(): CallRecord includes requestedModel when failover occurred', async () => {
+    const schema = { parse: (d: unknown) => d as { answer: string } };
+    const client = makeMockClient({
+      structured: vi.fn().mockResolvedValue({
+        data: { answer: '42' },
+        model: 'claude-3-haiku-20240307',
+        requestedModel: 'claude-opus-4-99',
+        usage: mockUsage,
+        latencyMs: 80,
+      }),
+    });
+
+    const instrumented = instrumentClient(client, failoverSdkConfig);
+    await instrumented.structured(mockMessages, schema);
+    await new Promise<void>((r) => setTimeout(r, 0));
+
+    const [, init] = getFirstFetchCall(fetch as ReturnType<typeof vi.fn>);
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>
+    expect(body['requestedModel']).toBe('claude-opus-4-99');
+  });
+
   it('withTools(): CallRecord includes requestedModel when failover occurred', async () => {
     const client = makeMockClient({
       withTools: vi.fn().mockResolvedValue({
@@ -1112,5 +1134,54 @@ describe('requestedModel propagation from provider failover', () => {
     const body = JSON.parse(init.body as string) as Record<string, unknown>;
     // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>
     expect(body['requestedModel']).toBe('claude-opus-4-99');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// files passthrough (v5.1.0)
+// ---------------------------------------------------------------------------
+
+describe('files passthrough', () => {
+  it('instrumented.files is the same reference as client.files', () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    // files is a direct passthrough — not wrapped, not recorded, not instrumented.
+    // The same object reference must be exposed so callers can upload/delete
+    // without going through the dispatch layer.
+    expect(instrumented.files).toBe(client.files);
+  });
+
+  it('instrumented.files is accessible in disabled mode', () => {
+    const client = makeMockClient();
+    const instrumented = instrumentClient(client, { ...sdkConfig, disabled: true });
+
+    expect(instrumented.files).toBe(client.files);
+  });
+
+  it('calling instrumented.files.upload() delegates to the underlying client.files.upload()', async () => {
+    const mockUpload = vi.fn().mockResolvedValueOnce({
+      id: 'files/abc123',
+      provider: 'gemini' as const,
+      mediaType: 'video/mp4' as const,
+      sizeBytes: 1024,
+      state: 'active' as const,
+    });
+    const client = makeMockClient({
+      files: {
+        upload: mockUpload,
+        refresh: vi.fn().mockRejectedValue(new Error('not implemented')),
+        waitForActive: vi.fn().mockRejectedValue(new Error('not implemented')),
+        delete: vi.fn().mockRejectedValue(new Error('not implemented')),
+      },
+    });
+    const instrumented = instrumentClient(client, sdkConfig);
+
+    const data = Buffer.alloc(1024);
+    await instrumented.files.upload({ data, mediaType: 'video/mp4' });
+
+    expect(mockUpload).toHaveBeenCalledWith({ data, mediaType: 'video/mp4' });
+    // files.upload does NOT trigger a dispatch (no fetch call)
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

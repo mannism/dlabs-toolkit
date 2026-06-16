@@ -23,6 +23,12 @@
  *   eligibility. Callers pay no surcharge when the API ignores the marker on too-small blocks.
  *   Cost model: cache write = 1.25× normal input; cache read = 0.10× normal input.
  *   Break-even: 3 cache reads within the 5-minute TTL window.
+ *
+ * Files API beta (v5.1.0):
+ *   When any message contains a { type: 'file', ref } content block, the Anthropic API requires
+ *   the beta header 'files-api-2025-04-14'. The provider auto-injects this header per-call via
+ *   RequestOptions.headers — callers do not need to opt in. hasFileBlocks() detects presence and
+ *   filesBetaHeaders() returns the header object (or undefined) for conditional spreading.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -177,6 +183,30 @@ function buildSystemParam(
 }
 
 /**
+ * Returns true if any message in the array contains a { type: 'file', ref } content block.
+ *
+ * Used to detect whether the Anthropic Files beta header must be injected on the call.
+ * Only inspects array content — string messages never contain file blocks.
+ */
+function hasFileBlocks(messages: LlmMessage[]): boolean {
+  return messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === 'file'));
+}
+
+/**
+ * Returns RequestOptions.headers with the Files API beta header when file blocks are present,
+ * or undefined when no file blocks are detected.
+ *
+ * Spread into per-call RequestOptions alongside signal and timeout:
+ *   { signal, timeout, ...filesBetaHeaders(messages) }
+ */
+function filesBetaHeaders(
+  messages: LlmMessage[]
+): { headers: { 'anthropic-beta': string } } | undefined {
+  if (!hasFileBlocks(messages)) return undefined;
+  return { headers: { 'anthropic-beta': 'files-api-2025-04-14' } };
+}
+
+/**
  * Normalize any Anthropic SDK error into LlmError.
  * Exported for direct unit testing of the normalization logic.
  */
@@ -299,9 +329,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
 
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline for this call,
           // ensuring the per-call budget matches the AbortController budget (Fix A, v0.4.2).
+          // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
           const response = await client.messages.create(params, {
             signal: ctl.signal,
             timeout: effectiveTimeoutMs,
+            ...filesBetaHeaders(messages),
           });
 
           const content = response.content
@@ -363,9 +395,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
 
     try {
       // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
+      // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
       sdkStream = client.messages.stream(params, {
         signal: ctl.signal,
         timeout: effectiveTimeoutMs,
+        ...filesBetaHeaders(messages),
       });
     } catch (err) {
       ctl.dispose();
@@ -469,9 +503,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           if (temperature !== undefined) params.temperature = temperature;
 
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
+          // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
           return await client.messages.create(params, {
             signal: ctl.signal,
             timeout: effectiveTimeoutMs,
+            ...filesBetaHeaders(messages),
           });
         } catch (err) {
           throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
@@ -580,9 +616,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     let sdkStream: Awaited<ReturnType<typeof client.messages.stream>>;
 
     try {
+      // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
       sdkStream = client.messages.stream(params, {
         signal: ctl.signal,
         timeout: effectiveTimeoutMs,
+        ...filesBetaHeaders(messages),
       });
     } catch (err) {
       ctl.dispose();
@@ -791,9 +829,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
+          // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
           return await client.messages.create(params, {
             signal: ctl.signal,
             timeout: effectiveTimeoutMs,
+            ...filesBetaHeaders(messages),
           });
         } catch (err) {
           throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
