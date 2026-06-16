@@ -105,6 +105,8 @@ notes: |
   v3.2.2: peer-dep bump to llm-client@^5.0.0 (LlmToolSchema breaking tool inputSchema change).
   v3.2.3: files namespace passthrough — InstrumentedLlmClient.files delegates to the underlying
           LlmClient.files so callers can use the Files API without unwrapping the client.
+  v3.2.4: dependency bump — tracks llm-client@5.2.0 (gemini-3.5-flash capability
+          registration). No API or behavior change.
   CallRecord shape is the ingestion contract with the Agent Spend Dashboard — do not change
   without coordinating with the Dashboard brief.
   In-memory queue deferred to v0.2 — direct dispatch with retry covers 99% of transient
