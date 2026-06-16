@@ -18,12 +18,12 @@ For fleet-wide standards (TypeScript, security, git workflow, PR comprehension g
 `packages/` — each independently versioned and published under the `@diabolicallabs/*` npm scope:
 
 - `agent-sdk` — instrumentation client for cross-project cost/usage telemetry (consumed by FitChecker, GEOAudit, etc.)
-- `llm-client` — provider-agnostic LLM client (OpenAI, Anthropic, Gemini, Perplexity); retries, structured outputs, prompt caching, streaming
+- `llm-client` — provider-agnostic LLM client (OpenAI, Anthropic, Gemini, DeepSeek, Perplexity); retries, structured outputs, prompt caching, streaming
 - `llm-pricing` — pricing tables + cost computation
 - `notifier-core` — notification primitives
 - `notion` — Notion API helpers
 - `rate-limiter` — sliding-window rate limiter
-- `slack` — Slack Bolt wrapper
+- `slack` — send-only Slack notifier via @slack/web-api
 - `telegram` — Telegram Bot wrapper
 
 ## Commands
