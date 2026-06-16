@@ -89,4 +89,10 @@ jobs:
       - name: Audit dependencies
         # Fail on high or critical severity vulnerabilities.
         # Use --audit-level high — medium/low are tracked by Dependabot.
+        # Accepted-risk advisories (medium, dev-tooling only, no runtime exposure):
+        #   - GHSA-h67p-54hq-rp68 (js-yaml < 4.2.0) via @changesets/cli >
+        #     @manypkg/get-packages > read-yaml-file@1.x. Cannot override
+        #     js-yaml to 4.2.0 because read-yaml-file@1.x calls removed safeLoad().
+        #     Upstream tracking: bump @changesets/cli when it ships with
+        #     read-yaml-file@2.x. Review by 2026-09-16.
         run: pnpm audit --audit-level high
