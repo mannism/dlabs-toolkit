@@ -168,6 +168,11 @@ notes: |
           Passing the legacy { parse: fn } shape throws LlmError({ kind:'tool_schema_invalid' }),
           retryable: false. New error kind 'tool_schema_invalid' added to LlmErrorKind (now 16
           kinds after stream_stall was added in v0.3.0). LlmToolSchema exported from package root.
+  v5.2.0 (minor — PR #171): gemini-3.5-flash registered in capability matrix.
+          getModelCapabilities('gemini', 'gemini-3.5-flash') returns full ModelCapabilities
+          descriptor. contextWindow: 1_048_576 (2^20), maxOutputTokens: 65_536.
+          CAPABILITIES_VERSIONED_AT updated to '2026-06-17'. Smoke-verified: all 3 tests
+          (complete/stream/structured) PASS on live GOOGLE_AI_API_KEY (2026-06-17).
   v5.1.0 (minor — additive): Files API — LlmFilesApi namespace on LlmClient.files.
           New types: LlmFileMediaType, LlmFileState, LlmFileRef, LlmFilesApi.
           New content block: { type: 'file', ref: LlmFileRef } in LlmContentBlock.
