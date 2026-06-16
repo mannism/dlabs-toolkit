@@ -75,7 +75,7 @@ exports:
   - "LlmDocumentMediaType (type) — 'application/pdf' (v4.2.0+)"
   - "LlmFileMediaType (type) — video/mp4 | video/quicktime | video/webm | image/* | application/pdf (v5.1.0+)"
   - "LlmFileState (type) — 'processing' | 'active' | 'failed' (v5.1.0+)"
-  - "LlmFileRef (interface) — provider-neutral file reference; id, provider, mediaType, sizeBytes, state, expiresAt? (v5.1.0+)"
+  - "LlmFileRef (interface) — provider-neutral file reference; id, uri, provider, mediaType, sizeBytes, state, expiresAt? (v5.1.0+)"
   - "LlmFilesApi (interface) — upload/refresh/waitForActive/delete namespace on LlmClient.files (v5.1.0+)"
   - "linkedAbortController(parentSignal, opts?): LinkedAbortHandle — fan-out AbortController with optional per-child timeout (v1.4.0+)"
   - "LinkedAbortHandle, LinkedAbortControllerOptions (types)"
