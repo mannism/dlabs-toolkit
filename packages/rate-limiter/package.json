@@ -40,12 +40,12 @@
     "ioredis": ">=5"
   },
   "devDependencies": {
-    "@types/node": "^25.9.1",
+    "@types/node": "^25.9.3",
     "@types/uuid": "^11.0.0",
-    "@vitest/coverage-v8": "^4.1.8",
-    "ioredis": "^5.11.0",
+    "@vitest/coverage-v8": "^4.1.9",
+    "ioredis": "^5.11.1",
     "tsup": "^8.3.5",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "uuid": "^14.0.0"
