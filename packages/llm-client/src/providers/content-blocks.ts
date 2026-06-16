@@ -355,7 +355,10 @@ export function mapOpenAIContent(
  * Matches the @google/genai Part type's field shapes.
  *
  * fileData: used for Files API references (video, large images, PDFs).
- *   fileUri: the Gemini resource name (e.g. 'files/abc123') — NOT a raw HTTPS URI.
+ *   fileUri: must be the full HTTPS URI from the Files API response
+ *            (e.g. 'https://generativelanguage.googleapis.com/v1beta/files/abc123').
+ *            The bare resource name ('files/abc123') is NOT accepted by the Gemini
+ *            message API — verified by live smoke 2026-06-16.
  *   mimeType: the MIME type declared at upload time.
  */
 export interface GeminiPart {
@@ -371,7 +374,8 @@ export interface GeminiPart {
  *   { type: 'text' }        → { text }
  *   image.base64            → { inlineData: { mimeType: mediaType, data } }
  *   document.base64         → { inlineData: { mimeType: 'application/pdf', data } }
- *   file (v5.1.0)           → { fileData: { fileUri: ref.id, mimeType: ref.mediaType } }
+ *   file (v5.1.0)           → { fileData: { fileUri: ref.uri, mimeType: ref.mediaType } }
+ *                             Uses ref.uri (full HTTPS URL) NOT ref.id (bare resource name).
  *                             Throws bad_request if ref.state !== 'active'.
  *
  * image.url is rejected before this function is called by assertBlocksSupported().
@@ -379,6 +383,10 @@ export interface GeminiPart {
  *
  * file refs must be ACTIVE before mapping. assertBlocksSupported() validates the
  * cross-provider invariant; this function validates the state invariant.
+ *
+ * IMPORTANT — fileUri must be the full HTTPS URI, not the bare resource name.
+ * Gemini API error when using bare name: "Unsupported file URI type: files/<id>".
+ * LlmFileRef.uri holds the authoritative full URI returned by ai.files.upload().
  */
 export function mapGeminiParts(blocks: LlmContentBlock[]): GeminiPart[] {
   const result: GeminiPart[] = [];
@@ -424,11 +432,13 @@ export function mapGeminiParts(blocks: LlmContentBlock[]): GeminiPart[] {
           retryable: false,
         });
       }
-      // fileUri is the Gemini resource name — e.g. 'files/abc123'.
-      // Gemini's API accepts the name form directly as fileUri.
+      // fileUri must be the full HTTPS URI from the Files API (ref.uri), NOT the
+      // bare resource name (ref.id). Live smoke 2026-06-16 confirmed the Gemini API
+      // rejects bare names: "Unsupported file URI type: files/<id>. File URI must be
+      // a File API (e.g. https://generativelanguage.googleapis.com/files/<id>)..."
       result.push({
         fileData: {
-          fileUri: block.ref.id,
+          fileUri: block.ref.uri,
           mimeType: block.ref.mediaType,
         },
       });

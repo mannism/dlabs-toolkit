@@ -778,9 +778,15 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
               ? ('failed' as const)
               : ('processing' as const);
 
+        // response.uri is the full HTTPS URL required by the Gemini message API
+        // (e.g. https://generativelanguage.googleapis.com/v1beta/files/abc123).
+        // response.name is the bare resource name (e.g. files/abc123) used for management
+        // operations (get, delete). The Gemini fileData.fileUri parameter requires the
+        // full URI — NOT the bare name.
         const expirationTime = response.expirationTime;
         return {
           id: response.name ?? '',
+          uri: response.uri ?? '',
           provider: 'gemini' as const,
           mediaType,
           sizeBytes: Number(response.sizeBytes ?? data.length),
@@ -817,8 +823,12 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
               : ('processing' as const);
 
         const newExpirationTime = response.expirationTime ?? ref.expiresAt;
+        // Preserve the authoritative URI from the refreshed response when available;
+        // fall back to the existing ref.uri (unchanged between refreshes).
+        const refreshedUri = response.uri ?? ref.uri;
         return {
           ...ref,
+          uri: refreshedUri,
           state,
           ...(newExpirationTime !== undefined && { expiresAt: newExpirationTime }),
         };

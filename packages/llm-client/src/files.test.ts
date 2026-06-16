@@ -72,9 +72,15 @@ const PERPLEXITY_CONFIG: LlmClientConfig = {
   baseDelayMs: 0,
 };
 
+// The full HTTPS URI returned by the Gemini Files API.
+// This is the value that MUST be used for fileData.fileUri in generateContent calls.
+// The bare resource name ('files/abc123') is NOT accepted — verified 2026-06-16.
+const GEMINI_FILE_URI = 'https://generativelanguage.googleapis.com/v1beta/files/abc123';
+
 /** Build a minimal Gemini file response (as returned by ai.files.upload / ai.files.get). */
 function mockGeminiFile(overrides?: {
   name?: string;
+  uri?: string;
   state?: string;
   mimeType?: string;
   sizeBytes?: number;
@@ -82,6 +88,8 @@ function mockGeminiFile(overrides?: {
 }) {
   return {
     name: overrides?.name ?? 'files/abc123',
+    // uri is the full HTTPS URL required for fileData.fileUri in messages.
+    uri: overrides?.uri ?? GEMINI_FILE_URI,
     state: overrides?.state ?? 'ACTIVE',
     mimeType: overrides?.mimeType ?? 'video/mp4',
     sizeBytes: overrides?.sizeBytes ?? 1024 * 1024 * 5, // 5 MB
@@ -93,6 +101,7 @@ function mockGeminiFile(overrides?: {
 function geminiActiveRef(overrides?: Partial<LlmFileRef>): LlmFileRef {
   return {
     id: 'files/abc123',
+    uri: GEMINI_FILE_URI,
     provider: 'gemini',
     mediaType: 'video/mp4',
     sizeBytes: 5 * 1024 * 1024,
@@ -134,6 +143,9 @@ describe('Gemini files.upload()', () => {
     const ref = await client.files.upload({ data, mediaType: 'video/mp4' });
 
     expect(ref.id).toBe('files/abc123');
+    // uri must be the full HTTPS URL from the SDK response, NOT the bare resource name.
+    // Regression test for 2026-06-16 live smoke failure: Gemini rejects bare names in fileData.fileUri.
+    expect(ref.uri).toBe(GEMINI_FILE_URI);
     expect(ref.provider).toBe('gemini');
     expect(ref.mediaType).toBe('video/mp4');
     expect(ref.state).toBe('active');
@@ -241,6 +253,7 @@ describe('Gemini files.refresh()', () => {
     const client = createGeminiProvider(GEMINI_CONFIG);
     const openaiRef: LlmFileRef = {
       id: 'file-openai-123',
+      uri: 'file-openai-123',
       provider: 'openai',
       mediaType: 'application/pdf',
       sizeBytes: 1024,
@@ -445,6 +458,7 @@ describe('Gemini files.delete()', () => {
     const client = createGeminiProvider(GEMINI_CONFIG);
     const openaiRef: LlmFileRef = {
       id: 'file-openai-123',
+      uri: 'file-openai-123',
       provider: 'openai',
       mediaType: 'application/pdf',
       sizeBytes: 1024,
@@ -489,6 +503,33 @@ describe('Gemini files.delete()', () => {
 // ─── mapGeminiParts — file block ─────────────────────────────────────────────
 
 describe('mapGeminiParts — file block', () => {
+  it('emits fileData.fileUri from ref.uri (full HTTPS URL), NOT ref.id (bare resource name)', () => {
+    // Regression test for 2026-06-16 live smoke failure.
+    // Gemini API rejects bare resource names in fileData.fileUri:
+    //   "Unsupported file URI type: files/<id>. File URI must be a File API
+    //   (e.g. https://generativelanguage.googleapis.com/files/<id>)..."
+    // The mapper must use ref.uri (full URL) not ref.id (bare name).
+    const ref = geminiActiveRef({
+      id: 'files/abc123',
+      uri: GEMINI_FILE_URI,
+      state: 'active',
+      mediaType: 'video/mp4',
+    });
+    const blocks = [{ type: 'file' as const, ref }];
+
+    const parts = mapGeminiParts(blocks);
+
+    expect(parts).toHaveLength(1);
+    // fileUri must be the full HTTPS URI — asserting the exact value catches future regressions.
+    expect(parts[0]).toEqual({
+      fileData: { fileUri: GEMINI_FILE_URI, mimeType: 'video/mp4' },
+    });
+    // Also assert it is NOT the bare resource name.
+    expect((parts[0] as { fileData: { fileUri: string } }).fileData.fileUri).not.toBe(
+      'files/abc123'
+    );
+  });
+
   it('emits fileData part for an active Gemini file ref', () => {
     const ref = geminiActiveRef({ state: 'active', mediaType: 'video/mp4' });
     const blocks = [{ type: 'file' as const, ref }];
@@ -497,7 +538,7 @@ describe('mapGeminiParts — file block', () => {
 
     expect(parts).toHaveLength(1);
     expect(parts[0]).toEqual({
-      fileData: { fileUri: 'files/abc123', mimeType: 'video/mp4' },
+      fileData: { fileUri: GEMINI_FILE_URI, mimeType: 'video/mp4' },
     });
   });
 
@@ -558,6 +599,7 @@ describe('assertBlocksSupported — file blocks', () => {
   it('throws bad_request on cross-provider ref (openai ref sent to gemini)', () => {
     const openaiRef: LlmFileRef = {
       id: 'file-openai-xyz',
+      uri: 'file-openai-xyz',
       provider: 'openai',
       mediaType: 'application/pdf',
       sizeBytes: 1024,

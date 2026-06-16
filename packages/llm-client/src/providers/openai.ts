@@ -915,6 +915,8 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
         return {
           id: response.id,
+          // OpenAI references files by ID, not by URL — uri === id.
+          uri: response.id,
           provider: 'openai' as const,
           mediaType,
           sizeBytes: response.bytes ?? (data as Buffer).length,

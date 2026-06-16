@@ -211,17 +211,34 @@ export type LlmFileState = 'processing' | 'active' | 'failed';
 /**
  * Provider-neutral file reference returned by client.files.upload().
  *
- * Refs are NOT portable across providers — the id is provider-issued and only meaningful
- * to the provider it came from. The provider field is included so callers can detect
- * cross-provider misuse, and so the mapper can reject mismatched refs with a clear error.
+ * Refs are NOT portable across providers — the id and uri are provider-issued and only
+ * meaningful to the provider they came from. The provider field is included so callers
+ * can detect cross-provider misuse, and so the mapper can reject mismatched refs with
+ * a clear error.
  *
- * Gemini: id holds the `files/abc123` resource name which doubles as the fileUri.
- * OpenAI: id is the `file-xyz` Files API object id used in input_file.file_id.
- * Anthropic: id is the `file_...` Files beta object id used in source.file_id.
+ * Provider-specific semantics:
+ *   Gemini    — id: `files/abc123` resource name (used with ai.files.get / ai.files.delete).
+ *               uri: full HTTPS URL, e.g. `https://generativelanguage.googleapis.com/v1beta/files/abc123`.
+ *               The Gemini API's fileData.fileUri parameter REQUIRES the full HTTPS URI — the
+ *               bare resource name is not accepted. The mapper uses `ref.uri` for fileData.fileUri.
+ *   OpenAI    — id: `file-xyz` object id (used in input_file.file_id). uri === id (no separate URL).
+ *   Anthropic — id: `file_...` Files beta object id (used in source.file_id). uri === id.
  */
 export interface LlmFileRef {
-  /** Provider-issued file identifier. Format is provider-specific; do not parse. */
+  /**
+   * Provider-issued resource identifier. Gemini: `files/<id>` resource name (NOT the fileUri).
+   * OpenAI: `file-xyz`. Anthropic: `file_...`. Do not parse or construct — treat as opaque.
+   */
   id: string;
+  /**
+   * Full authoritative URI for use in API calls that reference this file by URL.
+   *
+   * Gemini: full HTTPS URL returned by the SDK (e.g. `https://generativelanguage.googleapis.com/v1beta/files/abc123`).
+   *   This value is required for fileData.fileUri in generateContent calls — the bare `files/<id>`
+   *   resource name is NOT accepted by the Gemini message API.
+   * OpenAI / Anthropic: set to the same value as `id` (these providers reference files by ID, not URL).
+   */
+  uri: string;
   /** Provider this ref belongs to. Refs are NOT portable across providers. */
   provider: 'gemini' | 'openai' | 'anthropic';
   mediaType: LlmFileMediaType;

@@ -420,6 +420,7 @@ describe('mapAnthropicContent() — file blocks (v5.1.0)', () => {
         type: 'file',
         ref: {
           id: 'file_pdf_abc',
+          uri: 'file_pdf_abc',
           provider: 'anthropic',
           mediaType: 'application/pdf',
           sizeBytes: 1024,
@@ -441,6 +442,7 @@ describe('mapAnthropicContent() — file blocks (v5.1.0)', () => {
         type: 'file',
         ref: {
           id: 'file_img_xyz',
+          uri: 'file_img_xyz',
           provider: 'anthropic',
           mediaType: 'image/jpeg',
           sizeBytes: 2048,
@@ -462,6 +464,7 @@ describe('mapAnthropicContent() — file blocks (v5.1.0)', () => {
         type: 'file',
         ref: {
           id: 'file_png_001',
+          uri: 'file_png_001',
           provider: 'anthropic',
           mediaType: 'image/png',
           sizeBytes: 512,
@@ -480,6 +483,7 @@ describe('mapAnthropicContent() — file blocks (v5.1.0)', () => {
         type: 'file',
         ref: {
           id: 'file_gif_002',
+          uri: 'file_gif_002',
           provider: 'anthropic',
           mediaType: 'image/gif',
           sizeBytes: 512,
@@ -498,6 +502,7 @@ describe('mapAnthropicContent() — file blocks (v5.1.0)', () => {
         type: 'file',
         ref: {
           id: 'file_webp_003',
+          uri: 'file_webp_003',
           provider: 'anthropic',
           mediaType: 'image/webp',
           sizeBytes: 512,
@@ -516,6 +521,7 @@ describe('mapAnthropicContent() — file blocks (v5.1.0)', () => {
         type: 'file',
         ref: {
           id: 'file_vid_mp4',
+          uri: 'file_vid_mp4',
           provider: 'anthropic',
           mediaType: 'video/mp4',
           sizeBytes: 5_000_000,
@@ -542,6 +548,7 @@ describe('mapOpenAIContent() — file blocks (v5.1.0)', () => {
         type: 'file',
         ref: {
           id: 'file-oai-pdf-123',
+          uri: 'file-oai-pdf-123',
           provider: 'openai',
           mediaType: 'application/pdf',
           sizeBytes: 1024,
@@ -563,6 +570,7 @@ describe('mapOpenAIContent() — file blocks (v5.1.0)', () => {
         type: 'file',
         ref: {
           id: 'file-oai-vid-456',
+          uri: 'file-oai-vid-456',
           provider: 'openai',
           mediaType: 'video/mp4',
           sizeBytes: 5_000_000,
@@ -586,6 +594,7 @@ describe('mapOpenAIContent() — file blocks (v5.1.0)', () => {
         type: 'file',
         ref: {
           id: 'file-oai-img-789',
+          uri: 'file-oai-img-789',
           provider: 'openai',
           mediaType: 'image/jpeg',
           sizeBytes: 1024,

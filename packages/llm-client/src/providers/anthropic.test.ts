@@ -1895,6 +1895,7 @@ describe('Anthropic provider — Files API beta header auto-injection (v5.1.0)',
     const client = createAnthropicProvider(TEST_CONFIG);
     const fileRef = {
       id: 'file_abc123',
+      uri: 'file_abc123',
       provider: 'anthropic' as const,
       mediaType: 'application/pdf' as const,
       sizeBytes: 1024,

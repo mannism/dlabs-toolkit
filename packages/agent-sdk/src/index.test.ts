@@ -1162,6 +1162,7 @@ describe('files passthrough', () => {
   it('calling instrumented.files.upload() delegates to the underlying client.files.upload()', async () => {
     const mockUpload = vi.fn().mockResolvedValueOnce({
       id: 'files/abc123',
+      uri: 'https://generativelanguage.googleapis.com/v1beta/files/abc123',
       provider: 'gemini' as const,
       mediaType: 'video/mp4' as const,
       sizeBytes: 1024,

@@ -968,6 +968,8 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
 
         return {
           id: response.id,
+          // Anthropic references files by ID, not by URL — uri === id.
+          uri: response.id,
           provider: 'anthropic' as const,
           mediaType,
           sizeBytes: (data as Buffer).length,
