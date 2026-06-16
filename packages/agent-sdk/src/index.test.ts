@@ -69,6 +69,13 @@ const mockToolCall: LlmToolCall = {
 function makeMockClient(overrides?: Partial<LlmClient>): LlmClient {
   return {
     config: mockConfig,
+    // files: stub that rejects — agent-sdk tests do not exercise Files API
+    files: {
+      upload: vi.fn().mockRejectedValue(new Error('not implemented in mock')),
+      refresh: vi.fn().mockRejectedValue(new Error('not implemented in mock')),
+      waitForActive: vi.fn().mockRejectedValue(new Error('not implemented in mock')),
+      delete: vi.fn().mockRejectedValue(new Error('not implemented in mock')),
+    },
     complete: vi.fn().mockResolvedValue({
       content: 'Hello back',
       model: 'claude-sonnet-4-6',

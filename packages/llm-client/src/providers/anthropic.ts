@@ -40,6 +40,8 @@ import type {
   LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
+  LlmFileRef,
+  LlmFilesApi,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
@@ -100,12 +102,13 @@ function buildAnthropicMessages(messages: LlmMessage[]): {
   messages: Anthropic.MessageParam[];
 } {
   // Pre-flight: assert all blocks in this message set are supported by Anthropic.
-  // Anthropic supports text, image (base64 + url), and document (base64) in v4.2.0.
+  // fileRef: true — file blocks are supported for PDF + image refs (media type validation is in mapAnthropicContent).
   assertBlocksSupported(messages, PROVIDER, {
     textBlock: true,
     imageBase64: true,
     imageUrl: true,
     documentBase64: true,
+    fileRef: true,
   });
 
   const systemMessages = messages.filter((m) => m.role === 'system');
@@ -875,12 +878,166 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     };
   }
 
+  // ─── Files API (v5.1.0) ──────────────────────────────────────────────────────
+
+  /**
+   * Anthropic Files API (beta: 'files-api-2025-04-14').
+   *
+   * Supports: application/pdf and image/* (JPEG, PNG, GIF, WebP) uploads.
+   * Video uploads are rejected with bad_request — Anthropic does not support video.
+   *
+   * Refs are immediately active on return (no async processing).
+   * waitForActive() and refresh() are no-ops.
+   *
+   * The beta header 'files-api-2025-04-14' is sent with every upload call.
+   * Message calls that reference uploaded files also need this beta header —
+   * the Anthropic provider passes betas automatically when a file block is present.
+   */
+  const files: LlmFilesApi = {
+    async upload({
+      data,
+      mediaType,
+      displayName,
+    }: {
+      data: Buffer | Uint8Array;
+      mediaType: import('../types.js').LlmFileMediaType;
+      displayName?: string;
+    }): Promise<LlmFileRef> {
+      // Anthropic Files beta supports PDF and image/*. Video is not supported.
+      if (mediaType.startsWith('video/')) {
+        throw new LlmError({
+          message:
+            `[llm-client] Provider 'anthropic' does not support media type '${mediaType}' via Files API.` +
+            ` Only 'application/pdf' and image/* are accepted by the Anthropic Files beta.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+
+      const filename = displayName ?? (mediaType === 'application/pdf' ? 'upload.pdf' : 'upload');
+      // Convert Buffer | Uint8Array to typed Uint8Array to satisfy File constructor types.
+      const fileBlob = new File([new Uint8Array(data)], filename, { type: mediaType });
+
+      try {
+        // Anthropic Files beta — betas param passed in the request body alongside file.
+        const response = await client.beta.files.upload({
+          file: fileBlob,
+          betas: ['files-api-2025-04-14'],
+        });
+
+        return {
+          id: response.id,
+          provider: 'anthropic' as const,
+          mediaType,
+          sizeBytes: (data as Buffer).length,
+          state: 'active' as const,
+          // Anthropic does not return an expiry for Files beta objects
+        };
+      } catch (err) {
+        if (err instanceof LlmError) throw err;
+        throw normalizeAnthropicFilesError(err, 'upload');
+      }
+    },
+
+    /**
+     * Anthropic refs are always active on return — no async processing.
+     */
+    async refresh(ref: LlmFileRef): Promise<LlmFileRef> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      return ref;
+    },
+
+    /**
+     * No-op for Anthropic — refs are always active on upload return.
+     */
+    async waitForActive(ref: LlmFileRef): Promise<LlmFileRef> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      return ref;
+    },
+
+    /**
+     * Delete a file from Anthropic's Files beta store. Swallows 404.
+     */
+    async delete(ref: LlmFileRef): Promise<void> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      try {
+        // Anthropic Files beta — betas param passed in the request body alongside file_id.
+        await client.beta.files.delete(ref.id, {
+          betas: ['files-api-2025-04-14'],
+        });
+      } catch (err) {
+        if (err instanceof Anthropic.NotFoundError) return;
+        throw normalizeAnthropicFilesError(err, 'delete');
+      }
+    },
+  };
+
   return {
     config: resolvedConfig,
+    files,
     complete,
     stream,
     structured,
     streamStructured,
     withTools,
   };
+}
+
+/**
+ * Normalize Anthropic Files API errors to LlmError.
+ */
+function normalizeAnthropicFilesError(err: unknown, operation: string): LlmError {
+  if (err instanceof LlmError) return err;
+
+  if (err instanceof Anthropic.APIConnectionError) {
+    return new LlmError({
+      message: `[llm-client] Files API network error: ${err.message} (${operation})`,
+      provider: PROVIDER,
+      kind: 'network',
+      retryable: true,
+      cause: err,
+    });
+  }
+
+  if (err instanceof Anthropic.APIError && err.status !== undefined) {
+    const kind = err.status >= 500 ? ('server_error' as const) : classifyHttpStatus(err.status);
+    return new LlmError({
+      message: `[llm-client] Files API server error: ${err.message} (${operation})`,
+      provider: PROVIDER,
+      statusCode: err.status,
+      kind,
+      retryable: kind === 'server_error',
+      cause: err,
+    });
+  }
+
+  return new LlmError({
+    message: `[llm-client] Files API network error: ${String(err)} (${operation})`,
+    provider: PROVIDER,
+    kind: 'network',
+    retryable: true,
+    cause: err,
+  });
 }

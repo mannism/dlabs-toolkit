@@ -66,6 +66,7 @@ import type {
   LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
+  LlmFilesApi,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
@@ -533,8 +534,51 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     });
   }
 
+  // ─── Files API stub (v5.1.0) ─────────────────────────────────────────────────
+
+  /**
+   * Perplexity does not support a Files API.
+   * All methods throw LlmError({ kind: 'bad_request', retryable: false }).
+   */
+  const files: LlmFilesApi = {
+    async upload(): Promise<never> {
+      throw new LlmError({
+        message:
+          "[llm-client] Provider 'perplexity' does not support Files API. Use inline base64 content instead.",
+        provider: PROVIDER,
+        kind: 'bad_request',
+        retryable: false,
+      });
+    },
+    async refresh(): Promise<never> {
+      throw new LlmError({
+        message: "[llm-client] Provider 'perplexity' does not support Files API.",
+        provider: PROVIDER,
+        kind: 'bad_request',
+        retryable: false,
+      });
+    },
+    async waitForActive(): Promise<never> {
+      throw new LlmError({
+        message: "[llm-client] Provider 'perplexity' does not support Files API.",
+        provider: PROVIDER,
+        kind: 'bad_request',
+        retryable: false,
+      });
+    },
+    async delete(): Promise<void> {
+      throw new LlmError({
+        message: "[llm-client] Provider 'perplexity' does not support Files API.",
+        provider: PROVIDER,
+        kind: 'bad_request',
+        retryable: false,
+      });
+    },
+  };
+
   return {
     config: resolvedConfig,
+    files,
     complete,
     stream,
     structured,
