@@ -63,9 +63,18 @@ const mockToolResponse = {
   stopReason: 'end_turn' as const,
 };
 
+/** Stub LlmFilesApi for client.test.ts mocks — files API is not exercised in these tests. */
+const mockFilesStub = {
+  upload: vi.fn().mockRejectedValue(new Error('not implemented in mock')),
+  refresh: vi.fn().mockRejectedValue(new Error('not implemented in mock')),
+  waitForActive: vi.fn().mockRejectedValue(new Error('not implemented in mock')),
+  delete: vi.fn().mockRejectedValue(new Error('not implemented in mock')),
+};
+
 vi.mock('./providers/anthropic.js', () => ({
   createAnthropicProvider: vi.fn(() => ({
     config: { provider: 'anthropic', model: 'claude-sonnet-4-6', apiKey: 'test' },
+    files: mockFilesStub,
     complete: vi.fn().mockResolvedValue(mockCompleteResponse),
     stream: vi.fn(),
     structured: vi.fn().mockResolvedValue(mockStructuredResponse),
@@ -77,6 +86,7 @@ vi.mock('./providers/anthropic.js', () => ({
 vi.mock('./providers/openai.js', () => ({
   createOpenAIProvider: vi.fn(() => ({
     config: { provider: 'openai', model: 'gpt-5.5', apiKey: 'test' },
+    files: mockFilesStub,
     complete: vi.fn().mockResolvedValue({ ...mockCompleteResponse, model: 'gpt-5.5' }),
     stream: vi.fn(),
     structured: vi.fn().mockResolvedValue({ ...mockStructuredResponse, model: 'gpt-5.5' }),
@@ -88,6 +98,7 @@ vi.mock('./providers/openai.js', () => ({
 vi.mock('./providers/gemini.js', () => ({
   createGeminiProvider: vi.fn(() => ({
     config: {},
+    files: mockFilesStub,
     complete: vi.fn(),
     stream: vi.fn(),
     structured: vi.fn(),
@@ -99,6 +110,7 @@ vi.mock('./providers/gemini.js', () => ({
 vi.mock('./providers/deepseek.js', () => ({
   createDeepSeekProvider: vi.fn(() => ({
     config: {},
+    files: mockFilesStub,
     complete: vi.fn(),
     stream: vi.fn(),
     structured: vi.fn(),
@@ -477,6 +489,7 @@ describe('createClient — provider failover', () => {
     mockFactory
       .mockReturnValueOnce({
         config: { provider: 'anthropic', model: 'claude-opus-4-99', apiKey: 'test' },
+        files: mockFilesStub,
         complete: primaryComplete,
         stream: vi.fn(),
         structured: vi.fn(),
@@ -485,6 +498,7 @@ describe('createClient — provider failover', () => {
       })
       .mockReturnValueOnce({
         config: { provider: 'anthropic', model: 'claude-3-haiku-20240307', apiKey: 'test' },
+        files: mockFilesStub,
         complete: fallbackComplete,
         stream: vi.fn(),
         structured: vi.fn(),
@@ -526,6 +540,7 @@ describe('createClient — provider failover', () => {
 
     mockFactory.mockReturnValueOnce({
       config: { provider: 'anthropic', model: 'claude-sonnet-4-6', apiKey: 'test' },
+      files: mockFilesStub,
       complete: primaryComplete,
       stream: vi.fn(),
       structured: vi.fn(),

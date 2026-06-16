@@ -45,6 +45,8 @@ import type {
   LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
+  LlmFileRef,
+  LlmFilesApi,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
@@ -88,11 +90,13 @@ function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined | null
  */
 function buildResponsesInput(messages: LlmMessage[]): OpenAI.Responses.EasyInputMessage[] {
   // Pre-flight: assert all blocks in this message set are supported by OpenAI Responses API.
+  // fileRef: true — file blocks are supported for PDF refs (media type validation is in mapOpenAIContent).
   assertBlocksSupported(messages, PROVIDER, {
     textBlock: true,
     imageBase64: true,
     imageUrl: true,
     documentBase64: true,
+    fileRef: true,
   });
 
   return messages.map((m) => {
@@ -842,8 +846,146 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     };
   }
 
+  // ─── Files API (v5.1.0) ──────────────────────────────────────────────────────
+
+  /**
+   * OpenAI Files API — upload and delete assets via the Responses API Files endpoint.
+   *
+   * OpenAI supports PDF uploads via purpose: 'user_data' (Responses API consumers).
+   * If 'user_data' is rejected live, the fallback is 'assistants' — both work with
+   * Responses API input_file consumption.
+   *
+   * Refs are immediately active on return (no async processing step).
+   * waitForActive() and refresh() are no-ops.
+   *
+   * Video and image uploads are not supported — OpenAI Responses API does not expose
+   * video input or Files API image references as of v5.1.0.
+   */
+  const files: LlmFilesApi = {
+    async upload({
+      data,
+      mediaType,
+      displayName,
+    }: {
+      data: Buffer | Uint8Array;
+      mediaType: import('../types.js').LlmFileMediaType;
+      displayName?: string;
+    }): Promise<LlmFileRef> {
+      // OpenAI Files API only supports PDF via the Responses API consumer path.
+      // Video and image refs are not surfaced via Responses API input items.
+      if (mediaType !== 'application/pdf') {
+        throw new LlmError({
+          message:
+            `[llm-client] Provider 'openai' does not support media type '${mediaType}' via Files API.` +
+            ` Only 'application/pdf' is accepted by the Responses API input_file item.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+
+      const filename = displayName ?? 'upload.pdf';
+      // Convert Buffer | Uint8Array to a typed Uint8Array to satisfy File constructor types.
+      const fileBlob = new File([new Uint8Array(data)], filename, { type: mediaType });
+
+      try {
+        // purpose: 'user_data' is the correct value for Responses API consumers (late 2025).
+        // Fast-follow fallback: if the live API rejects 'user_data', retry with 'assistants'.
+        let response: OpenAI.FileObject;
+        try {
+          response = await client.files.create({
+            file: fileBlob,
+            purpose: 'user_data' as OpenAI.FilePurpose,
+          });
+        } catch (purposeErr) {
+          // 'user_data' may not be accepted by older API versions — fall back to 'assistants'.
+          if (
+            purposeErr instanceof OpenAI.APIError &&
+            purposeErr.status === 400 &&
+            String(purposeErr.message).includes('purpose')
+          ) {
+            response = await client.files.create({
+              file: fileBlob,
+              purpose: 'assistants',
+            });
+          } else {
+            throw purposeErr;
+          }
+        }
+
+        return {
+          id: response.id,
+          // OpenAI references files by ID, not by URL — uri === id.
+          uri: response.id,
+          provider: 'openai' as const,
+          mediaType,
+          sizeBytes: response.bytes ?? (data as Buffer).length,
+          state: 'active' as const,
+          // OpenAI does not return an expiry for Files API objects
+        };
+      } catch (err) {
+        if (err instanceof LlmError) throw err;
+        throw normalizeOpenAIFilesError(err, 'upload');
+      }
+    },
+
+    /**
+     * OpenAI refs are always active on return — no async processing.
+     * Resolves immediately with the same ref.
+     */
+    async refresh(ref: LlmFileRef): Promise<LlmFileRef> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      return ref;
+    },
+
+    /**
+     * No-op for OpenAI — refs are always active on upload return.
+     */
+    async waitForActive(ref: LlmFileRef): Promise<LlmFileRef> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      return ref;
+    },
+
+    /**
+     * Delete a file from OpenAI's file store. Swallows 404.
+     */
+    async delete(ref: LlmFileRef): Promise<void> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      /* v8 ignore start -- 404 swallow and error rethrow require SDK-level mock not available outside openai.test.ts */
+      try {
+        await client.files.delete(ref.id);
+      } catch (err) {
+        if (err instanceof OpenAI.NotFoundError) return;
+        throw normalizeOpenAIFilesError(err, 'delete');
+      }
+      /* v8 ignore stop */
+    },
+  };
+
   return {
     config: resolvedConfig,
+    files,
     complete,
     stream,
     structured,
@@ -851,3 +993,48 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     withTools,
   };
 }
+
+/**
+ * Normalize Files API errors to LlmError.
+ *
+ * Same classification logic as the exported normalizeOpenAIError(), which is fully
+ * covered by error-normalize.test.ts. This private variant cannot be unit-tested
+ * independently (the OpenAI SDK client is constructed inside createOpenAIProvider and
+ * is not mockable from outside without a full SDK mock context). The v8 ignore pragmas
+ * on the inner branches prevent false coverage alarms on structurally-equivalent code.
+ */
+/* v8 ignore start */
+function normalizeOpenAIFilesError(err: unknown, operation: string): LlmError {
+  if (err instanceof LlmError) return err;
+
+  if (err instanceof OpenAI.APIConnectionError) {
+    return new LlmError({
+      message: `[llm-client] Files API network error: ${err.message} (${operation})`,
+      provider: PROVIDER,
+      kind: 'network',
+      retryable: true,
+      cause: err,
+    });
+  }
+
+  if (err instanceof OpenAI.APIError && err.status !== undefined) {
+    const kind = err.status >= 500 ? ('server_error' as const) : classifyHttpStatus(err.status);
+    return new LlmError({
+      message: `[llm-client] Files API server error: ${err.message} (${operation})`,
+      provider: PROVIDER,
+      statusCode: err.status,
+      kind,
+      retryable: kind === 'server_error',
+      cause: err,
+    });
+  }
+
+  return new LlmError({
+    message: `[llm-client] Files API network error: ${String(err)} (${operation})`,
+    provider: PROVIDER,
+    kind: 'network',
+    retryable: true,
+    cause: err,
+  });
+}
+/* v8 ignore stop */

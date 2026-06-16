@@ -93,6 +93,26 @@
  *   LlmTool.inputSchema     — changed from { parse(d): unknown } to LlmToolSchema.
  *                             Bare { parse: fn } objects now throw tool_schema_invalid at runtime.
  *   LlmErrorKind            — added 'tool_schema_invalid' (not retryable).
+ *
+ * v5.1.0 additions (Files API — video + large-file inputs):
+ *   LlmFileMediaType        — MIME type union for uploadable files (video/*, image/*, PDF).
+ *   LlmFileState            — 'processing' | 'active' | 'failed' lifecycle states.
+ *   LlmFileRef              — provider-neutral file reference returned after upload.
+ *   LlmFilesApi             — upload / refresh / waitForActive / delete namespace.
+ *   LlmContentBlock         — extended with { type: 'file'; ref: LlmFileRef } variant.
+ *   LlmClient.files         — LlmFilesApi namespace on every client instance.
+ *
+ *   Provider support matrix:
+ *     Gemini    — full: upload, async state poll (PROCESSING→ACTIVE), fileData part.
+ *     OpenAI    — PDF only via input_file.file_id; video rejected with bad_request.
+ *     Anthropic — PDF + image via Files beta (files-api-2025-04-14); video rejected.
+ *     DeepSeek / Perplexity — upload rejects with bad_request; no Files API.
+ *
+ *   Error kinds: all file errors map to existing LlmErrorKind values.
+ *     bad_request — unsupported media type, cross-provider ref, non-active ref, failed upload.
+ *     timeout     — waitForActive exceeded timeoutMs.
+ *     network     — Files API network failure.
+ *     server_error — Files API 5xx from provider.
  */
 
 import type { LlmCost, PricingTable } from '@diabolicallabs/llm-pricing';
@@ -159,19 +179,162 @@ export type LlmImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'imag
  */
 export type LlmDocumentMediaType = 'application/pdf';
 
+// ─── Files API types (v5.1.0) ─────────────────────────────────────────────────
+
+/**
+ * MIME types accepted by the Files API across providers.
+ *
+ * Video types (MP4, QuickTime, WebM) — Gemini only. OpenAI and Anthropic reject with bad_request.
+ * Image types — Gemini (all) and Anthropic (JPEG, PNG, GIF, WebP). OpenAI rejects via Files API.
+ * PDF — Gemini, OpenAI, and Anthropic all support upload + reference.
+ */
+export type LlmFileMediaType =
+  | 'video/mp4'
+  | 'video/quicktime'
+  | 'video/webm'
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/gif'
+  | 'image/webp'
+  | 'application/pdf';
+
+/**
+ * Lifecycle state of a file at the provider.
+ *
+ * processing — Gemini: file has been uploaded but is being transcoded/indexed.
+ *              Call waitForActive() before referencing in a message.
+ * active     — Ready to use. All providers return active refs immediately except Gemini for video.
+ * failed     — Provider processing failed. The ref cannot be used. Treat as bad_request error.
+ */
+export type LlmFileState = 'processing' | 'active' | 'failed';
+
+/**
+ * Provider-neutral file reference returned by client.files.upload().
+ *
+ * Refs are NOT portable across providers — the id and uri are provider-issued and only
+ * meaningful to the provider they came from. The provider field is included so callers
+ * can detect cross-provider misuse, and so the mapper can reject mismatched refs with
+ * a clear error.
+ *
+ * Provider-specific semantics:
+ *   Gemini    — id: `files/abc123` resource name (used with ai.files.get / ai.files.delete).
+ *               uri: full HTTPS URL, e.g. `https://generativelanguage.googleapis.com/v1beta/files/abc123`.
+ *               The Gemini API's fileData.fileUri parameter REQUIRES the full HTTPS URI — the
+ *               bare resource name is not accepted. The mapper uses `ref.uri` for fileData.fileUri.
+ *   OpenAI    — id: `file-xyz` object id (used in input_file.file_id). uri === id (no separate URL).
+ *   Anthropic — id: `file_...` Files beta object id (used in source.file_id). uri === id.
+ */
+export interface LlmFileRef {
+  /**
+   * Provider-issued resource identifier. Gemini: `files/<id>` resource name (NOT the fileUri).
+   * OpenAI: `file-xyz`. Anthropic: `file_...`. Do not parse or construct — treat as opaque.
+   */
+  id: string;
+  /**
+   * Full authoritative URI for use in API calls that reference this file by URL.
+   *
+   * Gemini: full HTTPS URL returned by the SDK (e.g. `https://generativelanguage.googleapis.com/v1beta/files/abc123`).
+   *   This value is required for fileData.fileUri in generateContent calls — the bare `files/<id>`
+   *   resource name is NOT accepted by the Gemini message API.
+   * OpenAI / Anthropic: set to the same value as `id` (these providers reference files by ID, not URL).
+   */
+  uri: string;
+  /** Provider this ref belongs to. Refs are NOT portable across providers. */
+  provider: 'gemini' | 'openai' | 'anthropic';
+  mediaType: LlmFileMediaType;
+  sizeBytes: number;
+  state: LlmFileState;
+  /** ISO 8601 expiry timestamp. Present when the provider returns an expiry (Gemini: 48h TTL). */
+  expiresAt?: string;
+}
+
+/**
+ * Files API namespace — upload, refresh, poll, and delete file assets.
+ *
+ * Workflow:
+ *   1. const ref = await client.files.upload({ data, mediaType });
+ *   2. const activeRef = await client.files.waitForActive(ref);   // no-op for OpenAI/Anthropic
+ *   3. const response = await client.complete([{ role:'user', content:[
+ *        { type:'text', text:'Describe this video.' },
+ *        { type:'file', ref: activeRef },
+ *      ]}]);
+ *   4. await client.files.delete(activeRef);  // optional cleanup
+ *
+ * Error kinds:
+ *   bad_request  — unsupported media type, cross-provider ref, non-active ref, failed upload.
+ *   timeout      — waitForActive exceeded timeoutMs.
+ *   network      — Files API network failure.
+ *   server_error — Files API 5xx from provider.
+ */
+export interface LlmFilesApi {
+  /**
+   * Upload a binary asset to the provider's file store.
+   *
+   * Returns immediately with the ref. For Gemini video uploads, the ref may have
+   * state: 'processing' — call waitForActive() before referencing it in a message.
+   * For OpenAI and Anthropic, refs are always active on return.
+   *
+   * @throws LlmError({ kind: 'bad_request' }) if the media type is not supported by the provider.
+   */
+  upload(input: {
+    data: Buffer | Uint8Array;
+    mediaType: LlmFileMediaType;
+    displayName?: string;
+  }): Promise<LlmFileRef>;
+
+  /**
+   * Re-fetch a ref's current state from the provider.
+   *
+   * For providers that return ready refs immediately (OpenAI, Anthropic),
+   * this resolves with the same ref unchanged. For Gemini, it polls the file resource.
+   *
+   * @throws LlmError({ kind: 'network' }) on network failure.
+   * @throws LlmError({ kind: 'server_error' }) on provider 5xx.
+   */
+  refresh(ref: LlmFileRef): Promise<LlmFileRef>;
+
+  /**
+   * Poll refresh() until the ref reaches state 'active' or the timeout fires.
+   *
+   * No-op for providers that always return active refs — resolves immediately.
+   * For Gemini video uploads, typical processing time is 5–60 seconds.
+   *
+   * @param opts.timeoutMs   — max wait in ms. Default: 120000 (2 min).
+   * @param opts.intervalMs  — poll interval in ms. Default: 2000.
+   *
+   * @throws LlmError({ kind: 'bad_request' }) if the ref reaches state 'failed'.
+   * @throws LlmError({ kind: 'timeout', retryable: true }) if timeoutMs is exceeded.
+   */
+  waitForActive(
+    ref: LlmFileRef,
+    opts?: { timeoutMs?: number; intervalMs?: number }
+  ): Promise<LlmFileRef>;
+
+  /**
+   * Delete a file from the provider's store. Best-effort: logs and continues on 404.
+   *
+   * @throws LlmError({ kind: 'network' | 'server_error' }) on non-404 failures.
+   */
+  delete(ref: LlmFileRef): Promise<void>;
+}
+
 /**
  * Provider-neutral multimodal content block for LlmMessage.content (v4.2.0+).
  *
  * Replaces (or augments) a string message with typed blocks that map to each
  * provider's native request schema:
  *
- *   Anthropic — text/image/document all natively supported.
- *   OpenAI    — text/image/document via Responses API input items.
- *   Gemini    — text/image(base64)/document(base64) via inlineData parts.
+ *   Anthropic — text/image/document/file(PDF+image via Files beta) natively supported.
+ *   OpenAI    — text/image/document via Responses API; file(PDF) via Files API input_file.
+ *   Gemini    — text/image(base64)/document(base64) via inlineData; file via Files API fileData.
  *               URL images are not supported — use base64 source only.
  *   Perplexity — all media blocks rejected with bad_request (v4.2.0).
  *                Image support is deferred pending live smoke confirmation.
  *   DeepSeek  — all media blocks rejected with bad_request.
+ *
+ * v5.1.0: new `file` block for provider Files API references. The ref carries the
+ * media type and provider, so callers don't repeat that information in the block.
+ * Cross-provider refs are rejected pre-flight with bad_request.
  *
  * Use toolkit identifier `mediaType` (camelCase), not the provider-specific `media_type`.
  * Use `type: 'url'` source only for images — document URL support is out of scope.
@@ -187,7 +350,11 @@ export type LlmContentBlock =
   | {
       type: 'document';
       source: { type: 'base64'; mediaType: LlmDocumentMediaType; data: string; filename?: string };
-    };
+    }
+  // v5.1.0: file block for provider Files API references (video, large images, PDFs).
+  // ref.provider must match the receiving provider — cross-provider refs throw bad_request.
+  // For Gemini refs, ensure ref.state === 'active' before use; call waitForActive() first.
+  | { type: 'file'; ref: LlmFileRef };
 
 /**
  * A single conversation turn passed to complete(), stream(), structured(), and withTools().
@@ -979,9 +1146,28 @@ export interface LlmHooks {
  * five call types across up to five providers: complete, stream, structured,
  * withTools, and streamStructured. The config field exposes the resolved
  * configuration for inspection and is readonly after construction.
+ *
+ * v5.1.0: files namespace — upload, poll, and reference binary assets via the
+ * provider's Files API (Gemini full, OpenAI PDF, Anthropic PDF+image, DeepSeek/Perplexity unsupported).
  */
 export interface LlmClient {
   readonly config: Readonly<LlmClientConfig>;
+
+  /**
+   * Files API namespace for uploading and managing file assets (v5.1.0+).
+   *
+   * Use this to upload video, large images, and PDFs to the provider's file store before
+   * referencing them in messages via { type: 'file', ref } content blocks.
+   *
+   * Provider support:
+   *   Gemini    — full: video + image + PDF. Async processing for video (call waitForActive()).
+   *   OpenAI    — PDF only via input_file.file_id. Video/image rejects with bad_request.
+   *   Anthropic — PDF + image via Files beta. Video rejects with bad_request.
+   *   DeepSeek / Perplexity — not supported; upload() throws bad_request immediately.
+   *
+   * @see LlmFilesApi for the full method signatures and error semantics.
+   */
+  readonly files: LlmFilesApi;
 
   // Non-streaming completion
   complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse>;

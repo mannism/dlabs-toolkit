@@ -61,6 +61,11 @@ export type {
   LlmContentBlock,
   LlmDocumentMediaType,
   LlmErrorKind,
+  // Files API types — v5.1.0+
+  LlmFileMediaType,
+  LlmFileRef,
+  LlmFileState,
+  LlmFilesApi,
   LlmHooks,
   LlmImageMediaType,
   LlmMessage,

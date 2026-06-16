@@ -6,7 +6,10 @@ purpose: >
   Provider-neutral multimodal content blocks (v4.2.0+): LlmContentBlock[] in LlmMessage.content
   for images (base64 + URL) and PDFs (base64) — Anthropic full, OpenAI full, Gemini base64 only,
   Perplexity/DeepSeek reject with bad_request. Per-provider mediaInput capability flags.
-  Error normalization into 15-kind LlmError taxonomy with retryability and status-code
+  Files API (v5.1.0+): LlmFilesApi namespace on every LlmClient — upload/refresh/waitForActive/delete.
+  Supports video (Gemini only), large images (Gemini + Anthropic), PDFs (all three).
+  { type: 'file', ref: LlmFileRef } content block references uploaded assets in messages.
+  Error normalization into 16-kind LlmError taxonomy with retryability and status-code
   classification. Token usage normalization into consistent LlmUsage shape regardless of
   provider. Configurable retry with 4 strategies (exponential, linear, fixed, none).
   Provider failover via model: string[] — tries each model in order on configured error kinds.
@@ -54,7 +57,7 @@ exports:
   - "createClient(config: LlmClientConfig): Promise<LlmClient>  — async as of v1.7.0"
   - "createClientFromEnv(provider, model, overrides?): Promise<LlmClient>  — async as of v1.7.0"
   - "LlmError (class)"
-  - "LlmErrorKind (type) — 15-kind discriminated union"
+  - "LlmErrorKind (type) — 16-kind discriminated union"
   - "LlmToolSchema (type) — discriminated union for LlmTool.inputSchema: { kind:'zod'; schema: ZodType } | { kind:'jsonSchema'; schema: Record<string,unknown>; validate?: fn } (v5.0.0+)"
   - "Types: LlmMessage, LlmClientConfig, LlmCallOptions, LlmUsage, LlmResponse, LlmStreamChunk, LlmStructuredResponse, LlmToolResponse, LlmClient, LlmCost"
   - "RetryConfig, RetryStrategy (types)"
@@ -67,9 +70,13 @@ exports:
   - "getModelCapabilities(provider, model): ModelCapabilities | null — provider capability lookup"
   - "ModelCapabilities (type) — capability descriptor including mediaInput: { image: { base64, url }, document: { pdfBase64 } } (v4.2.0+)"
   - "CAPABILITIES_VERSIONED_AT (constant) — ISO date of last capability table update"
-  - "LlmContentBlock (type) — provider-neutral content block: text | image (base64/url) | document (base64) (v4.2.0+)"
+  - "LlmContentBlock (type) — provider-neutral content block: text | image (base64/url) | document (base64) | file (v5.1.0+) (v4.2.0+)"
   - "LlmImageMediaType (type) — 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' (v4.2.0+)"
   - "LlmDocumentMediaType (type) — 'application/pdf' (v4.2.0+)"
+  - "LlmFileMediaType (type) — video/mp4 | video/quicktime | video/webm | image/* | application/pdf (v5.1.0+)"
+  - "LlmFileState (type) — 'processing' | 'active' | 'failed' (v5.1.0+)"
+  - "LlmFileRef (interface) — provider-neutral file reference; id, provider, mediaType, sizeBytes, state, expiresAt? (v5.1.0+)"
+  - "LlmFilesApi (interface) — upload/refresh/waitForActive/delete namespace on LlmClient.files (v5.1.0+)"
   - "linkedAbortController(parentSignal, opts?): LinkedAbortHandle — fan-out AbortController with optional per-child timeout (v1.4.0+)"
   - "LinkedAbortHandle, LinkedAbortControllerOptions (types)"
   - "withTools() — native tool calling on LlmClient (all providers except Perplexity)"
@@ -159,8 +166,17 @@ notes: |
           { kind:'jsonSchema'; schema: Record<string,unknown>; validate?: fn } — JSON
           Schema passed verbatim to the provider; optional validate() for argument checking.
           Passing the legacy { parse: fn } shape throws LlmError({ kind:'tool_schema_invalid' }),
-          retryable: false. New error kind 'tool_schema_invalid' added to LlmErrorKind (now 15
-          kinds). LlmToolSchema exported from package root.
+          retryable: false. New error kind 'tool_schema_invalid' added to LlmErrorKind (now 16
+          kinds after stream_stall was added in v0.3.0). LlmToolSchema exported from package root.
+  v5.1.0 (minor — additive): Files API — LlmFilesApi namespace on LlmClient.files.
+          New types: LlmFileMediaType, LlmFileState, LlmFileRef, LlmFilesApi.
+          New content block: { type: 'file', ref: LlmFileRef } in LlmContentBlock.
+          Gemini: full — video/*/image/*/PDF upload, async state poll (PROCESSING→ACTIVE),
+          fileData parts. OpenAI: PDF-only — input_file.file_id; purpose:'user_data' with
+          'assistants' fallback. Anthropic: PDF + image/* via Files beta
+          (betas: ['files-api-2025-04-14']). DeepSeek/Perplexity: bad_request stubs.
+          BlockSupportMatrix extended with fileRef flag. LlmClient.files passthrough in
+          wrapWithHooks, wrapWithPricing, createFailoverClient, and agent-sdk instrumentClient.
   v4.2.0 (PR #149, merged 2026-06-06): provider-neutral multimodal content blocks.
           LlmMessage.content widened to string | LlmContentBlock[]. Three new exported types:
           LlmContentBlock, LlmImageMediaType, LlmDocumentMediaType. New internal module

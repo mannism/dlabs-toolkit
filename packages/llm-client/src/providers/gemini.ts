@@ -67,6 +67,8 @@ import type {
   LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
+  LlmFileRef,
+  LlmFilesApi,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
@@ -116,13 +118,15 @@ function buildGeminiContents(messages: LlmMessage[]): {
   system: string | undefined;
   contents: Content[];
 } {
-  // Pre-flight: Gemini supports text, image.base64, document.base64.
+  // Pre-flight: Gemini supports text, image.base64, document.base64, and Files API refs.
   // image.url is NOT supported — Gemini inlineData requires inline bytes.
+  // fileRef: true — file blocks are supported via Gemini Files API (video, image, PDF).
   assertBlocksSupported(messages, PROVIDER, {
     textBlock: true,
     imageBase64: true,
     imageUrl: false,
     documentBase64: true,
+    fileRef: true,
   });
 
   const systemMessages = messages.filter((m) => m.role === 'system');
@@ -720,12 +724,232 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     });
   }
 
+  // ─── Files API (v5.1.0) ──────────────────────────────────────────────────────
+
+  /**
+   * Gemini Files API — upload, poll state, and delete assets via @google/genai v2.x.
+   *
+   * Gemini is the only provider that supports video inputs (MP4, QuickTime, WebM).
+   * Video uploads go through an async processing pipeline (PROCESSING → ACTIVE).
+   * Callers MUST call waitForActive() before referencing a file in a message.
+   *
+   * State lifecycle:
+   *   upload() → ref.state = 'processing' (usually)
+   *   waitForActive() polls refresh() until state === 'active' or timeout
+   *   active ref can be placed in a { type: 'file', ref } content block
+   *   delete() cleans up — optional but recommended for large/sensitive files
+   */
+  const files: LlmFilesApi = {
+    /**
+     * Upload a binary asset to Gemini's file store.
+     *
+     * Maps to ai.files.upload({ file: { data, mimeType }, config: { displayName } }).
+     * Returns immediately — state is typically 'processing' for video uploads.
+     * All supported Gemini media types are accepted: video/*, image/*, application/pdf.
+     */
+    async upload({
+      data,
+      mediaType,
+      displayName,
+    }: {
+      data: Buffer | Uint8Array;
+      mediaType: import('../types.js').LlmFileMediaType;
+      displayName?: string;
+    }): Promise<LlmFileRef> {
+      try {
+        // Gemini SDK v2.x: ai.files.upload({ file: Blob, config: { mimeType, displayName? } }).
+        // We construct a Blob from the raw bytes and pass mimeType via config.
+        // Convert Buffer | Uint8Array → typed Uint8Array to satisfy Blob constructor types.
+        const blob = new Blob([new Uint8Array(data)], { type: mediaType });
+        const uploadConfig: { mimeType: string; displayName?: string } = { mimeType: mediaType };
+        if (displayName !== undefined) uploadConfig.displayName = displayName;
+
+        const response = await ai.files.upload({
+          file: blob,
+          config: uploadConfig,
+        });
+
+        // Map Gemini state to LlmFileState. Gemini uses PROCESSING/ACTIVE/FAILED (uppercase).
+        const rawState = String(response.state ?? 'ACTIVE');
+        const state =
+          rawState === 'ACTIVE'
+            ? ('active' as const)
+            : rawState === 'FAILED'
+              ? ('failed' as const)
+              : ('processing' as const);
+
+        // response.uri is the full HTTPS URL required by the Gemini message API
+        // (e.g. https://generativelanguage.googleapis.com/v1beta/files/abc123).
+        // response.name is the bare resource name (e.g. files/abc123) used for management
+        // operations (get, delete). The Gemini fileData.fileUri parameter requires the
+        // full URI — NOT the bare name.
+        const expirationTime = response.expirationTime;
+        return {
+          id: response.name ?? '',
+          uri: response.uri ?? '',
+          provider: 'gemini' as const,
+          mediaType,
+          sizeBytes: Number(response.sizeBytes ?? data.length),
+          state,
+          ...(expirationTime !== undefined && { expiresAt: expirationTime }),
+        };
+      } catch (err) {
+        throw normalizeGeminiFilesError(err, 'upload');
+      }
+    },
+
+    /**
+     * Re-fetch a file ref's current state from Gemini.
+     *
+     * Maps to ai.files.get({ name: ref.id }).
+     */
+    async refresh(ref: LlmFileRef): Promise<LlmFileRef> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      try {
+        const response = await ai.files.get({ name: ref.id });
+        const rawState = String(response.state ?? 'ACTIVE');
+        const state =
+          rawState === 'ACTIVE'
+            ? ('active' as const)
+            : rawState === 'FAILED'
+              ? ('failed' as const)
+              : ('processing' as const);
+
+        const newExpirationTime = response.expirationTime ?? ref.expiresAt;
+        // Preserve the authoritative URI from the refreshed response when available;
+        // fall back to the existing ref.uri (unchanged between refreshes).
+        const refreshedUri = response.uri ?? ref.uri;
+        return {
+          ...ref,
+          uri: refreshedUri,
+          state,
+          ...(newExpirationTime !== undefined && { expiresAt: newExpirationTime }),
+        };
+      } catch (err) {
+        throw normalizeGeminiFilesError(err, 'refresh');
+      }
+    },
+
+    /**
+     * Poll refresh() until the ref reaches state 'active' or the timeout fires.
+     *
+     * Default: poll every 2s, timeout after 120s. Sufficient for typical Gemini video
+     * processing (observed range: 5–60s for clips under 100 MB).
+     */
+    async waitForActive(
+      ref: LlmFileRef,
+      opts?: { timeoutMs?: number; intervalMs?: number }
+    ): Promise<LlmFileRef> {
+      // Immediately resolve if already active
+      if (ref.state === 'active') return ref;
+
+      if (ref.state === 'failed') {
+        throw new LlmError({
+          message: `[llm-client] File processing failed at provider: ref '${ref.id}' is in 'failed' state.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+
+      const timeoutMs = opts?.timeoutMs ?? 120_000;
+      const intervalMs = opts?.intervalMs ?? 2_000;
+      const deadline = Date.now() + timeoutMs;
+
+      let current = ref;
+      while (Date.now() < deadline) {
+        // Wait for the interval before polling
+        await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
+
+        current = await files.refresh(current);
+
+        if (current.state === 'active') return current;
+
+        if (current.state === 'failed') {
+          throw new LlmError({
+            message: `[llm-client] File processing failed at provider: ref '${ref.id}' transitioned to 'failed'.`,
+            provider: PROVIDER,
+            kind: 'bad_request',
+            retryable: false,
+          });
+        }
+      }
+
+      throw new LlmError({
+        message: `[llm-client] File ref did not become active within ${timeoutMs}ms.`,
+        provider: PROVIDER,
+        kind: 'timeout',
+        retryable: true,
+      });
+    },
+
+    /**
+     * Delete a file from Gemini's file store. Best-effort: swallows 404.
+     */
+    async delete(ref: LlmFileRef): Promise<void> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      try {
+        await ai.files.delete({ name: ref.id });
+      } catch (err) {
+        // Swallow 404 — file already deleted or never existed
+        if (err instanceof ApiError && err.status === 404) {
+          return;
+        }
+        throw normalizeGeminiFilesError(err, 'delete');
+      }
+    },
+  };
+
   return {
     config: resolvedConfig,
+    files,
     complete,
     stream,
     structured,
     streamStructured,
     withTools,
   };
+}
+
+/**
+ * Normalize Files API errors to LlmError.
+ * Network failures → kind:'network'. 5xx → kind:'server_error'. Others → classifyHttpStatus.
+ */
+function normalizeGeminiFilesError(err: unknown, operation: string): LlmError {
+  if (err instanceof LlmError) return err;
+
+  if (err instanceof ApiError) {
+    const kind = err.status >= 500 ? ('server_error' as const) : classifyHttpStatus(err.status);
+    return new LlmError({
+      message: `[llm-client] Files API server error: ${err.message} (${operation})`,
+      provider: PROVIDER,
+      statusCode: err.status,
+      kind,
+      retryable: kind === 'server_error',
+      cause: err,
+    });
+  }
+
+  // Network or unknown error
+  return new LlmError({
+    message: `[llm-client] Files API network error: ${String(err)} (${operation})`,
+    provider: PROVIDER,
+    kind: 'network',
+    retryable: true,
+    cause: err,
+  });
 }

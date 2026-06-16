@@ -1869,3 +1869,83 @@ describe('Anthropic provider — multimodal content blocks (v4.2.0)', () => {
     expect(callArgs.system).toBe('You are a helpful assistant. Be concise.');
   });
 });
+
+// ─── Files API beta header injection (v5.1.0) ────────────────────────────────
+
+describe('Anthropic provider — Files API beta header auto-injection (v5.1.0)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockMessageResponse());
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+        beta: {
+          files: {
+            upload: vi.fn(),
+            delete: vi.fn(),
+          },
+        },
+      };
+    });
+  });
+
+  it('complete(): injects anthropic-beta header when a file block is present', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const fileRef = {
+      id: 'file_abc123',
+      uri: 'file_abc123',
+      provider: 'anthropic' as const,
+      mediaType: 'application/pdf' as const,
+      sizeBytes: 1024,
+      state: 'active' as const,
+    };
+
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Summarize this PDF.' },
+          { type: 'file', ref: fileRef },
+        ],
+      },
+    ]);
+
+    // The second argument to messages.create is RequestOptions
+    const callOptions = mockCreate.mock.calls[0]?.[1] as { headers?: Record<string, string> };
+    expect(callOptions.headers).toBeDefined();
+    // biome-ignore lint/complexity/useLiteralKeys: headers is Record<string, string>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(callOptions.headers?.['anthropic-beta']).toBe('files-api-2025-04-14');
+  });
+
+  it('complete(): does NOT inject anthropic-beta header when no file blocks present', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+
+    await client.complete([{ role: 'user', content: 'Hello, world.' }]);
+
+    const callOptions = mockCreate.mock.calls[0]?.[1] as { headers?: Record<string, string> };
+    // No headers key should be present when there are no file blocks
+    expect(callOptions.headers).toBeUndefined();
+  });
+
+  it('complete(): does NOT inject anthropic-beta header for non-file block content', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe this image.' },
+          {
+            type: 'image',
+            source: { type: 'base64', mediaType: 'image/jpeg', data: 'base64data' },
+          },
+        ],
+      },
+    ]);
+
+    const callOptions = mockCreate.mock.calls[0]?.[1] as { headers?: Record<string, string> };
+    expect(callOptions.headers).toBeUndefined();
+  });
+});

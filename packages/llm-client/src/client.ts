@@ -373,6 +373,11 @@ function createFailoverClient(
   return {
     // Expose the original config (with array model) for introspection.
     config: Object.freeze({ ...config }),
+    // files: delegate to primary provider — failover is not supported for Files API calls
+    // since refs are provider-specific and cannot be retried against a different model.
+    get files() {
+      return getProvider(0).files;
+    },
     complete,
     stream,
     structured,
@@ -508,6 +513,8 @@ function wrapWithPricing(base: LlmClient, config: LlmClientConfig): LlmClient {
 
   return {
     config: base.config,
+    // files: delegate to base — cost wrapping does not apply to Files API calls.
+    files: base.files,
     complete,
     // stream() yields individual chunks — cost cannot be computed mid-stream.
     // Delegate directly to the base provider's generator.
@@ -790,6 +797,9 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
 
   return {
     config: base.config,
+    // files: delegate to base — hooks do not wrap Files API calls.
+    // File operations are not part of the message call lifecycle.
+    files: base.files,
     complete,
     stream,
     structured,

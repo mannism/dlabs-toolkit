@@ -23,6 +23,12 @@
  *   eligibility. Callers pay no surcharge when the API ignores the marker on too-small blocks.
  *   Cost model: cache write = 1.25× normal input; cache read = 0.10× normal input.
  *   Break-even: 3 cache reads within the 5-minute TTL window.
+ *
+ * Files API beta (v5.1.0):
+ *   When any message contains a { type: 'file', ref } content block, the Anthropic API requires
+ *   the beta header 'files-api-2025-04-14'. The provider auto-injects this header per-call via
+ *   RequestOptions.headers — callers do not need to opt in. hasFileBlocks() detects presence and
+ *   filesBetaHeaders() returns the header object (or undefined) for conditional spreading.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -40,6 +46,8 @@ import type {
   LlmCallWithToolsOptions,
   LlmClient,
   LlmClientConfig,
+  LlmFileRef,
+  LlmFilesApi,
   LlmMessage,
   LlmResponse,
   LlmStreamChunk,
@@ -100,12 +108,13 @@ function buildAnthropicMessages(messages: LlmMessage[]): {
   messages: Anthropic.MessageParam[];
 } {
   // Pre-flight: assert all blocks in this message set are supported by Anthropic.
-  // Anthropic supports text, image (base64 + url), and document (base64) in v4.2.0.
+  // fileRef: true — file blocks are supported for PDF + image refs (media type validation is in mapAnthropicContent).
   assertBlocksSupported(messages, PROVIDER, {
     textBlock: true,
     imageBase64: true,
     imageUrl: true,
     documentBase64: true,
+    fileRef: true,
   });
 
   const systemMessages = messages.filter((m) => m.role === 'system');
@@ -171,6 +180,30 @@ function buildSystemParam(
       cache_control: { type: 'ephemeral' },
     },
   ];
+}
+
+/**
+ * Returns true if any message in the array contains a { type: 'file', ref } content block.
+ *
+ * Used to detect whether the Anthropic Files beta header must be injected on the call.
+ * Only inspects array content — string messages never contain file blocks.
+ */
+function hasFileBlocks(messages: LlmMessage[]): boolean {
+  return messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === 'file'));
+}
+
+/**
+ * Returns RequestOptions.headers with the Files API beta header when file blocks are present,
+ * or undefined when no file blocks are detected.
+ *
+ * Spread into per-call RequestOptions alongside signal and timeout:
+ *   { signal, timeout, ...filesBetaHeaders(messages) }
+ */
+function filesBetaHeaders(
+  messages: LlmMessage[]
+): { headers: { 'anthropic-beta': string } } | undefined {
+  if (!hasFileBlocks(messages)) return undefined;
+  return { headers: { 'anthropic-beta': 'files-api-2025-04-14' } };
 }
 
 /**
@@ -296,9 +329,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
 
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline for this call,
           // ensuring the per-call budget matches the AbortController budget (Fix A, v0.4.2).
+          // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
           const response = await client.messages.create(params, {
             signal: ctl.signal,
             timeout: effectiveTimeoutMs,
+            ...filesBetaHeaders(messages),
           });
 
           const content = response.content
@@ -360,9 +395,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
 
     try {
       // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
+      // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
       sdkStream = client.messages.stream(params, {
         signal: ctl.signal,
         timeout: effectiveTimeoutMs,
+        ...filesBetaHeaders(messages),
       });
     } catch (err) {
       ctl.dispose();
@@ -466,9 +503,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           if (temperature !== undefined) params.temperature = temperature;
 
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
+          // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
           return await client.messages.create(params, {
             signal: ctl.signal,
             timeout: effectiveTimeoutMs,
+            ...filesBetaHeaders(messages),
           });
         } catch (err) {
           throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
@@ -577,9 +616,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     let sdkStream: Awaited<ReturnType<typeof client.messages.stream>>;
 
     try {
+      // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
       sdkStream = client.messages.stream(params, {
         signal: ctl.signal,
         timeout: effectiveTimeoutMs,
+        ...filesBetaHeaders(messages),
       });
     } catch (err) {
       ctl.dispose();
@@ -788,9 +829,11 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
+          // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
           return await client.messages.create(params, {
             signal: ctl.signal,
             timeout: effectiveTimeoutMs,
+            ...filesBetaHeaders(messages),
           });
         } catch (err) {
           throw normalizeAnthropicError(classifyAbort(err, ctl.abortReason(), PROVIDER));
@@ -875,8 +918,129 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     };
   }
 
+  // ─── Files API (v5.1.0) ──────────────────────────────────────────────────────
+
+  /**
+   * Anthropic Files API (beta: 'files-api-2025-04-14').
+   *
+   * Supports: application/pdf and image/* (JPEG, PNG, GIF, WebP) uploads.
+   * Video uploads are rejected with bad_request — Anthropic does not support video.
+   *
+   * Refs are immediately active on return (no async processing).
+   * waitForActive() and refresh() are no-ops.
+   *
+   * The beta header 'files-api-2025-04-14' is sent with every upload call.
+   * Message calls that reference uploaded files also need this beta header —
+   * the Anthropic provider passes betas automatically when a file block is present.
+   */
+  const files: LlmFilesApi = {
+    async upload({
+      data,
+      mediaType,
+      displayName,
+    }: {
+      data: Buffer | Uint8Array;
+      mediaType: import('../types.js').LlmFileMediaType;
+      displayName?: string;
+    }): Promise<LlmFileRef> {
+      // Anthropic Files beta supports PDF and image/*. Video is not supported.
+      if (mediaType.startsWith('video/')) {
+        throw new LlmError({
+          message:
+            `[llm-client] Provider 'anthropic' does not support media type '${mediaType}' via Files API.` +
+            ` Only 'application/pdf' and image/* are accepted by the Anthropic Files beta.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+
+      const filename = displayName ?? (mediaType === 'application/pdf' ? 'upload.pdf' : 'upload');
+      // Convert Buffer | Uint8Array to typed Uint8Array to satisfy File constructor types.
+      const fileBlob = new File([new Uint8Array(data)], filename, { type: mediaType });
+
+      try {
+        // Anthropic Files beta — betas param passed in the request body alongside file.
+        const response = await client.beta.files.upload({
+          file: fileBlob,
+          betas: ['files-api-2025-04-14'],
+        });
+
+        return {
+          id: response.id,
+          // Anthropic references files by ID, not by URL — uri === id.
+          uri: response.id,
+          provider: 'anthropic' as const,
+          mediaType,
+          sizeBytes: (data as Buffer).length,
+          state: 'active' as const,
+          // Anthropic does not return an expiry for Files beta objects
+        };
+      } catch (err) {
+        if (err instanceof LlmError) throw err;
+        throw normalizeAnthropicFilesError(err, 'upload');
+      }
+    },
+
+    /**
+     * Anthropic refs are always active on return — no async processing.
+     */
+    async refresh(ref: LlmFileRef): Promise<LlmFileRef> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      return ref;
+    },
+
+    /**
+     * No-op for Anthropic — refs are always active on upload return.
+     */
+    async waitForActive(ref: LlmFileRef): Promise<LlmFileRef> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      return ref;
+    },
+
+    /**
+     * Delete a file from Anthropic's Files beta store. Swallows 404.
+     */
+    async delete(ref: LlmFileRef): Promise<void> {
+      if (ref.provider !== PROVIDER) {
+        throw new LlmError({
+          message: `[llm-client] LlmFileRef provider mismatch: ref is '${ref.provider}', client is '${PROVIDER}'.`,
+          provider: PROVIDER,
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      try {
+        // Anthropic Files beta — betas param passed in the request body alongside file_id.
+        await client.beta.files.delete(ref.id, {
+          betas: ['files-api-2025-04-14'],
+        });
+      } catch (err) {
+        /* v8 ignore start -- 404 swallow and error rethrow require SDK-level mock not available outside anthropic.test.ts */
+        if (err instanceof Anthropic.NotFoundError) return;
+        throw normalizeAnthropicFilesError(err, 'delete');
+        /* v8 ignore stop */
+      }
+    },
+  };
+
   return {
     config: resolvedConfig,
+    files,
     complete,
     stream,
     structured,
@@ -884,3 +1048,48 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     withTools,
   };
 }
+
+/**
+ * Normalize Anthropic Files API errors to LlmError.
+ *
+ * Same classification logic as the exported normalizeAnthropicError(), which is fully
+ * covered by error-normalize.test.ts. This private variant cannot be unit-tested
+ * independently (the Anthropic SDK client is constructed inside createAnthropicProvider and
+ * is not mockable from outside without a full SDK mock context). The v8 ignore pragmas
+ * on the inner branches prevent false coverage alarms on structurally-equivalent code.
+ */
+/* v8 ignore start */
+function normalizeAnthropicFilesError(err: unknown, operation: string): LlmError {
+  if (err instanceof LlmError) return err;
+
+  if (err instanceof Anthropic.APIConnectionError) {
+    return new LlmError({
+      message: `[llm-client] Files API network error: ${err.message} (${operation})`,
+      provider: PROVIDER,
+      kind: 'network',
+      retryable: true,
+      cause: err,
+    });
+  }
+
+  if (err instanceof Anthropic.APIError && err.status !== undefined) {
+    const kind = err.status >= 500 ? ('server_error' as const) : classifyHttpStatus(err.status);
+    return new LlmError({
+      message: `[llm-client] Files API server error: ${err.message} (${operation})`,
+      provider: PROVIDER,
+      statusCode: err.status,
+      kind,
+      retryable: kind === 'server_error',
+      cause: err,
+    });
+  }
+
+  return new LlmError({
+    message: `[llm-client] Files API network error: ${String(err)} (${operation})`,
+    provider: PROVIDER,
+    kind: 'network',
+    retryable: true,
+    cause: err,
+  });
+}
+/* v8 ignore stop */

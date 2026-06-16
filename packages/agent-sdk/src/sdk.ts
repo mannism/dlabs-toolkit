@@ -421,6 +421,9 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
 
   return {
     config: client.config,
+    // files: delegate to the underlying client — instrumentation does not wrap Files API calls.
+    // File operations are not recorded as call records (no per-call token/cost tracking).
+    files: client.files,
     sdkConfig: effectiveConfig,
     complete,
     stream,
