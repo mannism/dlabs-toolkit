@@ -4,12 +4,13 @@
  * Run from monorepo root:
  *   set -a; source .env; set +a && npx tsx scripts/smoke-gemini.ts
  *
- * Target model: gemini-2.5-flash — GEOAudit default (api/server.js:109).
- * Confirmed current 2026-05-12 via Google Gemini API docs.
+ * Models tested:
+ *   - gemini-2.5-flash — GEOAudit default (api/server.js:109). Confirmed 2026-05-12.
+ *   - gemini-3.5-flash — Google GA flagship (released 2026-05-19). Added 2026-06-17.
  *
  * Env var: GOOGLE_AI_API_KEY (as resolved by createClientFromEnv for the gemini provider).
  *
- * Verifies:
+ * Verifies per model:
  *   1. complete() happy path — logs model/latency/usage/content snippet
  *   2. stream() — accumulates tokens, logs usage from final chunk
  *   3. structured() with Zod 4 schema — exercises responseSchema + responseMimeType path
@@ -22,23 +23,20 @@ import { z } from 'zod';
 import { createClientFromEnv } from '../packages/llm-client/src/index.js';
 import type { LlmUsage } from '../packages/llm-client/src/types.js';
 
-// Default model in GEOAudit (api/server.js:109). Confirmed current 2026-05-12.
-const MODEL = 'gemini-2.5-flash';
+const MODELS = ['gemini-2.5-flash', 'gemini-3.5-flash'] as const;
 
-async function runSmoke(): Promise<void> {
-  // Pre-flight: explicit env key guard matching smoke-perplexity.ts pattern.
-  // createClientFromEnv reads GOOGLE_AI_API_KEY for the gemini provider.
-  const apiKey = process.env['GOOGLE_AI_API_KEY'];
-  if (!apiKey) {
-    throw new Error('GOOGLE_AI_API_KEY not set. Source .env before running.');
-  }
+const TopicSchema = z.object({
+  topic: z.string(),
+  bullets: z.array(z.string()),
+});
 
-  console.log('=== Gemini Provider Smoke Test ===\n');
-  const overallStart = Date.now();
+async function smokeModel(model: string): Promise<void> {
+  console.log(`\n── ${model} ──────────────────────────────────────────────────\n`);
+  const modelStart = Date.now();
 
   // ─── Test 1: complete() happy path ───────────────────────────────────────
-  console.log(`Test 1: complete() with ${MODEL} — happy path`);
-  const client1 = await createClientFromEnv('gemini', MODEL);
+  console.log(`Test 1: complete() with ${model} — happy path`);
+  const client1 = await createClientFromEnv('gemini', model);
   const result1 = await client1.complete([
     {
       role: 'user',
@@ -52,7 +50,7 @@ async function runSmoke(): Promise<void> {
   console.log(`  usage: ${JSON.stringify(result1.usage)}`);
   console.log(`  content snippet: ${result1.content.slice(0, 200)}`);
   if (!result1.content || result1.content.length === 0) {
-    throw new Error('complete() returned empty content');
+    throw new Error(`[${model}] complete() returned empty content`);
   }
   console.log('  PASS\n');
 
@@ -61,8 +59,8 @@ async function runSmoke(): Promise<void> {
   // Usage is captured on each chunk — the final chunk has the complete totals.
   // The provider wraps the SDK stream with withStallTimeout and yields an empty
   // sentinel chunk with usage at the end (gemini.ts:272).
-  console.log(`Test 2: stream() with ${MODEL}`);
-  const client2 = await createClientFromEnv('gemini', MODEL);
+  console.log(`Test 2: stream() with ${model}`);
+  const client2 = await createClientFromEnv('gemini', model);
   let accumulated = '';
   let finalUsage: LlmUsage | undefined;
 
@@ -79,7 +77,7 @@ async function runSmoke(): Promise<void> {
   }
 
   if (finalUsage === undefined) {
-    throw new Error('stream() final chunk did not include usage');
+    throw new Error(`[${model}] stream() final chunk did not include usage`);
   }
   console.log(`  accumulated chars: ${accumulated.length}`);
   console.log(`  content snippet: ${accumulated.slice(0, 200)}`);
@@ -90,13 +88,8 @@ async function runSmoke(): Promise<void> {
   // Gemini structured output uses responseSchema (OpenAPI 3.0 format derived from Zod 4
   // via toProviderSchema) plus responseMimeType: 'application/json'. The provider does a
   // belt-and-braces fence-strip on the response before JSON.parse (gemini.ts:333).
-  console.log(`Test 3: structured() with ${MODEL} — Zod 4 responseSchema path`);
-  const client3 = await createClientFromEnv('gemini', MODEL);
-
-  const TopicSchema = z.object({
-    topic: z.string(),
-    bullets: z.array(z.string()),
-  });
+  console.log(`Test 3: structured() with ${model} — Zod 4 responseSchema path`);
+  const client3 = await createClientFromEnv('gemini', model);
 
   const result3 = await client3.structured(
     [
@@ -113,11 +106,30 @@ async function runSmoke(): Promise<void> {
   console.log(`  usage: ${JSON.stringify(result3.usage)}`);
   console.log(`  parsed data: ${JSON.stringify(result3.data, null, 2)}`);
   if (!result3.data.topic || result3.data.bullets.length === 0) {
-    throw new Error('structured() returned empty topic or bullets');
+    throw new Error(`[${model}] structured() returned empty topic or bullets`);
   }
   console.log('  PASS\n');
 
-  console.log('=== All smoke tests passed ===');
+  console.log(`  ${model} — all 3 tests passed (${Date.now() - modelStart}ms)`);
+}
+
+async function runSmoke(): Promise<void> {
+  // Pre-flight: explicit env key guard matching smoke-perplexity.ts pattern.
+  // createClientFromEnv reads GOOGLE_AI_API_KEY for the gemini provider.
+  const apiKey = process.env['GOOGLE_AI_API_KEY'];
+  if (!apiKey) {
+    throw new Error('GOOGLE_AI_API_KEY not set. Source .env before running.');
+  }
+
+  console.log('=== Gemini Provider Smoke Test ===');
+  console.log(`Models: ${MODELS.join(', ')}`);
+  const overallStart = Date.now();
+
+  for (const model of MODELS) {
+    await smokeModel(model);
+  }
+
+  console.log(`\n=== All smoke tests passed (${MODELS.length} models × 3 tests) ===`);
   console.log(`Total elapsed: ${Date.now() - overallStart}ms`);
 }
 
