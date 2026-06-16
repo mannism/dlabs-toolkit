@@ -282,7 +282,6 @@ describe('Gemini files.refresh()', () => {
 
   it('propagates 4xx ApiError from refresh with classifyHttpStatus kind', async () => {
     const err403 = new ApiError({ message: 'Forbidden', status: 403 });
-    // biome-ignore lint/suspicious/noExplicitAny: manually setting status on mocked ApiError instance
     (err403 as unknown as Record<string, unknown>)['status'] = 403;
     mockFilesGet.mockRejectedValueOnce(err403);
 
@@ -443,7 +442,6 @@ describe('Gemini files.delete()', () => {
     // ApiError is auto-mocked by vi.mock('@google/genai') — constructor body doesn't run.
     // Manually assign status so the instanceof + status === 404 check works correctly.
     const err404 = new ApiError({ message: 'File not found', status: 404 });
-    // biome-ignore lint/suspicious/noExplicitAny: manually setting status on mocked ApiError instance
     (err404 as unknown as Record<string, unknown>)['status'] = 404;
     mockFilesDelete.mockRejectedValueOnce(err404);
 
@@ -474,7 +472,6 @@ describe('Gemini files.delete()', () => {
   it('propagates non-404 ApiError from delete as server_error', async () => {
     // Non-404 ApiError (e.g. 500) must be propagated, not swallowed.
     const err500 = new ApiError({ message: 'Internal server error', status: 500 });
-    // biome-ignore lint/suspicious/noExplicitAny: manually setting status on mocked ApiError instance
     (err500 as unknown as Record<string, unknown>)['status'] = 500;
     mockFilesDelete.mockRejectedValueOnce(err500);
 

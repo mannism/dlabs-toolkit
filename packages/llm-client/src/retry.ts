@@ -135,6 +135,7 @@ export function computeStrategyDelayMs(
 
 // ─── RetryOptions ────────────────────────────────────────────────────────────
 
+/** Internal configuration bag passed to withRetry() — controls max attempts, delay, provider label, signal, and optional full RetryConfig. */
 export interface RetryOptions {
   /** Maximum retries (maxAttempts - 1). Legacy field kept for backwards compat. */
   maxRetries: number;
@@ -257,7 +258,7 @@ export async function withRetry<T>(
         const retryAfterHeader = llmErr.headers['retry-after'];
         if (retryAfterHeader !== undefined) {
           const parsed = parseInt(retryAfterHeader, 10);
-          if (!isNaN(parsed) && parsed >= 0) {
+          if (!Number.isNaN(parsed) && parsed >= 0) {
             // Header is integer seconds — convert to ms and cap at maxDelayMs
             delayMs = Math.min(cap, parsed * 1000);
           } else {

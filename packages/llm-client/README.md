@@ -4,9 +4,10 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**v5.0.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
+**v5.1.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
 
 Highlights:
+- **v5.1.0** — Files API: `LlmFilesApi` namespace on every `LlmClient` (`files.upload()`, `files.refresh()`, `files.waitForActive()`, `files.delete()`). New `{ type: 'file', ref: LlmFileRef }` content block for passing uploaded files in messages. Gemini supports video, large images, and PDFs via the Files API; OpenAI supports PDFs; Anthropic supports PDFs and images via the Files beta. Error kinds map to the existing taxonomy (`bad_request` for provider/state mismatches, `network`/`server_error` for SDK failures, `timeout` for waitForActive deadline exceeded). Cross-provider refs throw `bad_request` before any SDK call.
 - **v5.0.0** — **Breaking.** `LlmTool.inputSchema` now requires an `LlmToolSchema` discriminated union (`{ kind: 'zod', schema }` or `{ kind: 'jsonSchema', schema, validate? }`). The legacy `{ parse: fn }` shape throws `LlmError({ kind: 'tool_schema_invalid' })` at runtime. `LlmToolSchema` is exported from the package root. New `tool_schema_invalid` error kind added. See [Tool calling](#tool-calling-v100) for migration examples.
 - **v1.7.0** — `createClient()` is now `async`. `pricing.remoteUrl` config option fetches a remote `PricingTable` on init (stale-while-revalidate cache, 24h default TTL). `pricing.cacheTtlMs` controls the TTL. Structured `pricing_source` log on every `createClient()` with pricing config. Requires `@diabolicallabs/llm-pricing@^0.2.0`.
 - **v1.6.0** — `LlmAfterCallContext` now carries `usage?: LlmUsage` for all 5 call types. Non-streaming paths mirror `response.usage`; `stream()` captures from the terminal chunk; `streamStructured()` from the `done` event. The v1.5.0 caveat ("usage not surfaced for streaming in afterCall") is removed. `agent-sdk` v2.0.0 uses this to complete its architecture migration.

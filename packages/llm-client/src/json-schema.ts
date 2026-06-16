@@ -29,6 +29,7 @@
 import { z } from 'zod';
 import { LlmError } from './types.js';
 
+/** Target provider profile for JSON Schema post-processing in toProviderSchema(). */
 export type SchemaProfile = 'openai' | 'anthropic' | 'gemini';
 
 /**

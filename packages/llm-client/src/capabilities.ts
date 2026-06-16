@@ -18,6 +18,7 @@
 import type { LlmClientConfig } from './types.js';
 
 // Re-export LlmProvider type from config for convenience
+/** String union of supported provider names extracted from LlmClientConfig. */
 export type LlmProvider = LlmClientConfig['provider'];
 
 /**
