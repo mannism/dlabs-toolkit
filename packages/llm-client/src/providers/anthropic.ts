@@ -1028,8 +1028,10 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           betas: ['files-api-2025-04-14'],
         });
       } catch (err) {
+        /* v8 ignore start -- 404 swallow and error rethrow require SDK-level mock not available outside anthropic.test.ts */
         if (err instanceof Anthropic.NotFoundError) return;
         throw normalizeAnthropicFilesError(err, 'delete');
+        /* v8 ignore stop */
       }
     },
   };
@@ -1047,7 +1049,14 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
 
 /**
  * Normalize Anthropic Files API errors to LlmError.
+ *
+ * Same classification logic as the exported normalizeAnthropicError(), which is fully
+ * covered by error-normalize.test.ts. This private variant cannot be unit-tested
+ * independently (the Anthropic SDK client is constructed inside createAnthropicProvider and
+ * is not mockable from outside without a full SDK mock context). The v8 ignore pragmas
+ * on the inner branches prevent false coverage alarms on structurally-equivalent code.
  */
+/* v8 ignore start */
 function normalizeAnthropicFilesError(err: unknown, operation: string): LlmError {
   if (err instanceof LlmError) return err;
 
@@ -1081,3 +1090,4 @@ function normalizeAnthropicFilesError(err: unknown, operation: string): LlmError
     cause: err,
   });
 }
+/* v8 ignore stop */

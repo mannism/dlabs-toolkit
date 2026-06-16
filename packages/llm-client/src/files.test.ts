@@ -253,6 +253,34 @@ describe('Gemini files.refresh()', () => {
       retryable: false,
     });
   });
+
+  it('propagates SDK error from refresh as network error', async () => {
+    mockFilesGet.mockRejectedValueOnce(new Error('ETIMEDOUT'));
+
+    const client = createGeminiProvider(GEMINI_CONFIG);
+    const ref = geminiActiveRef();
+
+    await expect(client.files.refresh(ref)).rejects.toMatchObject({
+      name: 'LlmError',
+      kind: 'network',
+      retryable: true,
+    });
+  });
+
+  it('propagates 4xx ApiError from refresh with classifyHttpStatus kind', async () => {
+    const err403 = new ApiError({ message: 'Forbidden', status: 403 });
+    // biome-ignore lint/suspicious/noExplicitAny: manually setting status on mocked ApiError instance
+    (err403 as unknown as Record<string, unknown>)['status'] = 403;
+    mockFilesGet.mockRejectedValueOnce(err403);
+
+    const client = createGeminiProvider(GEMINI_CONFIG);
+    const ref = geminiActiveRef();
+
+    await expect(client.files.refresh(ref)).rejects.toMatchObject({
+      name: 'LlmError',
+      kind: 'auth',
+    });
+  });
 });
 
 // ─── Gemini files.waitForActive() ────────────────────────────────────────────
@@ -426,6 +454,34 @@ describe('Gemini files.delete()', () => {
     await expect(client.files.delete(openaiRef)).rejects.toMatchObject({
       name: 'LlmError',
       kind: 'bad_request',
+    });
+  });
+
+  it('propagates non-404 ApiError from delete as server_error', async () => {
+    // Non-404 ApiError (e.g. 500) must be propagated, not swallowed.
+    const err500 = new ApiError({ message: 'Internal server error', status: 500 });
+    // biome-ignore lint/suspicious/noExplicitAny: manually setting status on mocked ApiError instance
+    (err500 as unknown as Record<string, unknown>)['status'] = 500;
+    mockFilesDelete.mockRejectedValueOnce(err500);
+
+    const client = createGeminiProvider(GEMINI_CONFIG);
+    const ref = geminiActiveRef();
+
+    await expect(client.files.delete(ref)).rejects.toMatchObject({
+      name: 'LlmError',
+      kind: 'server_error',
+    });
+  });
+
+  it('propagates non-404 generic error from delete as network error', async () => {
+    mockFilesDelete.mockRejectedValueOnce(new Error('ECONNRESET'));
+
+    const client = createGeminiProvider(GEMINI_CONFIG);
+    const ref = geminiActiveRef();
+
+    await expect(client.files.delete(ref)).rejects.toMatchObject({
+      name: 'LlmError',
+      kind: 'network',
     });
   });
 });

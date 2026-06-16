@@ -410,3 +410,194 @@ describe('mapGeminiParts()', () => {
     expect(result).toHaveLength(0);
   });
 });
+
+// ─── mapAnthropicContent — file blocks (v5.1.0) ───────────────────────────────
+
+describe('mapAnthropicContent() — file blocks (v5.1.0)', () => {
+  it('maps application/pdf file ref to Anthropic document block with source.type file', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'file',
+        ref: {
+          id: 'file_pdf_abc',
+          provider: 'anthropic',
+          mediaType: 'application/pdf',
+          sizeBytes: 1024,
+          state: 'active',
+        },
+      },
+    ];
+    const result = mapAnthropicContent(blocks);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'document',
+      source: { type: 'file', file_id: 'file_pdf_abc' },
+    });
+  });
+
+  it('maps image/jpeg file ref to Anthropic image block with source.type file', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'file',
+        ref: {
+          id: 'file_img_xyz',
+          provider: 'anthropic',
+          mediaType: 'image/jpeg',
+          sizeBytes: 2048,
+          state: 'active',
+        },
+      },
+    ];
+    const result = mapAnthropicContent(blocks);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'image',
+      source: { type: 'file', file_id: 'file_img_xyz' },
+    });
+  });
+
+  it('maps image/png file ref to Anthropic image block', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'file',
+        ref: {
+          id: 'file_png_001',
+          provider: 'anthropic',
+          mediaType: 'image/png',
+          sizeBytes: 512,
+          state: 'active',
+        },
+      },
+    ];
+    const result = mapAnthropicContent(blocks);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ type: 'image' });
+  });
+
+  it('maps image/gif file ref to Anthropic image block', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'file',
+        ref: {
+          id: 'file_gif_002',
+          provider: 'anthropic',
+          mediaType: 'image/gif',
+          sizeBytes: 512,
+          state: 'active',
+        },
+      },
+    ];
+    const result = mapAnthropicContent(blocks);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ type: 'image' });
+  });
+
+  it('maps image/webp file ref to Anthropic image block', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'file',
+        ref: {
+          id: 'file_webp_003',
+          provider: 'anthropic',
+          mediaType: 'image/webp',
+          sizeBytes: 512,
+          state: 'active',
+        },
+      },
+    ];
+    const result = mapAnthropicContent(blocks);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ type: 'image' });
+  });
+
+  it('throws bad_request for video/mp4 file ref (Anthropic does not support video)', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'file',
+        ref: {
+          id: 'file_vid_mp4',
+          provider: 'anthropic',
+          mediaType: 'video/mp4',
+          sizeBytes: 5_000_000,
+          state: 'active',
+        },
+      },
+    ];
+    expect(() => mapAnthropicContent(blocks)).toThrow(
+      expect.objectContaining({
+        name: 'LlmError',
+        kind: 'bad_request',
+        retryable: false,
+      })
+    );
+  });
+});
+
+// ─── mapOpenAIContent — file blocks (v5.1.0) ──────────────────────────────────
+
+describe('mapOpenAIContent() — file blocks (v5.1.0)', () => {
+  it('maps application/pdf file ref to OpenAI input_file with file_id', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'file',
+        ref: {
+          id: 'file-oai-pdf-123',
+          provider: 'openai',
+          mediaType: 'application/pdf',
+          sizeBytes: 1024,
+          state: 'active',
+        },
+      },
+    ];
+    const result = mapOpenAIContent(blocks);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'input_file',
+      file_id: 'file-oai-pdf-123',
+    });
+  });
+
+  it('throws bad_request for video/mp4 file ref (OpenAI does not support video via Files API)', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'file',
+        ref: {
+          id: 'file-oai-vid-456',
+          provider: 'openai',
+          mediaType: 'video/mp4',
+          sizeBytes: 5_000_000,
+          state: 'active',
+        },
+      },
+    ];
+    expect(() => mapOpenAIContent(blocks)).toThrow(
+      expect.objectContaining({
+        name: 'LlmError',
+        kind: 'bad_request',
+        retryable: false,
+        message: expect.stringContaining("'openai' does not support media type 'video/mp4'"),
+      })
+    );
+  });
+
+  it('throws bad_request for image/jpeg file ref (OpenAI does not support image Files API refs)', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'file',
+        ref: {
+          id: 'file-oai-img-789',
+          provider: 'openai',
+          mediaType: 'image/jpeg',
+          sizeBytes: 1024,
+          state: 'active',
+        },
+      },
+    ];
+    expect(() => mapOpenAIContent(blocks)).toThrow(
+      expect.objectContaining({
+        name: 'LlmError',
+        kind: 'bad_request',
+      })
+    );
+  });
+});

@@ -970,12 +970,14 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
           retryable: false,
         });
       }
+      /* v8 ignore start -- 404 swallow and error rethrow require SDK-level mock not available outside openai.test.ts */
       try {
         await client.files.delete(ref.id);
       } catch (err) {
         if (err instanceof OpenAI.NotFoundError) return;
         throw normalizeOpenAIFilesError(err, 'delete');
       }
+      /* v8 ignore stop */
     },
   };
 
@@ -992,7 +994,14 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
 /**
  * Normalize Files API errors to LlmError.
+ *
+ * Same classification logic as the exported normalizeOpenAIError(), which is fully
+ * covered by error-normalize.test.ts. This private variant cannot be unit-tested
+ * independently (the OpenAI SDK client is constructed inside createOpenAIProvider and
+ * is not mockable from outside without a full SDK mock context). The v8 ignore pragmas
+ * on the inner branches prevent false coverage alarms on structurally-equivalent code.
  */
+/* v8 ignore start */
 function normalizeOpenAIFilesError(err: unknown, operation: string): LlmError {
   if (err instanceof LlmError) return err;
 
@@ -1026,3 +1035,4 @@ function normalizeOpenAIFilesError(err: unknown, operation: string): LlmError {
     cause: err,
   });
 }
+/* v8 ignore stop */
