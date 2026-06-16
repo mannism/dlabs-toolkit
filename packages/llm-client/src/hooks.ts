@@ -39,6 +39,7 @@ export interface BeforeCallSkip {
   response: LlmSkipResult;
 }
 
+/** Discriminated union returned by runBeforeCall — either pass through with (mutated) args or skip with a cached response. */
 export type BeforeCallResult = BeforeCallPassThrough | BeforeCallSkip;
 
 // ─── runBeforeCall ───────────────────────────────────────────────────────────

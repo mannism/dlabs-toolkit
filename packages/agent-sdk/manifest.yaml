@@ -24,13 +24,14 @@ status: published
 
 depends_on:
   - name: "@diabolicallabs/llm-client"
-    version: "^4.0.0"
+    version: "^5.0.0"
     why: "Wraps LlmClient via instrumentClient(). v2.0.0 routes all 5 call types through
-          a single buildAfterCallDispatch() function. v4.x is the current major track —
-          agent-sdk@3.1.0 cascaded with llm-client@4.0.0 when the pluggable PricingLogger
-          peer-dep contract changed. LlmAfterCallContext.usage is populated on all paths
-          including streaming, which is what allows the unified dispatch to read usage from
-          afterCall on stream/streamStructured."
+          a single buildAfterCallDispatch() function. v5.x is the current major track —
+          agent-sdk@3.2.2 bumped the peer dep to ^5.0.0 when llm-client shipped LlmToolSchema
+          (breaking tool inputSchema change). LlmAfterCallContext.usage is populated on all
+          paths including streaming, which is what allows the unified dispatch to read usage
+          from afterCall on stream/streamStructured. v5.1.0 adds the Files API and
+          InstrumentedLlmClient exposes the files namespace passthrough."
   - name: "@diabolicallabs/llm-pricing"
     version: "devDependency only (workspace:*)"
     why: "Dev-only — used in tests and local type resolution. NOT a peer dep as of v3.0.1.
@@ -45,6 +46,7 @@ depended_on_by:
 exports:
   - "instrumentClient(client: LlmClient, config: AgentSdkConfig): InstrumentedLlmClient"
   - "Types: AgentIdentity, AgentSdkConfig, InstrumentedLlmClient, CallRecord"
+  - "files namespace passthrough: InstrumentedLlmClient.files delegates to the underlying LlmClient.files (v3.2.3+)"
 
 contracts:
   ingestion:
@@ -94,6 +96,15 @@ notes: |
   v2.0.0: Architecture-migration complete. All 5 call types route through a single
           buildAfterCallDispatch() function. Bespoke stream wrappers deleted.
           Requires llm-client@^1.6.0. Public API unchanged.
+  v3.0.x: peer-dep cleanup — @diabolicallabs/llm-pricing removed from peerDependencies.
+          LlmCost inlined in types.ts. Prevents Changesets peer-cascade major bumps.
+  v3.1.0: pluggable logger — setAgentSdkLogger() added; structured JSON stdout default.
+          Aligns with llm-client and llm-pricing pluggable logger convention.
+  v3.2.0: UUID validation at startup — instrumentClient() validates identity.agentId and
+          identity.projectId at call time; non-UUID values flip to no-op mode with console.warn.
+  v3.2.2: peer-dep bump to llm-client@^5.0.0 (LlmToolSchema breaking tool inputSchema change).
+  v3.2.3: files namespace passthrough — InstrumentedLlmClient.files delegates to the underlying
+          LlmClient.files so callers can use the Files API without unwrapping the client.
   CallRecord shape is the ingestion contract with the Agent Spend Dashboard — do not change
   without coordinating with the Dashboard brief.
   In-memory queue deferred to v0.2 — direct dispatch with retry covers 99% of transient

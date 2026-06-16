@@ -2,15 +2,19 @@
 
 Cost-tracking middleware for `@diabolicallabs/llm-client`. Drop-in wrapper that captures call records and dispatches them asynchronously to the Agent Spend Dashboard. © Diabolical Labs
 
-**Stable.** Requires `@diabolicallabs/llm-client@^4.0.0`. Public API committed: `instrumentClient`, `CallRecord`, `setAgentSdkLogger`.
+**Stable.** Requires `@diabolicallabs/llm-client@^5.0.0`. Public API committed: `instrumentClient`, `CallRecord`, `setAgentSdkLogger`.
 
 ## Status
 
-**Published — v3.2.0.** `instrumentClient()` wraps all five `LlmClient` methods: `complete()`, `stream()`, `structured()`, `streamStructured()`, `withTools()`. Cost propagation (v1.1.0), failover `requestedModel` tracking (v1.2.0), and `streamStructured()` (v1.3.0) are included.
+**Published — v3.2.3.** `instrumentClient()` wraps all five `LlmClient` methods: `complete()`, `stream()`, `structured()`, `streamStructured()`, `withTools()`. Cost propagation (v1.1.0), failover `requestedModel` tracking (v1.2.0), and `streamStructured()` (v1.3.0) are included.
 
 **v3.2.0 — UUID validation at startup:** `instrumentClient()` now validates `identity.agentId` (required UUID) and `identity.projectId` (optional — validated if present) at call time. Non-UUID values emit a `console.warn` with the offending field names and flip the returned client to no-op/disabled mode rather than silently dispatching records that the dashboard will reject. See [Common pitfalls](#common-pitfalls).
 
 **v2.0.0 — architecture migration complete:** all 5 call types now route through a single `buildAfterCallDispatch()` function. The `stream()` and `streamStructured()` bespoke usage-capture wrappers retained in v1.4.0 are deleted. `LlmAfterCallContext.usage` is now populated by `llm-client@1.6.0` for streaming paths, so `agent-sdk` no longer needs its own generator iteration for usage capture. Public API is unchanged.
+
+**v3.2.3 — files namespace passthrough:** `InstrumentedLlmClient.files` now delegates to the underlying `LlmClient.files`. Callers can use the Files API (upload, refresh, waitForActive, delete) directly on the instrumented client without unwrapping it. Requires `llm-client@^5.1.0` for the full Files API surface.
+
+**v3.2.2 — peer-dep bump to llm-client@^5.0.0:** Follows the `llm-client@5.0.0` breaking change to `LlmToolSchema` (tool `inputSchema` discriminated union). No API change in agent-sdk itself.
 
 **v3.0.1 — peer-dep cleanup:** `@diabolicallabs/llm-pricing` is no longer declared as a peer dependency. The only usage was two `import type` statements compiled away at build time. The `LlmCost` type is now defined inline in agent-sdk — no consumer-side install change required. If your project uses `@diabolicallabs/llm-client` with pricing enabled, install `@diabolicallabs/llm-pricing` via the llm-client peer-dep path (or directly) — not as an agent-sdk requirement.
 
