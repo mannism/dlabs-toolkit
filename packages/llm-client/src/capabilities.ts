@@ -79,7 +79,7 @@ export interface ModelCapabilities {
  * ISO 8601 date the capability table was last verified against provider documentation.
  * Compare against Date.now() to detect staleness.
  */
-export const CAPABILITIES_VERSIONED_AT = '2026-06-06';
+export const CAPABILITIES_VERSIONED_AT = '2026-06-17';
 
 /** Provider-keyed, model-keyed capability lookup table. */
 const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> = {
@@ -348,6 +348,20 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
     'gemini-3.1-flash-lite': {
       contextWindow: 1_000_000,
       maxOutputTokens: 8_192,
+      streaming: true,
+      tools: true,
+      parallelTools: false,
+      promptCache: null,
+      structuredOutput: 'response-schema',
+      responseIds: 'synthesized',
+      streamStructured: false,
+      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+    },
+    // Google's current GA flagship Flash model (released 2026-05-19).
+    // contextWindow is 2^20 (1,048,576) per ai.google.dev/gemini-api/docs/models/gemini-3.5-flash.
+    'gemini-3.5-flash': {
+      contextWindow: 1_048_576,
+      maxOutputTokens: 65_536,
       streaming: true,
       tools: true,
       parallelTools: false,

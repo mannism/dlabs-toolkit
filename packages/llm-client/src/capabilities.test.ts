@@ -65,6 +65,24 @@ describe('getModelCapabilities', () => {
     expect(c.streamStructured).toBe(false);
   });
 
+  it('returns correct capabilities for gemini-3.5-flash (gemini)', () => {
+    const caps = getModelCapabilities('gemini', 'gemini-3.5-flash');
+    expect(caps).not.toBeNull();
+    const c = caps as ModelCapabilities;
+    expect(c.contextWindow).toBe(1_048_576);
+    expect(c.maxOutputTokens).toBe(65_536);
+    expect(c.streaming).toBe(true);
+    expect(c.tools).toBe(true);
+    expect(c.parallelTools).toBe(false);
+    expect(c.promptCache).toBeNull();
+    expect(c.structuredOutput).toBe('response-schema');
+    expect(c.responseIds).toBe('synthesized');
+    expect(c.streamStructured).toBe(false);
+    expect(c.mediaInput.image.base64).toBe(true);
+    expect(c.mediaInput.image.url).toBe(false);
+    expect(c.mediaInput.document.pdfBase64).toBe(true);
+  });
+
   // ── DeepSeek ─────────────────────────────────────────────────────────────
 
   it('returns correct capabilities for deepseek-v4-flash (deepseek)', () => {
