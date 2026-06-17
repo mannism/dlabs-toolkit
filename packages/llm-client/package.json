@@ -8,12 +8,14 @@
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.js"
     },
     "./pool": {
-      "import": "./dist/pool/index.js",
-      "types": "./dist/pool/index.d.ts"
+      "types": "./dist/pool/index.d.ts",
+      "require": "./dist/pool/index.js",
+      "import": "./dist/pool/index.js"
     }
   },
   "main": "./dist/index.js",
@@ -31,7 +33,7 @@
     "url": "https://github.com/mannism/dlabs-toolkit/issues"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "build": "tsup",

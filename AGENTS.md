@@ -78,7 +78,8 @@ pnpm release              # build + changeset publish
 - **Root `package.json` `"license"` is `"UNLICENSED"` (private), while each published `package.json` is `"MIT"`.** The root is private (the monorepo isn't published); the packages are MIT-licensed for downstream consumption. Don't "fix" the root to match.
 - **Changesets are the only way to bump a version.** Do not edit `package.json` `"version"` by hand.
 - **`@diabolicallabs/*` scope is registered on npm.** Publishing requires the appropriate npm auth — no workarounds.
-- **Some packages have downstream callers in private repos** (FitChecker, GEOAudit, labs). Breaking changes need at least one cycle of downstream coordination — flag in the Changeset.
+- **Some packages have downstream callers in private repos** (FitChecker, GEOAudit, labs, brand-compliance-saas). Breaking changes need at least one cycle of downstream coordination — flag in the Changeset.
+- **`llm-client` `require` condition resolves an ESM file via `require(esm)` (Node ≥22.12 stable feature).** The exports map intentionally has no separate CJS build — the same `dist/index.js` ESM file is served to both `require` and `import`. This is safe only as long as the module graph contains **no top-level `await`**. Any future TLA in `llm-client` or a dependency it re-exports would cause `require(esm)` to throw `ERR_REQUIRE_ASYNC_MODULE` for CJS consumers. Review for TLA before adding async module-level initialization.
 
 ## Testing
 
