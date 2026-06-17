@@ -141,7 +141,7 @@ Each package has a `manifest.yaml` with its full contract: exports, dependencies
 ## Conventions
 
 - **TypeScript strict.** No `any`, no unused locals/params, no implicit `any`.
-- **ESM-only.** Node >=20 and modern bundlers. No CJS dual-publish.
+- **ESM-only.** Node >=20 and modern bundlers. No separate CJS build. `@diabolicallabs/llm-client` requires Node >=22.12.0 (the `require` condition in its exports map uses `require(esm)`, stable since 22.12).
 - **US English** in all code identifiers, JSDoc, error messages, READMEs, and manifests.
 - **Independent versioning per package** via Changesets. Semver discipline mandatory.
 - **No package ships without tests.** 80% coverage gate across lines, functions, branches, statements.

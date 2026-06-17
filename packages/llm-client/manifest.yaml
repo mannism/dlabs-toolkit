@@ -25,15 +25,15 @@ status: published
 
 depends_on:
   - name: "@anthropic-ai/sdk"
-    version: "^0.100.1"
+    version: "^0.104.2"
     why: "Anthropic Claude provider — messages API with streaming and prompt cache support"
   - name: "openai"
-    version: "^6.39.1"
+    version: "^6.42.0"
     why: "OpenAI Responses API provider; also used by DeepSeek and Perplexity with baseURL override"
   - name: "zod"
     why: "Structured output schema validation. Used in structured() and streamStructured() to parse and validate JSON responses."
   - name: "@google/genai"
-    version: "^2.7.0"
+    version: "^2.8.0"
     why: "Google Gemini provider — generateContent + streaming via v2.x SDK"
   - name: "deepseek (openai SDK with baseURL override)"
     why: "DeepSeek's API is OpenAI Chat Completions-compatible; uses the openai SDK pointed at api.deepseek.com"
@@ -47,7 +47,9 @@ depended_on_by:
   - name: "@diabolicallabs/agent-sdk"
     how: "agent-sdk wraps LlmClient via instrumentClient() to intercept all calls for cost tracking. LlmClient is a peer dep of agent-sdk, not bundled."
   - name: "GEOAudit"
-    how: "Live consumer — dynamic ESM import in api/server.js. All four providers (anthropic, openai, perplexity, gemini) active in production on caret range ^0.4.4 (auto-propagates on minor publishes)"
+    how: "Live consumer — on ^6.0.0 as of PR #284. All five providers active in production."
+  - name: "brand-compliance-saas"
+    how: "Live consumer — on ^6.0.0. BullMQ workers run via tsx (CJS-mode); dynamic import() used as workaround pre-6.1.0. CJS require condition (v6.1.0) is the permanent fix."
   - name: "FitChecker"
     how: "Migration in backlog — replaces lib/llm/providers/openai-provider.ts"
   - name: "Agent Spend Dashboard"
@@ -173,6 +175,17 @@ notes: |
           descriptor. contextWindow: 1_048_576 (2^20), maxOutputTokens: 65_536.
           CAPABILITIES_VERSIONED_AT updated to '2026-06-17'. Smoke-verified: all 3 tests
           (complete/stream/structured) PASS on live GOOGLE_AI_API_KEY (2026-06-17).
+  v6.0.0 (phantom major — PR #177): peer-dep cascade from llm-pricing@1.2.0 minor publish
+          before cascade guard was in place. No behavioral change. Cascade fix shipped
+          same cycle (PR #178): onlyUpdatePeerDependentsWhenOutOfRange + widen peerDep to ^1.0.0.
+  v6.1.0 (minor — PRs #179, #180): CJS require exports condition. Adds "require" key to
+          exports map for both "." and "./pool" subpaths pointing to the same ESM dist/index.js.
+          No dual build — require(esm) is stable on Node >=22.12.0. engines.node raised from
+          >=20 to >=22.12.0. Fixes ERR_PACKAGE_PATH_NOT_EXPORTED for CJS-mode runtimes
+          (tsx workers, Next.js loaders without serverExternalPackages). Unblocks
+          brand-compliance-saas BullMQ workers. 634 tests. 5-provider smoke gate passed.
+          INVARIANT: the require condition relies on no top-level await in the module graph.
+          A future TLA would cause ERR_REQUIRE_ASYNC_MODULE for CJS consumers.
   v5.1.0 (minor — additive): Files API — LlmFilesApi namespace on LlmClient.files.
           New types: LlmFileMediaType, LlmFileState, LlmFileRef, LlmFilesApi.
           New content block: { type: 'file', ref: LlmFileRef } in LlmContentBlock.
