@@ -24,14 +24,13 @@ status: published
 
 depends_on:
   - name: "@diabolicallabs/llm-client"
-    version: "^5.0.0"
+    version: "^6.1.0"
     why: "Wraps LlmClient via instrumentClient(). v2.0.0 routes all 5 call types through
-          a single buildAfterCallDispatch() function. v5.x is the current major track —
-          agent-sdk@3.2.2 bumped the peer dep to ^5.0.0 when llm-client shipped LlmToolSchema
-          (breaking tool inputSchema change). LlmAfterCallContext.usage is populated on all
-          paths including streaming, which is what allows the unified dispatch to read usage
-          from afterCall on stream/streamStructured. v5.1.0 adds the Files API and
-          InstrumentedLlmClient exposes the files namespace passthrough."
+          a single buildAfterCallDispatch() function. v6.x is the current major track —
+          tracked as workspace:* locally, resolves to the published version on npm.
+          LlmAfterCallContext.usage is populated on all paths including streaming, which is
+          what allows the unified dispatch to read usage from afterCall on stream/streamStructured.
+          v5.1.0 adds the Files API and InstrumentedLlmClient exposes the files namespace passthrough."
   - name: "@diabolicallabs/llm-pricing"
     version: "devDependency only (workspace:*)"
     why: "Dev-only — used in tests and local type resolution. NOT a peer dep as of v3.0.1.
@@ -107,6 +106,8 @@ notes: |
           LlmClient.files so callers can use the Files API without unwrapping the client.
   v3.2.4: dependency bump — tracks llm-client@5.2.0 (gemini-3.5-flash capability
           registration). No API or behavior change.
+  v3.2.5: dependency bump — tracks llm-client@6.0.0 (phantom major cascade). No API change.
+  v3.2.6: dependency bump — tracks llm-client@6.1.0 (CJS require exports condition). No API change.
   CallRecord shape is the ingestion contract with the Agent Spend Dashboard — do not change
   without coordinating with the Dashboard brief.
   In-memory queue deferred to v0.2 — direct dispatch with retry covers 99% of transient
