@@ -324,6 +324,56 @@ describe('mapOpenAIContent()', () => {
     });
   });
 
+  it('respects detail: high on base64 image', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'image',
+        source: { type: 'base64', mediaType: 'image/jpeg', data: 'abc' },
+        detail: 'high',
+      },
+    ];
+    const result = mapOpenAIContent(blocks);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'input_image',
+      image_url: 'data:image/jpeg;base64,abc',
+      detail: 'high',
+    });
+  });
+
+  it('respects detail: low on url image', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'image',
+        source: { type: 'url', url: 'https://example.com/img.jpg' },
+        detail: 'low',
+      },
+    ];
+    const result = mapOpenAIContent(blocks);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'input_image',
+      image_url: 'https://example.com/img.jpg',
+      detail: 'low',
+    });
+  });
+
+  it('defaults detail to auto when omitted', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'image',
+        source: { type: 'url', url: 'https://example.com/img.jpg' },
+      },
+    ];
+    const result = mapOpenAIContent(blocks);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'input_image',
+      image_url: 'https://example.com/img.jpg',
+      detail: 'auto',
+    });
+  });
+
   it('maps document.base64 to input_file with data URI and default filename', () => {
     const blocks: LlmContentBlock[] = [
       {

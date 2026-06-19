@@ -346,6 +346,7 @@ export type LlmContentBlock =
       source:
         | { type: 'base64'; mediaType: LlmImageMediaType; data: string }
         | { type: 'url'; url: string };
+      detail?: 'low' | 'high' | 'auto';
     }
   | {
       type: 'document';

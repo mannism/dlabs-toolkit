@@ -268,15 +268,15 @@ export function mapAnthropicContent(blocks: LlmContentBlock[]): Anthropic.Conten
  *
  * Mapping:
  *   { type: 'text' }        → { type: 'input_text', text }
- *   image.base64            → { type: 'input_image', image_url: 'data:<mediaType>;base64,<data>', detail: 'auto' }
- *   image.url               → { type: 'input_image', image_url: url, detail: 'auto' }
+ *   image.base64            → { type: 'input_image', image_url: 'data:<mediaType>;base64,<data>', detail: block.detail ?? 'auto' }
+ *   image.url               → { type: 'input_image', image_url: url, detail: block.detail ?? 'auto' }
  *   document.base64         → { type: 'input_file', filename, file_data: 'data:application/pdf;base64,<data>' }
  *   file (v5.1.0)           → { type: 'input_file', file_id: ref.id } for application/pdf only.
  *                             Video and image refs throw bad_request — OpenAI Responses API
  *                             does not expose video input or Files API images as of v5.1.0.
  *
  * Note on detail: OpenAI detail accepts 'low' | 'high' | 'original' | 'auto'.
- * Hardcoded to 'auto' in v4.2.0; surfacing caller control is a follow-up item.
+ * Callers may set block.detail on any image block; defaults to 'auto' when omitted.
  *
  * Note on input_file.filename: REQUIRED by the Responses API — a 400 is returned without it.
  * Verified via live smoke test 2026-06-06: omitting filename → HTTP 400 "Missing required parameter";
@@ -300,14 +300,14 @@ export function mapOpenAIContent(
         result.push({
           type: 'input_image',
           image_url: dataUrl,
-          detail: 'auto',
+          detail: block.detail ?? 'auto',
         } as OpenAI.Responses.ResponseInputContent);
       } else {
         // block.source.type === 'url'
         result.push({
           type: 'input_image',
           image_url: block.source.url,
-          detail: 'auto',
+          detail: block.detail ?? 'auto',
         } as OpenAI.Responses.ResponseInputContent);
       }
       continue;
