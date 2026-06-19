@@ -1,5 +1,11 @@
 # @diabolicallabs/llm-client
 
+## 6.2.0
+
+### Minor Changes
+
+- e26fe8a: Add optional `detail` field to image content blocks. OpenAI mapper threads it through (`'auto'` default unchanged); Gemini and Anthropic mappers ignore it. Closes the `detail: "high"` gap from the raw-SDK migration.
+
 ## 6.1.0
 
 ### Minor Changes
