@@ -45,6 +45,17 @@ contracts:
   secret_safety: "Authorization headers stripped from error context. botToken and webhookUrl never logged."
   rate_limiter_fail_open: "When rate-limiter peer-dep throws (Redis down), logs SLACK_RATELIMITER_UNAVAILABLE and sends anyway."
 
+performance:
+  latency:
+    p50_ms: "100–300"
+    p99_ms: "1000–2000"
+    note: "chat.postMessage against Slack API under normal load. p99 can reach 2 s under sustained send bursts or Slack degradation."
+  rate_limits:
+    api_tier: "Slack Tier 3 — chat.postMessage is a Tier 3 method"
+    workspace_limit: "50 req/min per workspace (Slack-enforced default)"
+    reactive_strategy: "429 triggers back-off via Retry-After header (seconds); full-jitter exponential backoff applied before requeue."
+    proactive_gate: "Optional @diabolicallabs/rate-limiter peer-dep enforces 1 msg/s per channel before the send (fail-open on Redis unavailable)."
+
 failure_modes:
   - trigger: "Invalid bot token (invalid_auth, not_authed)"
     impact: "SlackAuthError thrown immediately. Not retried."
