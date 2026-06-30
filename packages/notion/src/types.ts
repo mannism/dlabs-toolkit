@@ -133,8 +133,10 @@ export class NotionError extends Error {
   }
 }
 
+/** Authentication failure — integration token is invalid, revoked, or lacks access to the target resource (401/403). */
 export class NotionAuthError extends NotionError {}
 
+/** Resource not found — the page or database ID does not exist or has not been shared with the integration (404). */
 export class NotionNotFoundError extends NotionError {}
 
 /**
@@ -144,8 +146,11 @@ export class NotionNotFoundError extends NotionError {}
  */
 export class NotionValidationError extends NotionError {}
 
+/** Rate limit exceeded — Notion returned HTTP 429. SDK retries are exhausted; back off before retrying the request. */
 export class NotionRateLimitError extends NotionError {}
 
+/** Write conflict — another update raced on the same page (409). Retry the read-modify-write cycle. */
 export class NotionConflictError extends NotionError {}
 
+/** Notion API unavailable — transient 5xx error after SDK retries are exhausted. */
 export class NotionUnavailableError extends NotionError {}

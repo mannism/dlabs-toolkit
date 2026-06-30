@@ -25,6 +25,10 @@ const defaultLogger: Logger = {
 
 let activeLogger: Logger = defaultLogger;
 
+/**
+ * Override the default Telegram notifier logger.
+ * Pass `null` to reset to the built-in JSON-to-stdout default.
+ */
 export function setTelegramLogger(logger: Logger | null): void {
   activeLogger = logger ?? defaultLogger;
 }

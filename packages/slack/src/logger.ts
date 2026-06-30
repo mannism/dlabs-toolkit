@@ -27,6 +27,10 @@ const defaultLogger: Logger = {
 
 let activeLogger: Logger = defaultLogger;
 
+/**
+ * Override the default Slack notifier logger.
+ * Pass `null` to reset to the built-in JSON-to-stdout default.
+ */
 export function setSlackLogger(logger: Logger | null): void {
   activeLogger = logger ?? defaultLogger;
 }
