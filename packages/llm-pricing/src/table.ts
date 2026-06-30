@@ -21,6 +21,11 @@
 
 import type { PricingTable } from './types.js';
 
+/**
+ * Bundled pricing table snapshot — provider/model costs in USD per million tokens.
+ * Auto-generated from `pricing/table.json`; run `node pricing/sync-bundled.mjs` to refresh.
+ * Use `fetchRemoteTable()` to load a fresher version at runtime without a code change.
+ */
 export const DEFAULT_PRICING_TABLE: PricingTable = {
   versionedAt: '2026-06-04',
 
