@@ -58,11 +58,14 @@ jobs:
         # 1. Coverage failures are clearly reported as a separate step
         # 2. Turbo can cache the test run; coverage does not participate in the cache
         # Each package runs vitest with --coverage flag. Thresholds are in vitest.config.ts.
+        # Packages gated here: llm-client, agent-sdk, notion, rate-limiter, llm-pricing.
+        # notifier-core, slack, telegram gate via --coverage in their own test scripts.
         run: |
           pnpm --filter @diabolicallabs/llm-client exec vitest run --coverage
           pnpm --filter @diabolicallabs/agent-sdk exec vitest run --coverage
           pnpm --filter @diabolicallabs/notion exec vitest run --coverage
           pnpm --filter @diabolicallabs/rate-limiter exec vitest run --coverage
+          pnpm --filter @diabolicallabs/llm-pricing exec vitest run --coverage
 
   audit:
     name: Security Audit
