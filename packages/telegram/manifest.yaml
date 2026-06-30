@@ -42,6 +42,16 @@ contracts:
   secret_safety: "botToken is in the URL path — never logged. Redacted form used in all log lines: https://api.telegram.org/bot[REDACTED]/sendMessage"
   sdk: "Native fetch only. No grammY, no telegraf, no node-telegram-bot-api. Node.js 20+ built-in fetch."
 
+performance:
+  latency:
+    p50_ms: "50–200"
+    note: "sendMessage via native fetch against api.telegram.org. Latency depends on Telegram server region and payload size; voice/media sends are higher."
+  rate_limits:
+    global: "30 msg/s per bot token (all send methods combined)"
+    per_chat: "20 msg/min per chat (Telegram Bot API enforced limit)"
+    http_status: "429 — retry_after comes from response BODY field parameters.retry_after (seconds), not a Retry-After header."
+    reactive_strategy: "TelegramRateLimitError.retryAfterMs set from body; full-jitter exponential backoff applied before requeue."
+
 failure_modes:
   - trigger: "Invalid bot token (401 Unauthorized)"
     impact: "TelegramAuthError thrown immediately. Not retried."
