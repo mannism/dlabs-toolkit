@@ -40,7 +40,7 @@
     "ioredis": ">=5"
   },
   "devDependencies": {
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.0",
     "@types/uuid": "^11.0.0",
     "@vitest/coverage-v8": "^4.1.9",
     "ioredis": "^5.11.1",
