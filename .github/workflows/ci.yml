@@ -66,6 +66,15 @@ jobs:
           pnpm --filter @diabolicallabs/notion exec vitest run --coverage
           pnpm --filter @diabolicallabs/rate-limiter exec vitest run --coverage
           pnpm --filter @diabolicallabs/llm-pricing exec vitest run --coverage
+          pnpm --filter @diabolicallabs/prompt-registry exec vitest run --coverage
+
+      - name: Prompt eval-gate demo (fixture prompt, pass + fail directions)
+        # Acceptance criterion: the CI eval-gate helper must be demonstrated in
+        # this package's own CI against a fixture prompt. Runs after `build`
+        # (turbo pipeline above) since the demo script imports from dist/.
+        # Exercises both directions: a passing eval script must clear the gate,
+        # a failing one must be blocked — see packages/prompt-registry/scripts/eval-gate-demo.mjs.
+        run: pnpm --filter @diabolicallabs/prompt-registry run demo:eval-gate
 
   audit:
     name: Security Audit
