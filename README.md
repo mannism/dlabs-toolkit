@@ -27,6 +27,7 @@ Eight v1.0.0+ packages on npmjs.com under `@diabolicallabs`. See per-package `pa
 |---|---|---|
 | [`@diabolicallabs/notion`](packages/notion/) | stable | Notion REST API client wrapping `@notionhq/client` v5. `createDatabasePage` / `queryDatabase` (auto-paginated via `collectPaginatedAPI`) / `getPage` / `updatePage`. Named error taxonomy (6 subclasses including `NotionValidationError`). Full-jitter 409-conflict retry. Pluggable logger. Default Notion-Version `2025-09-03`. |
 | [`@diabolicallabs/rate-limiter`](packages/rate-limiter/) | stable | Redis sliding-window rate limiter using Lua `EVAL`/`EVALSHA` for atomicity. `RateLimiterConfig.onRedisError: 'closed' \| 'open'` (default closed). `RateLimitError.kind: 'exceeded' \| 'unavailable'` discriminator. Structural `RedisExecutor` interface — works with `ioredis` out of the box, swappable to `@upstash/redis` adapters without a major bump. Pluggable logger. |
+| [`@diabolicallabs/prompt-registry`](packages/prompt-registry/) | published | Versioned LLM prompt lifecycle — extracted from the fleet admin standard (§S7). `seed()`/`get()`/`publish()`/`history()`/`rollback()` against a `prompt_versions` table. `PostgresPromptStorageAdapter` reference adapter (structural `PgPoolLike`, parameterized queries only, transactional). `runPromptEvalGate()` + CLI for CI prompt-eval gating. Sensitivity masking for audit/log surfaces. See package README for the FitCheckerApp migration guide. |
 
 See [`MODULES.md`](MODULES.md) for the canonical version index and build-plan history.
 

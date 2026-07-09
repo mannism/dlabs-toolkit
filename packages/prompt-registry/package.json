@@ -1,0 +1,64 @@
+{
+  "name": "@diabolicallabs/prompt-registry",
+  "version": "0.1.0",
+  "description": "Versioned LLM prompt lifecycle — admin-standard prompt_versions pattern as a package. Seed from repo files, publish new versions, roll back, audit history. © Diabolical Labs",
+  "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
+  "publisher": "Diabolical Labs",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "prompt-registry-eval-gate": "./dist/bin/eval-gate-cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "schema.sql"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mannism/dlabs-toolkit.git",
+    "directory": "packages/prompt-registry"
+  },
+  "homepage": "https://github.com/mannism/dlabs-toolkit#readme",
+  "bugs": {
+    "url": "https://github.com/mannism/dlabs-toolkit/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup && node scripts/chmod-bin.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check ./src && eslint ./src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "demo:eval-gate": "node scripts/eval-gate-demo.mjs"
+  },
+  "peerDependencies": {
+    "pg": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "@types/pg": "^8.11.6",
+    "@vitest/coverage-v8": "^4.1.9",
+    "pg": "^8.13.1",
+    "tsup": "^8.3.5",
+    "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

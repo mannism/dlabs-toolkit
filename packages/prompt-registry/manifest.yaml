@@ -1,0 +1,74 @@
+name: "@diabolicallabs/prompt-registry"
+purpose: >
+  Versioned LLM prompt lifecycle package implementing the fleet admin standard
+  (§S7, /Users/mann/Documents/Claude/admin-standard.md, ratified 2026-07-06).
+  seed() loads repo-file prompts into a prompt_versions table on first run
+  (idempotent — never overwrites existing versions). get(name, {version|latest})
+  reads the active version or a specific historical one. publish(name, text, meta)
+  appends a new version and activates it, never mutating a prior row. history(name)
+  lists all versions newest-first. rollback(name, version) re-activates a prior
+  version in place (no new row). Storage is adapter-based — PostgresPromptStorageAdapter
+  is the shipped reference (structural PgPoolLike interface, parameterized queries
+  only, transactional activateVersion()/insertVersion()). Sensitivity masking
+  (maskPromptBody, redactConnectionString) for audit-log/notification surfaces.
+  runPromptEvalGate() + CLI (prompt-registry-eval-gate) gates prompt changes on
+  a consumer-supplied eval script's exit code, for CI wiring.
+owner: Sable
+status: published
+
+depends_on:
+  - name: "zod"
+    version: "^4.4.3"
+    why: "Runtime validation at every public API boundary (seed/get/publish/history/rollback inputs) — no `any`, per fleet TypeScript-strict policy. Malformed input must fail at the API edge, not three layers down as a DB constraint error."
+  - name: "pg (peerDependency, optional)"
+    why: "Structural PgPoolLike interface (query + connect) is satisfied by a real pg.Pool instance. Listed as an optional peerDep so consumers pass their existing pool (Drizzle-backed apps already have one) — no duplicate connections. Same pattern as ioredis in @diabolicallabs/rate-limiter."
+
+depended_on_by:
+  - name: "FitCheckerApp (migration candidate)"
+    how: "Reference implementation this package was extracted from (db/schema/prompt-versions.ts + lib/prompts.ts). Migration is a separate follow-up brief per admin-standard post-merge obligations — not bundled with this PR."
+  - name: "GEOAudit, Candiv (future migration candidates)"
+    how: "Both have or are gaining prompt_versions tables per admin-standard §S7 Tier 2.1. Adopting this package removes per-product reimplementation once each has its own migration brief."
+
+exports:
+  - "createPromptRegistry(config: PromptRegistryConfig): PromptRegistry"
+  - "PromptRegistry: seed(entries), get(name, options?), publish(name, content, meta?), history(name, options?), rollback(name, version, options?)"
+  - "PostgresPromptStorageAdapter (class) — implements PromptStorageAdapter"
+  - "loadSeedFilesFromDirectory(dir), parseSeedFile(raw, filename)"
+  - "maskPromptBody(content, mode), redactConnectionString(value)"
+  - "runPromptEvalGate(options) — also shipped as CLI: prompt-registry-eval-gate <promptPath> <evalScriptPath>"
+  - "setPromptRegistryLogger(logger)"
+  - "Errors: PromptRegistryError, PromptNotFoundError, PromptVersionConflictError, PromptValidationError, PromptEvalGateFailedError, PromptStorageError"
+  - "Types: PromptRecord, PromptStorageAdapter, SeedPromptEntry, GetOptions, PublishMeta, HistoryOptions, RollbackOptions, PgPoolLike, PgClientLike"
+
+contracts:
+  schema: "prompt_versions: prompt_name, prompt_type, version, content, is_active, activated_on, created_by, change_notes, created_on. UNIQUE (prompt_name, prompt_type, version)."
+  default_type: "'system' when type is omitted from options/meta"
+  activation_invariant: "exactly one is_active=TRUE row per (prompt_name, prompt_type) at all times — enforced by transactional insertVersion()/activateVersion(), never by application-level convention alone"
+  idempotency: "seed() only inserts when getMaxVersion() returns 0 for the (name, type) pair — reruns on every deploy are safe no-ops after the first"
+  never_overwrite: "publish() always inserts a new row (version = max+1); rollback() only flips is_active/activated_on on an existing row, content is immutable post-insert"
+
+failure_modes:
+  - trigger: "Two publish() calls race on the same (name, type)"
+    impact: "Both compute the same next version number; the loser's INSERT hits the UNIQUE constraint (Postgres code 23505)."
+    propagation: "Mapped to PromptVersionConflictError (code: version_conflict) — the loser must retry, not silently corrupt or duplicate a version. Verified by the concurrent-publish integration test."
+  - trigger: "get()/rollback() target a (name, type, version) that does not exist"
+    impact: "No record returned/activated."
+    propagation: "Thrown as PromptNotFoundError (code: prompt_not_found), logged at warn level with name/type/version metadata only — never content."
+  - trigger: "Adapter (DB) call throws for any other reason (connection reset, timeout, etc.)"
+    impact: "Registry operation fails."
+    propagation: "Wrapped as PromptStorageError — original driver error is `.cause`, never included in `.message`, so consumers logging `.message` directly never leak DB internals."
+  - trigger: "runPromptEvalGate()'s eval script exits non-zero"
+    impact: "The prompt change should not ship."
+    propagation: "Throws PromptEvalGateFailedError by default (fails a CI step un-caught); throwOnFailure: false returns a non-throwing EvalGateResult for callers that want to inspect stdout/stderr instead."
+
+performance:
+  expected_latency: "One round trip per operation (get/publish/rollback each issue 1-4 parameterized queries inside a single transaction where applicable). Not designed for hot-path per-request DB reads — pair with an application-level cache (e.g. FitChecker's withCache 10-min TTL pattern) in front of get() for request-path usage; this package intentionally does not ship a cache layer itself (adapter-agnostic, no opinion on the consumer's cache infra)."
+
+notes: |
+  v0.1.0: initial extraction from the admin-standard §S7 pattern, ported from
+  FitCheckerApp's prompt_versions schema (identified as the fleet's cleanest
+  implementation — see README.md migration guide for the literal diff).
+  Round-trip integration suite (seed/get/publish/rollback/concurrent-publish)
+  gated by DATABASE_URL against real Postgres, mirroring the REDIS_URL-gated
+  pattern in @diabolicallabs/rate-limiter. No product migration is bundled in
+  this PR — per-product migration briefs are separate follow-ups.

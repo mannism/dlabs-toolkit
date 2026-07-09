@@ -25,6 +25,7 @@ For fleet-wide standards (TypeScript, security, git workflow, PR comprehension g
 - `rate-limiter` — sliding-window rate limiter
 - `slack` — send-only Slack notifier via @slack/web-api
 - `telegram` — Telegram Bot wrapper
+- `prompt-registry` — versioned LLM prompt lifecycle (admin-standard §S7): seed/get/publish/history/rollback against a `prompt_versions` table, Postgres reference adapter, CI eval-gate helper
 
 ## Commands
 
