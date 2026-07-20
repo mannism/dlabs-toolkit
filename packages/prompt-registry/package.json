@@ -51,12 +51,12 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.1",
     "@types/pg": "^8.11.6",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "pg": "^8.13.1",
     "tsup": "^8.3.5",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "zod": "^4.4.3"
