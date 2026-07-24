@@ -90,6 +90,7 @@ const REQUIRED_PROVIDERS: ReadonlyArray<keyof Omit<PricingTable, 'versionedAt'>>
   'gemini',
   'deepseek',
   'perplexity',
+  'xai',
 ];
 
 /**
