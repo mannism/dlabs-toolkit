@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "@diabolicallabs/notifier-core": "workspace:*",
-    "@slack/types": "^2.21.0",
+    "@slack/types": "^3.0.0",
     "@slack/web-api": "^7.17.0"
   },
   "peerDependencies": {
