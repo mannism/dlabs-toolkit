@@ -30,7 +30,7 @@ const TS_PATH = resolve(ROOT, 'packages', 'llm-pricing', 'src', 'table.ts');
 const raw = readFileSync(JSON_PATH, 'utf8');
 const data = JSON.parse(raw);
 
-const REQUIRED_PROVIDERS = ['anthropic', 'openai', 'gemini', 'deepseek', 'perplexity'];
+const REQUIRED_PROVIDERS = ['anthropic', 'openai', 'gemini', 'deepseek', 'perplexity', 'xai'];
 for (const p of REQUIRED_PROVIDERS) {
   if (typeof data[p] !== 'object' || data[p] === null) {
     console.error(`sync-bundled: table.json is missing required provider "${p}"`);

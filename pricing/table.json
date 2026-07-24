@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.schema.json",
-  "versionedAt": "2026-06-04",
+  "versionedAt": "2026-07-25",
   "anthropic": {
     "claude-opus-4-5": {
       "inputPer1M": 5.0,
@@ -388,6 +388,19 @@
       "partialCostCoverage": true,
       "verifiedAt": "2026-05-13",
       "sourceUrl": "https://docs.perplexity.ai/guides/pricing"
+    }
+  },
+  "xai": {
+    "grok-4.5": {
+      "inputPer1M": 2.0,
+      "outputPer1M": 6.0,
+      "cacheReadPer1M": 0.3,
+      "longContextThreshold": 200000,
+      "longContextInputPer1M": 4.0,
+      "longContextOutputPer1M": 12.0,
+      "longContextCacheReadPer1M": 0.6,
+      "verifiedAt": "2026-07-25",
+      "sourceUrl": "https://docs.x.ai/developers/models/grok-4.5"
     }
   }
 }

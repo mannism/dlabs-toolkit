@@ -21,13 +21,8 @@
 
 import type { PricingTable } from './types.js';
 
-/**
- * Bundled pricing table snapshot — provider/model costs in USD per million tokens.
- * Auto-generated from `pricing/table.json`; run `node pricing/sync-bundled.mjs` to refresh.
- * Use `fetchRemoteTable()` to load a fresher version at runtime without a code change.
- */
 export const DEFAULT_PRICING_TABLE: PricingTable = {
-  versionedAt: '2026-06-04',
+  versionedAt: '2026-07-25',
 
   anthropic: {
     'claude-haiku-3': {
@@ -420,6 +415,20 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       outputPer1M: 8,
       sourceUrl: 'https://docs.perplexity.ai/guides/pricing',
       verifiedAt: '2026-05-13',
+    },
+  },
+
+  xai: {
+    'grok-4.5': {
+      cacheReadPer1M: 0.3,
+      inputPer1M: 2,
+      longContextCacheReadPer1M: 0.6,
+      longContextInputPer1M: 4,
+      longContextOutputPer1M: 12,
+      longContextThreshold: 200000,
+      outputPer1M: 6,
+      sourceUrl: 'https://docs.x.ai/developers/models/grok-4.5',
+      verifiedAt: '2026-07-25',
     },
   },
 };

@@ -393,6 +393,37 @@ describe('computeCost — Perplexity', () => {
 // Unknown model
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// xAI
+// ---------------------------------------------------------------------------
+
+describe('computeCost — xAI', () => {
+  it('grok-4.5: resolves under provider xai at base (sub-200k) tier', () => {
+    // Base-tier rates: input $2.00/1M, output $6.00/1M. Kept under the 200k
+    // longContextThreshold — the tier branch keys off usage.inputTokens
+    // (see compute.ts `isLongContext`), so 1M+1M input tokens would actually
+    // trip the long-context branch below, not stay at base rate.
+    const usage = basicUsage(100_000, 100_000);
+    const cost = computeCost({ usage, provider: 'xai', model: 'grok-4.5' });
+
+    expect(cost.input).toBeCloseTo(0.2, 5); // 0.1M x $2.00
+    expect(cost.output).toBeCloseTo(0.6, 5); // 0.1M x $6.00
+    expect(cost.isPartial).toBe(false);
+    expect(warnCalls.some((w) => w.event === 'pricing_unknown_model')).toBe(false);
+  });
+
+  it('grok-4.5: long context (>200k input) uses elevated rates — 1M+1M returns $16.00', () => {
+    const usage = basicUsage(1_000_000, 1_000_000);
+    const cost = computeCost({ usage, provider: 'xai', model: 'grok-4.5' });
+
+    // Long-context: Input $4.00/1M, Output $12.00/1M -> 1M x $4 + 1M x $12 = $16.00
+    expect(cost.input).toBeCloseTo(4, 5);
+    expect(cost.output).toBeCloseTo(12, 5);
+    expect(cost.total).toBeCloseTo(16, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+});
+
 describe('computeCost — unknown model', () => {
   it('returns zero cost with isPartial = true and emits warning', () => {
     const usage = basicUsage(100_000, 50_000);
@@ -486,7 +517,7 @@ describe('DEFAULT_PRICING_TABLE integrity', () => {
   });
 
   it('all model records have required fields', () => {
-    const providers = ['anthropic', 'openai', 'gemini', 'deepseek', 'perplexity'] as const;
+    const providers = ['anthropic', 'openai', 'gemini', 'deepseek', 'perplexity', 'xai'] as const;
     for (const provider of providers) {
       const models = DEFAULT_PRICING_TABLE[provider];
       for (const [modelId, record] of Object.entries(models)) {

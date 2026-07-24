@@ -4,7 +4,7 @@
   "title": "LlmPricingTable",
   "description": "Canonical pricing table for @diabolicallabs/llm-pricing. Provider → model → per-token USD rates.",
   "type": "object",
-  "required": ["versionedAt", "anthropic", "openai", "gemini", "deepseek", "perplexity"],
+  "required": ["versionedAt", "anthropic", "openai", "gemini", "deepseek", "perplexity", "xai"],
   "additionalProperties": false,
   "properties": {
     "$schema": {
@@ -20,7 +20,8 @@
     "openai": { "$ref": "#/definitions/ProviderTable" },
     "gemini": { "$ref": "#/definitions/ProviderTable" },
     "deepseek": { "$ref": "#/definitions/ProviderTable" },
-    "perplexity": { "$ref": "#/definitions/ProviderTable" }
+    "perplexity": { "$ref": "#/definitions/ProviderTable" },
+    "xai": { "$ref": "#/definitions/ProviderTable" }
   },
   "definitions": {
     "ProviderTable": {

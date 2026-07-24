@@ -63,6 +63,14 @@ const MOCK_TABLE: PricingTable = {
       sourceUrl: 'https://docs.perplexity.ai/guides/pricing',
     },
   },
+  xai: {
+    'grok-4.5': {
+      inputPer1M: 2.0,
+      outputPer1M: 6.0,
+      verifiedAt: '2026-05-14',
+      sourceUrl: 'https://docs.x.ai/developers/models/grok-4.5',
+    },
+  },
 };
 
 const TEST_URL = 'https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.json';

@@ -88,10 +88,11 @@ export interface PricingTable {
   gemini: Record<string, ModelPricing>;
   deepseek: Record<string, ModelPricing>;
   perplexity: Record<string, ModelPricing>;
+  xai: Record<string, ModelPricing>;
 }
 
 /** Supported provider names — matches @diabolicallabs/llm-client provider strings. */
-export type Provider = 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'perplexity';
+export type Provider = 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'perplexity' | 'xai';
 
 /** Token usage shape — mirrors LlmUsage from @diabolicallabs/llm-client. */
 export interface LlmUsage {
