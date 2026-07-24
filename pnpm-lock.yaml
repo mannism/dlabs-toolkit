@@ -128,8 +128,8 @@ importers:
   packages/notion:
     dependencies:
       '@notionhq/client':
-        specifier: ^5.22.0
-        version: 5.22.0
+        specifier: ^5.23.2
+        version: 5.23.2
     devDependencies:
       '@types/node':
         specifier: ^26.1.1
@@ -700,8 +700,8 @@ packages:
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
 
-  '@notionhq/client@5.22.0':
-    resolution: {integrity: sha512-lZ3JGBCd6O6MNHWn/58QcUqX1FgmlcODcx/EaUEEpuxLXF5tSi+v29Vzoz8mZ6JgDWDn5pMzzjB69QevYjQQZA==}
+  '@notionhq/client@5.23.2':
+    resolution: {integrity: sha512-iyD5VU9MoNxCR0GespotyrMlBpO4kLG+BaZK2JpZW1yfFqrmOYmZGb3wl4xqfq3n1Z9eekFwNcZD6t63SaESig==}
     engines: {node: '>=18'}
 
   '@open-draft/deferred-promise@2.2.0':
@@ -2985,7 +2985,7 @@ snapshots:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
 
-  '@notionhq/client@5.22.0': {}
+  '@notionhq/client@5.23.2': {}
 
   '@open-draft/deferred-promise@2.2.0': {}
 
