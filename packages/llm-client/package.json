@@ -50,7 +50,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.107.0",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@google/genai": "^2.13.0",
     "openai": "^6.49.0",
     "zod": "^4.4.3"
