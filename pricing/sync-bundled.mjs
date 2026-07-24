@@ -128,9 +128,6 @@ const generated = `\
  *
  * Maintenance: edit pricing/table.json + run node pricing/sync-bundled.mjs.
  * See pricing/README.md for the full refresh workflow.
- *
- * IMPORTANT: deepseek-v4-pro has a 75% promotional discount active through 2026-05-31.
- * Post-discount rates will be approx 4x current. See verifiedAt + sourceUrl.
  */
 
 import type { PricingTable } from './types.js';
