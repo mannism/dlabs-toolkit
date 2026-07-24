@@ -492,4 +492,18 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       verifiedAt: '2026-07-25',
     },
   },
+
+  xai: {
+    'grok-4.5': {
+      cacheReadPer1M: 0.3,
+      inputPer1M: 2,
+      longContextCacheReadPer1M: 0.6,
+      longContextInputPer1M: 4,
+      longContextOutputPer1M: 12,
+      longContextThreshold: 200000,
+      outputPer1M: 6,
+      sourceUrl: 'https://docs.x.ai/developers/models/grok-4.5',
+      verifiedAt: '2026-07-25',
+    },
+  },
 };
