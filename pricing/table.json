@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.schema.json",
-  "versionedAt": "2026-06-04",
+  "versionedAt": "2026-07-25",
   "anthropic": {
     "claude-opus-4-5": {
       "inputPer1M": 5.0,
@@ -8,7 +8,7 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-05-18",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-opus-4-7": {
@@ -17,7 +17,7 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-06-04",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-sonnet-4-5": {
@@ -26,7 +26,7 @@
       "cacheReadPer1M": 0.3,
       "cacheWritePer1M": 3.75,
       "cacheWrite1hPer1M": 6.0,
-      "verifiedAt": "2026-05-18",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-sonnet-4-6": {
@@ -35,7 +35,7 @@
       "cacheReadPer1M": 0.3,
       "cacheWritePer1M": 3.75,
       "cacheWrite1hPer1M": 6.0,
-      "verifiedAt": "2026-06-04",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-haiku-4-5": {
@@ -44,7 +44,7 @@
       "cacheReadPer1M": 0.1,
       "cacheWritePer1M": 1.25,
       "cacheWrite1hPer1M": 2.0,
-      "verifiedAt": "2026-06-04",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-haiku-4-5-20251001": {
@@ -53,7 +53,7 @@
       "cacheReadPer1M": 0.1,
       "cacheWritePer1M": 1.25,
       "cacheWrite1hPer1M": 2.0,
-      "verifiedAt": "2026-06-04",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-opus-4-6": {
@@ -62,7 +62,7 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-06-04",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-sonnet-4-5-20250929": {
@@ -71,7 +71,7 @@
       "cacheReadPer1M": 0.3,
       "cacheWritePer1M": 3.75,
       "cacheWrite1hPer1M": 6.0,
-      "verifiedAt": "2026-06-04",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-haiku-3-5": {
@@ -80,7 +80,7 @@
       "cacheReadPer1M": 0.08,
       "cacheWritePer1M": 1.0,
       "cacheWrite1hPer1M": 1.6,
-      "verifiedAt": "2026-06-04",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-haiku-3": {
@@ -89,7 +89,7 @@
       "cacheReadPer1M": 0.03,
       "cacheWritePer1M": 0.3125,
       "cacheWrite1hPer1M": 0.5,
-      "verifiedAt": "2026-06-04",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-opus-4-8": {
@@ -98,7 +98,43 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-06-04",
+      "verifiedAt": "2026-07-25",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    "claude-fable-5": {
+      "inputPer1M": 10.0,
+      "outputPer1M": 50.0,
+      "cacheReadPer1M": 1.0,
+      "cacheWritePer1M": 12.5,
+      "cacheWrite1hPer1M": 20.0,
+      "verifiedAt": "2026-07-25",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    "claude-opus-5": {
+      "inputPer1M": 5.0,
+      "outputPer1M": 25.0,
+      "cacheReadPer1M": 0.5,
+      "cacheWritePer1M": 6.25,
+      "cacheWrite1hPer1M": 10.0,
+      "verifiedAt": "2026-07-25",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    "claude-sonnet-5": {
+      "inputPer1M": 3.0,
+      "outputPer1M": 15.0,
+      "cacheReadPer1M": 0.3,
+      "cacheWritePer1M": 3.75,
+      "cacheWrite1hPer1M": 6.0,
+      "verifiedAt": "2026-07-25",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+    },
+    "claude-mythos-5": {
+      "inputPer1M": 10.0,
+      "outputPer1M": 50.0,
+      "cacheReadPer1M": 1.0,
+      "cacheWritePer1M": 12.5,
+      "cacheWrite1hPer1M": 20.0,
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     }
   },
@@ -107,27 +143,27 @@
       "inputPer1M": 5.0,
       "outputPer1M": 30.0,
       "cacheReadPer1M": 0.5,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://pricepertoken.com/pricing-page/provider/openai"
     },
     "gpt-5.5-pro": {
       "inputPer1M": 30.0,
       "outputPer1M": 180.0,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://pricepertoken.com/pricing-page/provider/openai"
     },
     "gpt-5.4": {
       "inputPer1M": 2.5,
       "outputPer1M": 15.0,
       "cacheReadPer1M": 0.25,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://pricepertoken.com/pricing-page/provider/openai"
     },
     "gpt-5.4-mini": {
       "inputPer1M": 0.75,
       "outputPer1M": 4.5,
       "cacheReadPer1M": 0.075,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://pricepertoken.com/pricing-page/provider/openai"
     },
     "gpt-4.1": {
@@ -157,13 +193,13 @@
       "inputPer1M": 0.2,
       "outputPer1M": 1.25,
       "cacheReadPer1M": 0.02,
-      "verifiedAt": "2026-05-18",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing"
     },
     "gpt-5.4-pro": {
       "inputPer1M": 30.0,
       "outputPer1M": 180.0,
-      "verifiedAt": "2026-05-18",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing"
     },
     "o3-mini": {
@@ -257,8 +293,32 @@
       "inputPer1M": 1.75,
       "outputPer1M": 14.0,
       "cacheReadPer1M": 0.175,
-      "verifiedAt": "2026-05-18",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://portkey.ai/models/openai"
+    },
+    "gpt-5.6-sol": {
+      "inputPer1M": 5.0,
+      "outputPer1M": 30.0,
+      "cacheReadPer1M": 0.5,
+      "hasInvisibleReasoningTokens": true,
+      "verifiedAt": "2026-07-25",
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-5.6-sol"
+    },
+    "gpt-5.6-terra": {
+      "inputPer1M": 2.5,
+      "outputPer1M": 15.0,
+      "cacheReadPer1M": 0.25,
+      "hasInvisibleReasoningTokens": true,
+      "verifiedAt": "2026-07-25",
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing"
+    },
+    "gpt-5.6-luna": {
+      "inputPer1M": 1.0,
+      "outputPer1M": 6.0,
+      "cacheReadPer1M": 0.1,
+      "hasInvisibleReasoningTokens": true,
+      "verifiedAt": "2026-07-25",
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing"
     }
   },
   "gemini": {
@@ -270,7 +330,7 @@
       "longContextInputPer1M": 4.0,
       "longContextOutputPer1M": 18.0,
       "longContextCacheReadPer1M": 0.4,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-2.5-pro": {
@@ -281,21 +341,21 @@
       "longContextInputPer1M": 2.5,
       "longContextOutputPer1M": 15.0,
       "longContextCacheReadPer1M": 0.25,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-2.5-flash": {
       "inputPer1M": 0.3,
       "outputPer1M": 2.5,
       "cacheReadPer1M": 0.03,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-3.1-flash-lite": {
       "inputPer1M": 0.25,
       "outputPer1M": 1.5,
       "cacheReadPer1M": 0.025,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-3.1-pro": {
@@ -306,28 +366,42 @@
       "longContextInputPer1M": 4.0,
       "longContextOutputPer1M": 18.0,
       "longContextCacheReadPer1M": 0.4,
-      "verifiedAt": "2026-05-18",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-3-flash-preview": {
       "inputPer1M": 0.5,
       "outputPer1M": 3.0,
       "cacheReadPer1M": 0.05,
-      "verifiedAt": "2026-05-18",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-2.5-flash-lite": {
       "inputPer1M": 0.1,
       "outputPer1M": 0.4,
       "cacheReadPer1M": 0.01,
-      "verifiedAt": "2026-05-18",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-3.5-flash": {
       "inputPer1M": 1.5,
       "outputPer1M": 9.0,
       "cacheReadPer1M": 0.15,
-      "verifiedAt": "2026-06-04",
+      "verifiedAt": "2026-07-25",
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    "gemini-3.5-flash-lite": {
+      "inputPer1M": 0.3,
+      "outputPer1M": 2.5,
+      "cacheReadPer1M": 0.03,
+      "verifiedAt": "2026-07-25",
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    "gemini-3.6-flash": {
+      "inputPer1M": 1.5,
+      "outputPer1M": 7.5,
+      "cacheReadPer1M": 0.15,
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     }
   },
@@ -336,14 +410,14 @@
       "inputPer1M": 0.14,
       "outputPer1M": 0.28,
       "cacheReadPer1M": 0.0028,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing"
     },
     "deepseek-v4-pro": {
       "inputPer1M": 0.435,
       "outputPer1M": 0.87,
       "cacheReadPer1M": 0.003625,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing"
     },
     "deepseek-chat": {
@@ -367,26 +441,26 @@
     "sonar": {
       "inputPer1M": 1.0,
       "outputPer1M": 1.0,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://docs.perplexity.ai/guides/pricing"
     },
     "sonar-pro": {
       "inputPer1M": 3.0,
       "outputPer1M": 15.0,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://docs.perplexity.ai/guides/pricing"
     },
     "sonar-reasoning-pro": {
       "inputPer1M": 2.0,
       "outputPer1M": 8.0,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://docs.perplexity.ai/guides/pricing"
     },
     "sonar-deep-research": {
       "inputPer1M": 2.0,
       "outputPer1M": 8.0,
       "partialCostCoverage": true,
-      "verifiedAt": "2026-05-13",
+      "verifiedAt": "2026-07-25",
       "sourceUrl": "https://docs.perplexity.ai/guides/pricing"
     }
   }

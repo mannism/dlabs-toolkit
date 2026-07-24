@@ -1,23 +1,19 @@
 /**
  * Default pricing table for @diabolicallabs/llm-pricing.
  *
- * This file IS the source of truth — edit it directly. There is no
- * pricing/table.json or codegen step; DEFAULT_PRICING_TABLE below is the
- * canonical, hand-maintained pricing snapshot bundled with the package.
+ * AUTO-GENERATED — do not edit directly.
+ * Source of truth: pricing/table.json
+ * Regenerate: node pricing/sync-bundled.mjs
  *
+ * Data sourced from Tom's Wave 2a pricing snapshot (2026-05-13).
  * Confidence: High for Anthropic, Gemini, DeepSeek, Perplexity (first-party docs).
- *             Medium for OpenAI (primary pricing page is inconsistently reachable;
- *             several legacy rows are cross-referenced from third-party trackers
- *             rather than the official page — see individual sourceUrl fields).
+ *             Medium for OpenAI (primary pricing page 403'd; cross-referenced from
+ *             pricepertoken.com + devtk.ai + OpenRouter — all consistent).
  *
  * All prices are USD per 1 million tokens.
  *
- * Back-compat rule: entries are NEVER deleted from this table, even when a
- * model appears to have rotated off a provider's current pricing page. When a
- * model can't be reverified, its existing verifiedAt/prices are left as-is
- * rather than guessed at. Only confirmed drift gets repriced.
- *
- * Use `fetchRemoteTable()` to load a fresher version at runtime without a code change.
+ * Maintenance: edit pricing/table.json + run node pricing/sync-bundled.mjs.
+ * See pricing/README.md for the full refresh workflow.
  */
 
 import type { PricingTable } from './types.js';
@@ -71,7 +67,6 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
       verifiedAt: '2026-07-25',
     },
-    // Glasswing-only niche model, same pricing tier as Fable 5.
     'claude-mythos-5': {
       cacheReadPer1M: 1,
       cacheWrite1hPer1M: 20,
@@ -153,9 +148,6 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
       verifiedAt: '2026-07-25',
     },
-    // Standard rate. An introductory rate of $2/$10 (in/out) runs through 2026-08-31;
-    // this table intentionally encodes the standard/future-safe rate rather than the
-    // temporary intro rate — do not "correct" this to the intro pricing.
     'claude-sonnet-5': {
       cacheReadPer1M: 0.3,
       cacheWrite1hPer1M: 6,
@@ -278,8 +270,6 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       sourceUrl: 'https://pricepertoken.com/pricing-page/provider/openai',
       verifiedAt: '2026-07-25',
     },
-    // No long-context tier: the >272K-token $10/$45 rate seen on third-party
-    // trackers is unconfirmed on the official page — omitted until verified.
     'gpt-5.6-luna': {
       cacheReadPer1M: 0.1,
       hasInvisibleReasoningTokens: true,
