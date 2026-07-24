@@ -70,6 +70,9 @@ export interface ModelPricing {
   /** Source URL for this pricing record — official provider docs or best available cross-reference. */
   sourceUrl: string;
 
+  /** Free-text annotation surfaced to editors — not consumed by computeCost() or any runtime logic. */
+  notes?: string;
+
   /**
    * If this model ID is a deprecated alias, the canonical ID it resolves to.
    * computeCost() emits a `pricing_deprecated_alias` log event (via the configured

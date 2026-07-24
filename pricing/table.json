@@ -126,7 +126,8 @@
       "cacheWritePer1M": 3.75,
       "cacheWrite1hPer1M": 6.0,
       "verifiedAt": "2026-07-25",
-      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "Standard rate ($3/$15), not the temporary intro rate ($2/$10) which runs through 2026-08-31 — this is intentional, do not revert to the intro rate."
     },
     "claude-mythos-5": {
       "inputPer1M": 10.0,
@@ -135,7 +136,8 @@
       "cacheWritePer1M": 12.5,
       "cacheWrite1hPer1M": 20.0,
       "verifiedAt": "2026-07-25",
-      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "Glasswing-only niche model — same pricing tier as claude-fable-5."
     }
   },
   "openai": {
@@ -318,7 +320,8 @@
       "cacheReadPer1M": 0.1,
       "hasInvisibleReasoningTokens": true,
       "verifiedAt": "2026-07-25",
-      "sourceUrl": "https://developers.openai.com/api/docs/pricing"
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+      "notes": "Budget tier of the GPT-5.6 family (alongside gpt-5.6-sol and gpt-5.6-terra)."
     }
   },
   "gemini": {
