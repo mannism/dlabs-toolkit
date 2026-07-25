@@ -25,7 +25,12 @@
 import type { NotifyResult } from '@diabolicallabs/notifier-core';
 import { retryWithJitter } from '@diabolicallabs/notifier-core';
 import type { ChatPostMessageArguments } from '@slack/web-api';
-import { WebClient } from '@slack/web-api';
+import {
+  WebAPIHTTPError,
+  WebAPIPlatformError,
+  WebAPIRateLimitedError,
+  WebClient,
+} from '@slack/web-api';
 import { getLogger } from './logger.js';
 import type {
   PostMessageArgs,
@@ -74,10 +79,24 @@ const VALIDATION_CODES = new Set([
  * Map a @slack/web-api error (or any other thrown value) to the named error taxonomy.
  * Never includes the bot token or webhook URL in the resulting error message.
  * Exported for unit testing without requiring WebClient mock.
+ *
+ * @slack/web-api v8 throws four distinct runtime classes (real `instanceof`-able
+ * classes as of v8, not just TS interfaces as in v7):
+ *   - WebAPIPlatformError  — parsed Slack API error response ({ok:false, error:"..."}), has `.data`
+ *   - WebAPIHTTPError      — raw HTTP-layer failure (5xx/4xx/malformed response), no `.data`
+ *   - WebAPIRateLimitedError — dedicated 429 exception (only thrown when the client is
+ *     constructed with `rejectRateLimitedCalls: true`; currently dormant since this
+ *     wrapper doesn't set that flag, but classified correctly in case it's enabled later)
+ *   - WebAPIRequestError   — network-layer failure wrapping an `original: Error`, no
+ *     Slack-specific code to extract — falls through to the generic fallback below
  */
 export function mapSdkError(err: unknown): SlackError {
-  // @slack/web-api WebAPICallError shape
-  if (err !== null && typeof err === 'object' && 'data' in err) {
+  // WebAPIPlatformError (real instance) OR any duck-typed shape carrying `.data` —
+  // the duck-type check is kept as a safety fallback for mocks/future SDK shapes.
+  if (
+    err instanceof WebAPIPlatformError ||
+    (err !== null && typeof err === 'object' && 'data' in err)
+  ) {
     const sdkErr = err as {
       data?: { error?: string };
       code?: string;
@@ -116,7 +135,55 @@ export function mapSdkError(err: unknown): SlackError {
     return new SlackError(`Slack API error: ${slackCode}`, slackCode, err);
   }
 
-  // Network errors or unknown shapes
+  // WebAPIHTTPError — raw HTTP-layer failure. No `.data`; classify by statusCode.
+  if (err instanceof WebAPIHTTPError) {
+    const { statusCode } = err;
+
+    if (statusCode >= 500) {
+      return new SlackUnavailableError(
+        `Slack service unavailable: HTTP ${statusCode}`,
+        String(statusCode),
+        err
+      );
+    }
+
+    if (statusCode === 401 || statusCode === 403) {
+      return new SlackAuthError(
+        `Slack authentication failed: HTTP ${statusCode}`,
+        String(statusCode),
+        err
+      );
+    }
+
+    if (statusCode === 429) {
+      // retryAfterMs will be set by the caller after SDK retry exhaustion — no
+      // Retry-After extraction here, same as the existing 429 branch above.
+      return new SlackRateLimitError(
+        `Slack rate limit exceeded: HTTP ${statusCode}`,
+        String(statusCode),
+        'exceeded',
+        null,
+        err
+      );
+    }
+
+    return new SlackError(`Slack API error: HTTP ${statusCode}`, String(statusCode), err);
+  }
+
+  // WebAPIRateLimitedError — dedicated 429 exception (see JSDoc above re: dormancy).
+  // `retryAfter` is a typed field in seconds; convert directly to ms.
+  if (err instanceof WebAPIRateLimitedError) {
+    const retryAfterMs = err.retryAfter > 0 ? err.retryAfter * 1_000 : null;
+    return new SlackRateLimitError(
+      `Slack rate limit exceeded: retryAfter=${err.retryAfter}s`,
+      'ratelimited',
+      'exceeded',
+      retryAfterMs,
+      err
+    );
+  }
+
+  // WebAPIRequestError (network errors) or unknown shapes
   const message = err instanceof Error ? err.message : String(err);
   return new SlackError(`Slack request failed: ${message}`, 'unknown', err);
 }
