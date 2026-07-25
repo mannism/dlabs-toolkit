@@ -6,7 +6,7 @@
  *   SLACK_DEFAULT_CHANNEL; throws SlackValidationError synchronously when both
  *   token and webhook URL are absent.
  *
- * Implementation wraps @slack/web-api (v7.x). The SDK handles:
+ * Implementation wraps @slack/web-api (v8.x). The SDK handles:
  *   - Authorization headers
  *   - TLS / keep-alive
  *
