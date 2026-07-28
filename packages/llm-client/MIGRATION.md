@@ -1,5 +1,94 @@
 # @diabolicallabs/llm-client — Migration Guide
 
+## v6.2.x → v6.3.0 — Reasoning-effort passthrough
+
+### What changed
+
+`LlmCallOptions` now accepts an optional `reasoningEffort` field, letting callers control how many tokens a model spends on internal reasoning/thinking. Purely additive and opt-in — omitting it changes nothing for existing consumers.
+
+```typescript
+export type LlmReasoningEffort =
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max';
+```
+
+Supported on Anthropic, OpenAI, and Gemini — each with a different accepted subset of the 7 values (see table below). Perplexity and DeepSeek do not support a comparable parameter; setting `reasoningEffort` against either throws `LlmError({ kind: 'bad_request', retryable: false })` **before any SDK call**, for every public method (`complete`, `stream`, `structured`, `streamStructured`, `withTools`).
+
+| Provider | Wire field | Accepted values |
+|---|---|---|
+| Anthropic | `output_config.effort` | `low`, `medium`, `high`, `xhigh`, `max` |
+| OpenAI | `reasoning.effort` | all 7 values |
+| Gemini | `thinkingConfig.thinkingLevel` (uppercase on the wire) | `minimal`, `low`, `medium`, `high` |
+| Perplexity, DeepSeek | — | none — rejects with `bad_request` |
+
+A value outside the resolved provider's accepted set also throws `bad_request` before any SDK call — for example, `reasoningEffort: 'none'` against Anthropic, or `reasoningEffort: 'xhigh'` against Gemini.
+
+### New exports
+
+```typescript
+import { type LlmReasoningEffort } from '@diabolicallabs/llm-client';
+```
+
+### `LlmUsage` addition
+
+```typescript
+response.usage.reasoningTokens // number | undefined
+```
+
+Populated from `usage.output_tokens_details.thinking_tokens` (Anthropic) or `usage.output_tokens_details.reasoning_tokens` (OpenAI), in both the streaming and non-streaming paths. Undefined for Gemini/Perplexity/DeepSeek (no equivalent breakdown reported) and undefined whenever `reasoningEffort` wasn't set or the model didn't report a breakdown.
+
+### Capability matrix addition
+
+`getModelCapabilities(provider, model)` now returns a `reasoningEffort` field — a dialect tag, not a value-set enumeration:
+
+```typescript
+caps.reasoningEffort // 'anthropic-effort' | 'openai-effort' | 'gemini-thinking-level' | null
+```
+
+### Positive example — per provider
+
+```typescript
+import { type LlmReasoningEffort } from '@diabolicallabs/llm-client';
+
+// Anthropic
+await anthropicClient.complete(messages, {
+  model: 'claude-opus-5',
+  reasoningEffort: 'xhigh', // 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+});
+
+// OpenAI — all 7 values valid
+await openaiClient.complete(messages, {
+  model: 'gpt-5.6-sol',
+  reasoningEffort: 'none',
+});
+
+// Gemini — uppercase mapping happens internally
+await geminiClient.complete(messages, {
+  model: 'gemini-3.5-flash',
+  reasoningEffort: 'high', // becomes thinkingConfig.thinkingLevel: 'HIGH' on the wire
+});
+
+console.log(response.usage.reasoningTokens); // new in v6.3.0
+```
+
+### Negative example — unsupported value throws before any SDK call
+
+```typescript
+// Anthropic has no 'none'/'minimal' effort levels — throws bad_request, no network call made
+await anthropicClient.complete(messages, {
+  model: 'claude-opus-5',
+  reasoningEffort: 'none', // throws LlmError({ kind: 'bad_request', retryable: false })
+});
+
+// Perplexity and DeepSeek reject reasoningEffort entirely, for every method
+await perplexityClient.complete(messages, { reasoningEffort: 'high' }); // throws bad_request
+```
+
 ## v4.1.x → v4.2.0 — Provider-neutral multimodal content blocks
 
 ### What changed

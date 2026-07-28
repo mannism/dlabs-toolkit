@@ -4,9 +4,10 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**v5.1.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
+**v6.3.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
 
 Highlights:
+- **v6.3.0** — Reasoning-effort passthrough: `reasoningEffort` on `LlmCallOptions` (Anthropic, OpenAI, Gemini — Perplexity/DeepSeek reject), `LlmUsage.reasoningTokens`, and a `reasoningEffort` dialect tag on `ModelCapabilities`. See [Reasoning-effort passthrough](#reasoning-effort-passthrough-v630).
 - **v5.1.0** — Files API: `LlmFilesApi` namespace on every `LlmClient` (`files.upload()`, `files.refresh()`, `files.waitForActive()`, `files.delete()`). New `{ type: 'file', ref: LlmFileRef }` content block for passing uploaded files in messages. Gemini supports video, large images, and PDFs via the Files API; OpenAI supports PDFs; Anthropic supports PDFs and images via the Files beta. Error kinds map to the existing taxonomy (`bad_request` for provider/state mismatches, `network`/`server_error` for SDK failures, `timeout` for waitForActive deadline exceeded). Cross-provider refs throw `bad_request` before any SDK call.
 - **v5.0.0** — **Breaking.** `LlmTool.inputSchema` now requires an `LlmToolSchema` discriminated union (`{ kind: 'zod', schema }` or `{ kind: 'jsonSchema', schema, validate? }`). The legacy `{ parse: fn }` shape throws `LlmError({ kind: 'tool_schema_invalid' })` at runtime. `LlmToolSchema` is exported from the package root. New `tool_schema_invalid` error kind added. See [Tool calling](#tool-calling-v100) for migration examples.
 - **v1.7.0** — `createClient()` is now `async`. `pricing.remoteUrl` config option fetches a remote `PricingTable` on init (stale-while-revalidate cache, 24h default TTL). `pricing.cacheTtlMs` controls the TTL. Structured `pricing_source` log on every `createClient()` with pricing config. Requires `@diabolicallabs/llm-pricing@^0.2.0`.
@@ -510,6 +511,8 @@ console.log(caps.promptCache);      // 'ephemeral'
 console.log(caps.structuredOutput); // 'tool-use'
 console.log(caps.responseIds);      // 'provider'
 console.log(caps.streamStructured); // true
+console.log(caps.mediaInput);       // { image: { base64: true, url: true }, document: { pdfBase64: true } }
+console.log(caps.reasoningEffort);  // 'anthropic-effort'
 ```
 
 Returns `null` for unknown models — never throws.
@@ -527,6 +530,11 @@ interface ModelCapabilities {
   structuredOutput: 'tool-use' | 'json-schema' | 'response-schema' | null;
   responseIds: 'provider' | 'synthesized'; // Gemini = 'synthesized'
   streamStructured: boolean;      // streamStructured() supported
+  mediaInput: {                   // multimodal content block support (v4.2.0+)
+    image: { base64: boolean; url: boolean };
+    document: { pdfBase64: boolean };
+  };
+  reasoningEffort: 'anthropic-effort' | 'openai-effort' | 'gemini-thinking-level' | null; // v6.3.0+
 }
 ```
 
@@ -540,7 +548,59 @@ interface ModelCapabilities {
 | DeepSeek | true | true | null | `'json-schema'` | `'provider'` | true |
 | Perplexity | false | false | null | null | `'provider'` | false |
 
-`getModelCapabilities` covers all models in `@diabolicallabs/llm-pricing`'s `DEFAULT_PRICING_TABLE`. The table is versioned at `CAPABILITIES_VERSIONED_AT: '2026-05-13'` — import it to detect staleness.
+### `reasoningEffort` per provider/model (v6.3.0)
+
+`reasoningEffort` is a dialect tag, not a value-set enumeration — cross-reference it against the accepted `LlmReasoningEffort` subset for that dialect (see [Reasoning-effort passthrough](#reasoning-effort-passthrough-v630) below):
+
+| Dialect tag | Accepted `LlmReasoningEffort` values | Example models |
+|---|---|---|
+| `'anthropic-effort'` | `low`, `medium`, `high`, `xhigh`, `max` | `claude-opus-5`, `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6` |
+| `'openai-effort'` | all 7 values | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-mini`, `o3`, `o4-mini` |
+| `'gemini-thinking-level'` | `minimal`, `low`, `medium`, `high` | `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite`, `gemini-3.5-flash` |
+| `null` | not supported | every Perplexity/DeepSeek row; `gpt-4.1`; Gemini 2.5-series (`thinkingBudget`, not `thinkingLevel`); Anthropic models not listed above |
+
+`getModelCapabilities` covers all models in `@diabolicallabs/llm-pricing`'s `DEFAULT_PRICING_TABLE`. The table is versioned at `CAPABILITIES_VERSIONED_AT: '2026-07-29'` — import it to detect staleness.
+
+## Reasoning-effort passthrough (v6.3.0)
+
+Set `reasoningEffort` on any call to control how many tokens the model spends thinking/reasoning, where the resolved provider/model supports it. Purely additive and opt-in — omitting it changes nothing.
+
+```typescript
+import { createClient } from '@diabolicallabs/llm-client';
+
+const client = createClient({ provider: 'anthropic', model: 'claude-opus-5', apiKey: '...' });
+
+const response = await client.complete(
+  [{ role: 'user', content: 'Analyze the trade-offs between microservices and monoliths.' }],
+  { reasoningEffort: 'high' } // sweep across 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+);
+
+console.log(response.usage.reasoningTokens); // tokens spent on internal reasoning, when reported
+```
+
+**All three providers' accepted value sets differ** — a value unsupported by the resolved provider throws `LlmError({ kind: 'bad_request', retryable: false })` before any SDK call:
+
+| Provider | Wire field | Accepted `LlmReasoningEffort` values |
+|---|---|---|
+| Anthropic | `output_config.effort` | `'low' \| 'medium' \| 'high' \| 'xhigh' \| 'max'` — no `'none'`/`'minimal'` |
+| OpenAI | `reasoning.effort` | all 7 values — `'none' \| 'minimal' \| 'low' \| 'medium' \| 'high' \| 'xhigh' \| 'max'` |
+| Gemini | `thinkingConfig.thinkingLevel` (uppercase on the wire) | `'minimal' \| 'low' \| 'medium' \| 'high'` — no `'none'`/`'xhigh'`/`'max'` |
+| Perplexity, DeepSeek | — | not supported at all; setting `reasoningEffort` throws `bad_request` before any SDK call, for every method |
+
+```typescript
+// OpenAI — all 7 values valid
+await client.complete(messages, { model: 'gpt-5.6-sol', reasoningEffort: 'none' });
+
+// Gemini — uppercase mapping happens internally ('high' -> 'HIGH' on the wire)
+await client.complete(messages, { model: 'gemini-3.5-flash', reasoningEffort: 'high' });
+
+// Throws bad_request before any SDK call — Anthropic has no 'none'/'minimal'
+await client.complete(messages, { model: 'claude-opus-5', reasoningEffort: 'none' }); // throws
+```
+
+**`LlmUsage.reasoningTokens`** is populated from both providers that report a reasoning/thinking token breakdown separately from `outputTokens` — Anthropic (`usage.output_tokens_details.thinking_tokens`) and OpenAI (`usage.output_tokens_details.reasoning_tokens`) — in both the streaming and non-streaming paths. Undefined for Gemini, Perplexity, and DeepSeek, which don't report this breakdown, and undefined when `reasoningEffort` wasn't set.
+
+Cross-reference `getModelCapabilities(provider, model).reasoningEffort` against the table above to know which values a specific model accepts before setting `reasoningEffort` — see [Provider capability matrix](#provider-capability-matrix-v140).
 
 ## Linked AbortController helper (v1.4.0)
 
