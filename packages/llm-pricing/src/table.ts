@@ -154,7 +154,8 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheWrite1hPer1M: 6,
       cacheWritePer1M: 3.75,
       inputPer1M: 3,
-      notes: 'Standard rate ($3/$15), not the temporary intro rate ($2/$10) which runs through 2026-08-31 — this is intentional, do not revert to the intro rate.',
+      notes:
+        'Standard rate ($3/$15), not the temporary intro rate ($2/$10) which runs through 2026-08-31 — this is intentional, do not revert to the intro rate.',
       outputPer1M: 15,
       sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
       verifiedAt: '2026-07-25',

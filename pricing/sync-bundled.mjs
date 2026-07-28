@@ -15,15 +15,41 @@
  * CI can run --check to guard against accidental drift.
  */
 
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const JSON_PATH = resolve(ROOT, 'pricing', 'table.json');
 const TS_PATH = resolve(ROOT, 'packages', 'llm-pricing', 'src', 'table.ts');
+const BIOME_BIN = resolve(ROOT, 'node_modules', '.bin', 'biome');
+
+/**
+ * Run the generated source through the project's actual Biome formatter
+ * (--config-path pinned to ROOT so biome.json's lineWidth/quoteStyle apply
+ * regardless of the temp file's location) rather than hand-rolling
+ * line-wrap logic that would drift from biome.json over time. This keeps
+ * the generator's output byte-identical to what `biome check` expects,
+ * including cases like long `notes` string literals that need to wrap
+ * onto their own line under the 100-char lineWidth.
+ */
+function formatWithBiome(source) {
+  const tmpDir = mkdtempSync(join(tmpdir(), 'sync-bundled-'));
+  const tmpFile = join(tmpDir, 'table.ts');
+  try {
+    writeFileSync(tmpFile, source, 'utf8');
+    execFileSync(BIOME_BIN, ['format', '--write', `--config-path=${ROOT}`, tmpFile], {
+      stdio: 'pipe',
+    });
+    return readFileSync(tmpFile, 'utf8');
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
 
 // ─── Load + validate minimal shape ──────────────────────────────────────────
 
@@ -111,7 +137,7 @@ function renderProvider(providerName, models, baseIndent) {
 // Build the full table literal
 const providerBlocks = REQUIRED_PROVIDERS.map((p) => renderProvider(p, data[p], 2)).join('\n\n');
 
-const generated = `\
+const rawGenerated = `\
 /**
  * Default pricing table for @diabolicallabs/llm-pricing.
  *
@@ -138,6 +164,12 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
 ${providerBlocks}
 };
 `;
+
+// Route the naive serializer's output through Biome so the committed file
+// always matches what `biome check` expects (e.g. long string literals wrap
+// onto their own line under biome.json's lineWidth) without duplicating
+// Biome's formatting rules by hand.
+const generated = formatWithBiome(rawGenerated);
 
 // ─── Check mode ──────────────────────────────────────────────────────────────
 
