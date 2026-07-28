@@ -1949,3 +1949,153 @@ describe('Anthropic provider — Files API beta header auto-injection (v5.1.0)',
     expect(callOptions.headers).toBeUndefined();
   });
 });
+
+// ─── Reasoning-effort passthrough (v6.3.0) ───────────────────────────────────
+
+describe('Anthropic provider — reasoningEffort (v6.3.0)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockMessageResponse());
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: { create: mockCreate, stream: vi.fn() },
+      };
+    });
+  });
+
+  it.each(['low', 'medium', 'high', 'xhigh', 'max'] as const)(
+    "complete(): maps reasoningEffort '%s' to output_config.effort",
+    async (value) => {
+      const client = createAnthropicProvider(TEST_CONFIG);
+      await client.complete([{ role: 'user', content: 'Hi' }], { reasoningEffort: value });
+
+      const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+      expect(callArgs.output_config).toEqual({ effort: value });
+    }
+  );
+
+  it('withTools(): maps reasoningEffort to output_config.effort (second call type)', async () => {
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({ content: [{ type: 'text', text: 'no tools called', citations: null }] })
+    );
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.withTools(
+      [{ role: 'user', content: 'Hi' }],
+      [
+        {
+          name: 'noop',
+          description: 'no-op tool',
+          inputSchema: { kind: 'jsonSchema' as const, schema: { type: 'object' } },
+        },
+      ],
+      { reasoningEffort: 'medium' }
+    );
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    expect(callArgs.output_config).toEqual({ effort: 'medium' });
+  });
+
+  it.each(['none', 'minimal'] as const)(
+    "complete(): '%s' throws bad_request naming 'anthropic' before any SDK call",
+    async (value) => {
+      const client = createAnthropicProvider(TEST_CONFIG);
+      await expect(
+        client.complete([{ role: 'user', content: 'Hi' }], { reasoningEffort: value })
+      ).rejects.toThrow(LlmError);
+
+      expect(mockCreate).not.toHaveBeenCalled();
+
+      try {
+        await client.complete([{ role: 'user', content: 'Hi' }], { reasoningEffort: value });
+      } catch (err) {
+        expect(err).toBeInstanceOf(LlmError);
+        const e = err as LlmError;
+        expect(e.kind).toBe('bad_request');
+        expect(e.retryable).toBe(false);
+        expect(e.message).toContain('anthropic');
+      }
+    }
+  );
+
+  it('does not set output_config when reasoningEffort is unset (purely additive)', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
+    expect(callArgs.output_config).toBeUndefined();
+  });
+
+  it('complete(): surfaces reasoningTokens from output_tokens_details.thinking_tokens', async () => {
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({
+        usage: {
+          input_tokens: 20,
+          output_tokens: 100,
+          output_tokens_details: { thinking_tokens: 60 },
+        } as unknown as Anthropic.Usage,
+      })
+    );
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }], {
+      reasoningEffort: 'high',
+    });
+
+    expect(result.usage.reasoningTokens).toBe(60);
+  });
+
+  it('complete(): reasoningTokens is undefined when the model reports no breakdown', async () => {
+    const client = createAnthropicProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    expect(result.usage.reasoningTokens).toBeUndefined();
+  });
+
+  it('stream(): surfaces reasoningTokens on the final usage chunk (streaming finalUsage path)', async () => {
+    const mockEvents = [
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hi' } },
+      {
+        type: 'message_delta',
+        delta: { stop_reason: 'end_turn', stop_sequence: null },
+        usage: { output_tokens: 40 },
+      },
+    ] as unknown as Anthropic.MessageStreamEvent[];
+
+    const mockFinalMessage = mockMessageResponse({
+      usage: {
+        input_tokens: 15,
+        output_tokens: 40,
+        output_tokens_details: { thinking_tokens: 25 },
+      } as unknown as Anthropic.Usage,
+    });
+
+    const mockStream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield* mockEvents;
+      },
+      finalMessage: vi.fn().mockResolvedValue(mockFinalMessage),
+    };
+
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return {
+        messages: {
+          create: vi.fn(),
+          stream: vi.fn().mockReturnValue(mockStream),
+        },
+      };
+    });
+
+    const client = createAnthropicProvider(TEST_CONFIG);
+    let finalUsage: LlmUsage | undefined;
+
+    for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }], {
+      reasoningEffort: 'high',
+    })) {
+      if (chunk.usage !== undefined) finalUsage = chunk.usage;
+    }
+
+    expect(finalUsage?.reasoningTokens).toBe(25);
+  });
+});

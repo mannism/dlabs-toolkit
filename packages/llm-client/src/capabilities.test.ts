@@ -28,6 +28,7 @@ describe('getModelCapabilities', () => {
     expect(c.structuredOutput).toBe('tool-use');
     expect(c.responseIds).toBe('provider');
     expect(c.streamStructured).toBe(true);
+    expect(c.reasoningEffort).toBe('anthropic-effort');
   });
 
   // ── OpenAI ───────────────────────────────────────────────────────────────
@@ -44,6 +45,7 @@ describe('getModelCapabilities', () => {
     expect(c.structuredOutput).toBe('json-schema');
     expect(c.responseIds).toBe('provider');
     expect(c.streamStructured).toBe(true);
+    expect(c.reasoningEffort).toBe('openai-effort');
   });
 
   // ── Gemini ───────────────────────────────────────────────────────────────
@@ -63,6 +65,8 @@ describe('getModelCapabilities', () => {
     expect(c.responseIds).toBe('synthesized');
     // streamStructured throws bad_request on Gemini
     expect(c.streamStructured).toBe(false);
+    // Gemini 2.5 series uses thinkingBudget, not thinkingLevel — no reasoningEffort support.
+    expect(c.reasoningEffort).toBeNull();
   });
 
   it('returns correct capabilities for gemini-3.5-flash (gemini)', () => {
@@ -81,6 +85,8 @@ describe('getModelCapabilities', () => {
     expect(c.mediaInput.image.base64).toBe(true);
     expect(c.mediaInput.image.url).toBe(false);
     expect(c.mediaInput.document.pdfBase64).toBe(true);
+    // Gemini 3.5 (Gemini 3+ generation) supports thinkingConfig.thinkingLevel.
+    expect(c.reasoningEffort).toBe('gemini-thinking-level');
   });
 
   // ── DeepSeek ─────────────────────────────────────────────────────────────
@@ -97,6 +103,7 @@ describe('getModelCapabilities', () => {
     expect(c.structuredOutput).toBe('json-schema');
     expect(c.responseIds).toBe('provider');
     expect(c.streamStructured).toBe(true);
+    expect(c.reasoningEffort).toBeNull();
   });
 
   // ── Perplexity ───────────────────────────────────────────────────────────
@@ -116,6 +123,7 @@ describe('getModelCapabilities', () => {
     expect(c.responseIds).toBe('provider');
     // streamStructured throws bad_request on Perplexity
     expect(c.streamStructured).toBe(false);
+    expect(c.reasoningEffort).toBeNull();
   });
 
   // ── Unknown model → null ─────────────────────────────────────────────────
@@ -190,5 +198,52 @@ describe('getModelCapabilities', () => {
     expect(c.mediaInput.image.base64).toBe(false);
     expect(c.mediaInput.image.url).toBe(false);
     expect(c.mediaInput.document.pdfBase64).toBe(false);
+  });
+
+  // ── reasoningEffort (v6.3.0) — new claude-opus-5 / GPT-5.6 rows ───────────
+
+  describe('reasoningEffort — new model rows', () => {
+    it('claude-opus-5 (anthropic): anthropic-effort, verified capability figures', () => {
+      const caps = getModelCapabilities('anthropic', 'claude-opus-5');
+      expect(caps).not.toBeNull();
+      const c = caps as ModelCapabilities;
+      expect(c.contextWindow).toBe(1_000_000);
+      expect(c.maxOutputTokens).toBe(128_000);
+      expect(c.reasoningEffort).toBe('anthropic-effort');
+    });
+
+    it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'] as const)(
+      '%s (openai): openai-effort, verified capability figures',
+      (model) => {
+        const caps = getModelCapabilities('openai', model);
+        expect(caps).not.toBeNull();
+        const c = caps as ModelCapabilities;
+        expect(c.contextWindow).toBe(1_000_000);
+        expect(c.maxOutputTokens).toBe(128_000);
+        expect(c.reasoningEffort).toBe('openai-effort');
+      }
+    );
+  });
+
+  // ── reasoningEffort — null default across every Perplexity/DeepSeek row ───
+
+  describe('reasoningEffort — null across all Perplexity/DeepSeek rows', () => {
+    it.each([
+      ['perplexity', 'sonar'],
+      ['perplexity', 'sonar-pro'],
+      ['perplexity', 'sonar-reasoning-pro'],
+      ['perplexity', 'sonar-deep-research'],
+      ['deepseek', 'deepseek-v4-flash'],
+      ['deepseek', 'deepseek-v4-pro'],
+      ['deepseek', 'deepseek-chat'],
+      ['deepseek', 'deepseek-reasoner'],
+    ] as const)(
+      '%s/%s has reasoningEffort: null (no comparable API parameter)',
+      (provider, model) => {
+        const caps = getModelCapabilities(provider, model);
+        expect(caps).not.toBeNull();
+        expect((caps as ModelCapabilities).reasoningEffort).toBeNull();
+      }
+    );
   });
 });
