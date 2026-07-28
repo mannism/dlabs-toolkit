@@ -51,6 +51,7 @@ import type {
 } from '../types.js';
 import { LlmError } from '../types.js';
 import { assertBlocksSupported } from './content-blocks.js';
+import { assertReasoningEffortUnsupported } from './reasoning-effort.js';
 
 const PROVIDER = 'deepseek';
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
@@ -174,6 +175,8 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
   };
 
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
+    // reasoningEffort (v6.3.0+): DeepSeek does not document a comparable parameter.
+    assertReasoningEffortUnsupported(options, PROVIDER);
     const model = options?.model ?? resolvedConfig.model;
     const chatMessages = buildMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
@@ -220,6 +223,8 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     messages: LlmMessage[],
     options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
+    // reasoningEffort (v6.3.0+): DeepSeek does not document a comparable parameter.
+    assertReasoningEffortUnsupported(options, PROVIDER);
     const model = options?.model ?? resolvedConfig.model;
     const chatMessages = buildMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
@@ -278,6 +283,8 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     schema: { parse: (data: unknown) => T },
     options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>> {
+    // reasoningEffort (v6.3.0+): DeepSeek does not document a comparable parameter.
+    assertReasoningEffortUnsupported(options, PROVIDER);
     // Inject JSON-only system instruction. DeepSeek does not guarantee json_object
     // response_format support across all models, so we rely on prompt-level enforcement.
     const jsonSystemInstruction: LlmMessage = {
@@ -376,6 +383,8 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     tools: LlmTool[],
     options?: LlmCallWithToolsOptions
   ): Promise<LlmToolResponse> {
+    // reasoningEffort (v6.3.0+): DeepSeek does not document a comparable parameter.
+    assertReasoningEffortUnsupported(options, PROVIDER);
     const model = options?.model ?? resolvedConfig.model;
     const chatMessages = buildMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
@@ -551,6 +560,8 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     schema: { parse: (data: unknown) => T },
     options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    // reasoningEffort (v6.3.0+): DeepSeek does not document a comparable parameter.
+    assertReasoningEffortUnsupported(options, PROVIDER);
     const jsonSystemInstruction: LlmMessage = {
       role: 'system',
       content:

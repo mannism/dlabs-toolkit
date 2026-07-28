@@ -50,6 +50,7 @@ import {
   type GenerateContentResponseUsageMetadata,
   GoogleGenAI,
   type Part,
+  type ThinkingLevel,
   type ToolConfig,
 } from '@google/genai';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
@@ -81,6 +82,7 @@ import type {
 } from '../types.js';
 import { LlmError } from '../types.js';
 import { assertBlocksSupported, mapGeminiParts } from './content-blocks.js';
+import { resolveReasoningEffort } from './reasoning-effort.js';
 
 const PROVIDER = 'gemini';
 
@@ -274,6 +276,16 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) geminiConfig.temperature = temperature;
 
+          // reasoningEffort (v6.3.0+) — merge into thinkingConfig, never overwrite.
+          // resolveReasoningEffort returns the uppercase provider-native value ('high' -> 'HIGH').
+          const effort = resolveReasoningEffort(options?.reasoningEffort, 'gemini');
+          if (effort !== undefined) {
+            geminiConfig.thinkingConfig = {
+              ...geminiConfig.thinkingConfig,
+              thinkingLevel: effort as ThinkingLevel,
+            };
+          }
+
           // Promise.race: whichever settles first wins. If ctl.signal aborts (timeout or
           // caller cancel), the abortRace rejects; the SDK call continues in the background
           // until the httpOptions.timeout backstop fires. See module-level caveat.
@@ -317,6 +329,15 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) geminiConfig.temperature = temperature;
+
+    // reasoningEffort (v6.3.0+) — merge into thinkingConfig, never overwrite (see complete()).
+    const streamEffort = resolveReasoningEffort(options?.reasoningEffort, 'gemini');
+    if (streamEffort !== undefined) {
+      geminiConfig.thinkingConfig = {
+        ...geminiConfig.thinkingConfig,
+        thinkingLevel: streamEffort as ThinkingLevel,
+      };
+    }
 
     const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
     let sdkStream: AsyncGenerator<GenerateContentResponse>;
@@ -393,6 +414,15 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) geminiConfig.temperature = temperature;
+
+          // reasoningEffort (v6.3.0+) — merge into thinkingConfig, never overwrite (see complete()).
+          const structuredEffort = resolveReasoningEffort(options?.reasoningEffort, 'gemini');
+          if (structuredEffort !== undefined) {
+            geminiConfig.thinkingConfig = {
+              ...geminiConfig.thinkingConfig,
+              thinkingLevel: structuredEffort as ThinkingLevel,
+            };
+          }
 
           return await Promise.race([
             ai.models.generateContent({ model, contents, config: geminiConfig }),
@@ -494,6 +524,15 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) geminiConfig.temperature = temperature;
+
+          // reasoningEffort (v6.3.0+) — merge into thinkingConfig, never overwrite (see complete()).
+          const fallbackEffort = resolveReasoningEffort(options?.reasoningEffort, 'gemini');
+          if (fallbackEffort !== undefined) {
+            geminiConfig.thinkingConfig = {
+              ...geminiConfig.thinkingConfig,
+              thinkingLevel: fallbackEffort as ThinkingLevel,
+            };
+          }
 
           return await Promise.race([
             ai.models.generateContent({ model, contents, config: geminiConfig }),
@@ -617,6 +656,15 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) geminiConfig.temperature = temperature;
+
+          // reasoningEffort (v6.3.0+) — merge into thinkingConfig, never overwrite (see complete()).
+          const toolsEffort = resolveReasoningEffort(options?.reasoningEffort, 'gemini');
+          if (toolsEffort !== undefined) {
+            geminiConfig.thinkingConfig = {
+              ...geminiConfig.thinkingConfig,
+              thinkingLevel: toolsEffort as ThinkingLevel,
+            };
+          }
 
           return await Promise.race([
             ai.models.generateContent({ model, contents, config: geminiConfig }),

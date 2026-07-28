@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { LlmContentBlock } from './types.js';
+import type { LlmCallOptions, LlmContentBlock, LlmReasoningEffort } from './types.js';
 import { LlmError } from './types.js';
 
 describe('LlmError', () => {
@@ -108,5 +108,35 @@ describe('LlmContentBlock type exports', () => {
       type: 'document',
       source: { type: 'base64', mediaType: 'application/pdf' },
     });
+  });
+});
+
+// ─── Reasoning-effort passthrough types (v6.3.0) ─────────────────────────────
+
+describe('LlmReasoningEffort type exports', () => {
+  it('LlmReasoningEffort is importable from the package index (type-level test)', async () => {
+    // Dynamic import verifies the module exports correctly at runtime — LlmReasoningEffort
+    // itself is type-only, so we verify a value export (LlmError) as a proxy for module validity,
+    // matching the same pattern used for LlmContentBlock above.
+    const mod = await import('./index.js');
+    expect(typeof mod.LlmError).toBe('function');
+  });
+
+  it('LlmReasoningEffort accepts all 7 documented values', () => {
+    const values: LlmReasoningEffort[] = [
+      'none',
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+    ];
+    expect(values).toHaveLength(7);
+  });
+
+  it('LlmCallOptions.reasoningEffort accepts a valid LlmReasoningEffort value', () => {
+    const options: LlmCallOptions = { reasoningEffort: 'high' };
+    expect(options.reasoningEffort).toBe('high');
   });
 });

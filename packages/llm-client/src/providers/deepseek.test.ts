@@ -1206,3 +1206,100 @@ describe('DeepSeek provider — multimodal content blocks (v4.2.0)', () => {
     expect(e.kind).toBe('bad_request');
   });
 });
+
+// ─── Reasoning-effort passthrough (v6.3.0) ───────────────────────────────────
+
+describe('DeepSeek provider — reasoningEffort (v6.3.0): rejects for every public method', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn();
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+  });
+
+  function assertRejected(thrown: unknown): void {
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('bad_request');
+      expect(thrown.retryable).toBe(false);
+      expect(thrown.message).toContain('deepseek');
+    }
+    expect(mockCreate).not.toHaveBeenCalled();
+  }
+
+  it('complete(): throws bad_request naming deepseek, no API call', async () => {
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await client
+      .complete([{ role: 'user', content: 'Hi' }], { reasoningEffort: 'high' })
+      .catch((e: unknown) => e);
+    assertRejected(thrown);
+  });
+
+  it('stream(): throws bad_request naming deepseek, no API call', async () => {
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await (async () => {
+      for await (const _ of client.stream([{ role: 'user', content: 'Hi' }], {
+        reasoningEffort: 'high',
+      })) {
+        // consume
+      }
+    })().catch((e: unknown) => e);
+    assertRejected(thrown);
+  });
+
+  it('structured(): throws bad_request naming deepseek, no API call', async () => {
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await client
+      .structured(
+        [{ role: 'user', content: 'Hi' }],
+        { parse: (d: unknown) => d },
+        {
+          reasoningEffort: 'high',
+        }
+      )
+      .catch((e: unknown) => e);
+    assertRejected(thrown);
+  });
+
+  it('withTools(): throws bad_request naming deepseek, no API call', async () => {
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await client
+      .withTools(
+        [{ role: 'user', content: 'Hi' }],
+        [
+          {
+            name: 'noop',
+            description: 'no-op',
+            inputSchema: { kind: 'jsonSchema' as const, schema: { type: 'object' } },
+          },
+        ],
+        { reasoningEffort: 'high' }
+      )
+      .catch((e: unknown) => e);
+    assertRejected(thrown);
+  });
+
+  it('streamStructured(): throws bad_request naming deepseek, no API call', async () => {
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await (async () => {
+      for await (const _ of client.streamStructured(
+        [{ role: 'user', content: 'Hi' }],
+        { parse: (d: unknown) => d },
+        { reasoningEffort: 'high' }
+      )) {
+        // consume
+      }
+    })().catch((e: unknown) => e);
+    assertRejected(thrown);
+  });
+
+  it('complete(): does not throw when reasoningEffort is unset (purely additive)', async () => {
+    mockCreate.mockResolvedValue(mockChatCompletion('ok'));
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    await expect(client.complete([{ role: 'user', content: 'Hi' }])).resolves.toBeDefined();
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+});

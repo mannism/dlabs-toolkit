@@ -64,6 +64,7 @@ import {
   extractTextFromBlocks,
   mapAnthropicContent,
 } from './content-blocks.js';
+import { resolveReasoningEffort } from './reasoning-effort.js';
 
 const PROVIDER = 'anthropic';
 
@@ -71,6 +72,13 @@ const PROVIDER = 'anthropic';
 function normalizeUsage(usage: Anthropic.Usage | undefined): LlmUsage {
   const inputTokens = usage?.input_tokens ?? 0;
   const outputTokens = usage?.output_tokens ?? 0;
+  // output_tokens_details.thinking_tokens (v6.3.0+) — only present when the model actually
+  // used reasoning/thinking. Unlike cacheCreationTokens/cacheReadTokens (top-level Usage
+  // fields, safely narrowed to plain `number` via an intersection cast), this is a nested
+  // field (usage.output_tokens_details.thinking_tokens is `OutputTokensDetails | null` two
+  // levels deep) — genuinely `number | undefined` after optional chaining, so under
+  // exactOptionalPropertyTypes the key must be omitted (not assigned `undefined`) when absent.
+  const thinkingTokens = usage?.output_tokens_details?.thinking_tokens;
   return {
     inputTokens,
     outputTokens,
@@ -81,6 +89,9 @@ function normalizeUsage(usage: Anthropic.Usage | undefined): LlmUsage {
       ?.cache_creation_input_tokens,
     cacheReadTokens: (usage as Anthropic.Usage & { cache_read_input_tokens?: number })
       ?.cache_read_input_tokens,
+    // This single function feeds both non-streaming responses and the streaming finalUsage
+    // path (accum.usage after finalMessage()), so both paths get reasoningTokens for free.
+    ...(thinkingTokens !== undefined && { reasoningTokens: thinkingTokens }),
   };
 }
 
@@ -327,6 +338,17 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
             params.temperature = temperature;
           }
 
+          // reasoningEffort (v6.3.0+) — merge into output_config, never overwrite:
+          // OutputConfig also carries 'format' (structured outputs), which a bare
+          // assignment would silently clobber the moment any call site starts using it.
+          const effort = resolveReasoningEffort(options?.reasoningEffort, 'anthropic');
+          if (effort !== undefined) {
+            params.output_config = {
+              ...params.output_config,
+              effort: effort as NonNullable<Anthropic.OutputConfig['effort']>,
+            };
+          }
+
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline for this call,
           // ensuring the per-call budget matches the AbortController budget (Fix A, v0.4.2).
           // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
@@ -386,6 +408,15 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     const streamTemperature = options?.temperature ?? config.temperature;
     if (streamTemperature !== undefined) {
       params.temperature = streamTemperature;
+    }
+
+    // reasoningEffort (v6.3.0+) — merge into output_config, never overwrite (see complete()).
+    const streamEffort = resolveReasoningEffort(options?.reasoningEffort, 'anthropic');
+    if (streamEffort !== undefined) {
+      params.output_config = {
+        ...params.output_config,
+        effort: streamEffort as NonNullable<Anthropic.OutputConfig['effort']>,
+      };
     }
 
     // Stream is a single attempt — no retry of partial streams.
@@ -502,6 +533,15 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
+          // reasoningEffort (v6.3.0+) — merge into output_config, never overwrite (see complete()).
+          const structuredEffort = resolveReasoningEffort(options?.reasoningEffort, 'anthropic');
+          if (structuredEffort !== undefined) {
+            params.output_config = {
+              ...params.output_config,
+              effort: structuredEffort as NonNullable<Anthropic.OutputConfig['effort']>,
+            };
+          }
+
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
           // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
           return await client.messages.create(params, {
@@ -611,6 +651,15 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     if (system !== undefined) params.system = buildSystemParam(system, promptCache);
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) params.temperature = temperature;
+
+    // reasoningEffort (v6.3.0+) — merge into output_config, never overwrite (see complete()).
+    const streamStructuredEffort = resolveReasoningEffort(options?.reasoningEffort, 'anthropic');
+    if (streamStructuredEffort !== undefined) {
+      params.output_config = {
+        ...params.output_config,
+        effort: streamStructuredEffort as NonNullable<Anthropic.OutputConfig['effort']>,
+      };
+    }
 
     const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
     let sdkStream: Awaited<ReturnType<typeof client.messages.stream>>;
@@ -828,6 +877,15 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           if (system !== undefined) params.system = system;
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
+
+          // reasoningEffort (v6.3.0+) — merge into output_config, never overwrite (see complete()).
+          const toolsEffort = resolveReasoningEffort(options?.reasoningEffort, 'anthropic');
+          if (toolsEffort !== undefined) {
+            params.output_config = {
+              ...params.output_config,
+              effort: toolsEffort as NonNullable<Anthropic.OutputConfig['effort']>,
+            };
+          }
 
           // filesBetaHeaders: auto-inject 'files-api-2025-04-14' when file blocks are present.
           return await client.messages.create(params, {

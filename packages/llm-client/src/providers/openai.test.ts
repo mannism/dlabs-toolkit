@@ -1594,3 +1594,127 @@ describe('OpenAI provider — multimodal content blocks (v4.2.0)', () => {
     });
   });
 });
+
+// ─── Reasoning-effort passthrough (v6.3.0) ───────────────────────────────────
+
+describe('OpenAI provider (Responses API) — reasoningEffort (v6.3.0)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockResponse('Hello, world!'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: mockCreate } };
+    });
+  });
+
+  it.each(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const)(
+    "complete(): maps reasoningEffort '%s' to reasoning.effort — all 7 values valid for OpenAI",
+    async (value) => {
+      const client = createOpenAIProvider(TEST_CONFIG);
+      await client.complete([{ role: 'user', content: 'Hi' }], { reasoningEffort: value });
+
+      const callArgs = mockCreate.mock.calls[0]?.[0] as OpenAI.Responses.ResponseCreateParams;
+      expect(callArgs.reasoning).toEqual({ effort: value });
+    }
+  );
+
+  it('withTools(): maps reasoningEffort to reasoning.effort (second call type)', async () => {
+    mockCreate.mockResolvedValue(mockResponseTextOnly('no tool call'));
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.withTools(
+      [{ role: 'user', content: 'Hi' }],
+      [
+        {
+          name: 'noop',
+          description: 'no-op tool',
+          inputSchema: { kind: 'jsonSchema' as const, schema: { type: 'object' } },
+        },
+      ],
+      { reasoningEffort: 'medium' }
+    );
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as OpenAI.Responses.ResponseCreateParams;
+    expect(callArgs.reasoning).toEqual({ effort: 'medium' });
+  });
+
+  it('structuredPromptFallback(): maps reasoningEffort to reasoning.effort (third call type)', async () => {
+    mockCreate.mockResolvedValue(mockResponse('{"ok":true}'));
+    const schema = { parse: (data: unknown) => data as { ok: boolean } };
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.structured([{ role: 'user', content: 'Return data' }], schema, {
+      reasoningEffort: 'low',
+    });
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as OpenAI.Responses.ResponseCreateParams;
+    expect(callArgs.reasoning).toEqual({ effort: 'low' });
+  });
+
+  it('does not set reasoning when reasoningEffort is unset (purely additive)', async () => {
+    const client = createOpenAIProvider(TEST_CONFIG);
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    const callArgs = mockCreate.mock.calls[0]?.[0] as OpenAI.Responses.ResponseCreateParams;
+    expect(callArgs.reasoning).toBeUndefined();
+  });
+
+  it('complete(): surfaces reasoningTokens from output_tokens_details.reasoning_tokens', async () => {
+    const response = mockResponse('answer', { inputTokens: 30, outputTokens: 120 });
+    (response as unknown as { usage: Record<string, unknown> }).usage = {
+      ...response.usage,
+      output_tokens_details: { reasoning_tokens: 80 },
+    };
+    mockCreate.mockResolvedValue(response);
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }], {
+      reasoningEffort: 'high',
+    });
+
+    expect(result.usage.reasoningTokens).toBe(80);
+  });
+
+  it('complete(): reasoningTokens is undefined when the model reports no breakdown', async () => {
+    const client = createOpenAIProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    expect(result.usage.reasoningTokens).toBeUndefined();
+  });
+
+  it('stream(): surfaces reasoningTokens on response.completed (streaming finalUsage path)', async () => {
+    const mockEvents = [
+      { type: 'response.output_text.delta', delta: 'Hi' },
+      {
+        type: 'response.completed',
+        response: {
+          usage: {
+            input_tokens: 12,
+            output_tokens: 90,
+            total_tokens: 102,
+            output_tokens_details: { reasoning_tokens: 55 },
+          },
+        },
+      },
+    ];
+    const mockStream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield* mockEvents;
+      },
+    };
+    const streamCreate = vi.fn().mockResolvedValue(mockStream);
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: streamCreate } };
+    });
+
+    const client = createOpenAIProvider(TEST_CONFIG);
+    let finalUsage: LlmUsage | undefined;
+
+    for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }], {
+      reasoningEffort: 'high',
+    })) {
+      if (chunk.usage !== undefined) finalUsage = chunk.usage;
+    }
+
+    expect(finalUsage?.reasoningTokens).toBe(55);
+  });
+});

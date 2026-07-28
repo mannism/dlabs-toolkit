@@ -20,6 +20,11 @@ purpose: >
   Capability matrix (getModelCapabilities) with mediaInput fields. linkedAbortController fan-out
   helper. Pre-call hooks API (LlmHooks) — beforeCall (mutation + short-circuit) and afterCall
   (informational) on all 5 call types. Pluggable logger. Remote pricing table via pricing.remoteUrl.
+  Reasoning-effort passthrough (v6.3.0+): LlmCallOptions.reasoningEffort maps to Anthropic
+  output_config.effort, OpenAI reasoning.effort, Gemini thinkingConfig.thinkingLevel (uppercase);
+  Perplexity/DeepSeek reject with bad_request before any SDK call. LlmUsage.reasoningTokens
+  surfaces the model's reasoning-token spend where reported. reasoningEffort dialect tag added
+  to ModelCapabilities.
 owner: Sable
 status: published
 
@@ -70,7 +75,8 @@ exports:
   - "LlmAfterCallContext (type) — context passed to afterCall hooks: request, response, usage, error, latencyMs; usage populated for all 5 call types (v1.5.0+, usage field v1.6.0+)"
   - "LlmHooks (type) — { beforeCall?, afterCall? } interface; pass as hooks? on LlmClientConfig (v1.5.0+)"
   - "getModelCapabilities(provider, model): ModelCapabilities | null — provider capability lookup"
-  - "ModelCapabilities (type) — capability descriptor including mediaInput: { image: { base64, url }, document: { pdfBase64 } } (v4.2.0+)"
+  - "ModelCapabilities (type) — capability descriptor including mediaInput: { image: { base64, url }, document: { pdfBase64 } } (v4.2.0+) and reasoningEffort: 'anthropic-effort' | 'openai-effort' | 'gemini-thinking-level' | null (v6.3.0+)"
+  - "LlmReasoningEffort (type) — 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; set via LlmCallOptions.reasoningEffort (v6.3.0+)"
   - "CAPABILITIES_VERSIONED_AT (constant) — ISO date of last capability table update"
   - "LlmContentBlock (type) — provider-neutral content block: text | image (base64/url) | document (base64) | file (v5.1.0+) (v4.2.0+)"
   - "LlmImageMediaType (type) — 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' (v4.2.0+)"
@@ -134,12 +140,37 @@ failure_modes:
   - trigger: "Model failover — all models in array exhausted"
     impact: "Throws LlmError from the last attempted model"
     propagation: "propagated after all models tried"
+  - trigger: "reasoningEffort set to a value unsupported by the resolved provider (v6.3.0+)"
+    impact: "Throws LlmError kind:'bad_request', retryable:false, before any SDK call. Also thrown for any reasoningEffort value at all on Perplexity/DeepSeek."
+    propagation: "propagated immediately — no retry, no partial request sent"
+  - trigger: "reasoningEffort set against a non-reasoning OpenAI model (e.g. gpt-4.1) (v6.3.0+)"
+    impact: "OpenAI returns HTTP 400; normalizes to LlmError kind:'bad_request' via the existing error path. No internal pre-call capability check — deliberate, see manifest notes."
+    propagation: "propagated after the live API call, not pre-flight"
 
 performance:
   expected_latency: "Passthrough to provider — no overhead beyond retry logic"
   notes: "Token counting is done from the provider response, not via tiktoken. No sync-heavy computation."
 
 notes: |
+  v6.3.0 (minor — additive): reasoning-effort passthrough. New LlmCallOptions.reasoningEffort
+          field (LlmReasoningEffort: 'none'|'minimal'|'low'|'medium'|'high'|'xhigh'|'max').
+          New module providers/reasoning-effort.ts: resolveReasoningEffort() (Anthropic/OpenAI/
+          Gemini — maps to provider-native wire value, Gemini uppercased) and
+          assertReasoningEffortUnsupported() (Perplexity/DeepSeek — always rejects). Anthropic
+          merges into output_config (never overwrites .format) at all 5 call-type sites; OpenAI
+          merges into reasoning at all 6 sites incl. structuredPromptFallback and withTools;
+          Gemini merges into thinkingConfig at all 5 sites. LlmUsage.reasoningTokens added —
+          sourced from output_tokens_details.thinking_tokens (Anthropic) / .reasoning_tokens
+          (OpenAI); both providers route non-streaming and streaming finalUsage through the same
+          normalizeUsage() function, so one change covers both paths. ModelCapabilities gained a
+          reasoningEffort dialect tag (not a value-set enum) — cross-reference against
+          reasoning-effort.ts's exported value sets. New capability rows: claude-opus-5
+          (anthropic-effort), gpt-5.6-sol/terra/luna (openai-effort) — figures verified live
+          against provider docs 2026-07-29. Every pre-existing row backfilled with reasoningEffort
+          (mostly null; anthropic-effort on opus-4-6/4-7 + sonnet-4-6; openai-effort on
+          gpt-5.4/5.4-mini/5.5/5.5-pro/o3/o4-mini; gemini-thinking-level on 3.1-pro-preview/
+          3.1-flash-lite/3.5-flash — Gemini 2.5-series uses thinkingBudget, not thinkingLevel, so
+          stays null). Unblocks the Labs Effort-Level A/B Harness brief.
   v1.0.0: OpenAI Responses API migration; 14-kind LlmError taxonomy; withTools() for all providers.
   v1.1.0: Optional cost tracking via @diabolicallabs/llm-pricing peer dep.
   v1.2.0: Configurable retry strategies (4 modes); provider failover via model: string[];

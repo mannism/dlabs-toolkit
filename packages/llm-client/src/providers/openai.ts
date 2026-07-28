@@ -59,6 +59,7 @@ import type {
 } from '../types.js';
 import { LlmError } from '../types.js';
 import { assertBlocksSupported, mapOpenAIContent } from './content-blocks.js';
+import { resolveReasoningEffort } from './reasoning-effort.js';
 
 const PROVIDER = 'openai';
 
@@ -66,10 +67,17 @@ const PROVIDER = 'openai';
 function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined | null): LlmUsage {
   const inputTokens = usage?.input_tokens ?? 0;
   const outputTokens = usage?.output_tokens ?? 0;
+  // output_tokens_details.reasoning_tokens (v6.3.0+) — only meaningful for reasoning models.
+  // Genuinely `number | undefined` after optional chaining, so under exactOptionalPropertyTypes
+  // the key must be omitted (not assigned `undefined`) when the model didn't report it.
+  const reasoningTokens = usage?.output_tokens_details?.reasoning_tokens;
   return {
     inputTokens,
     outputTokens,
     totalTokens: usage?.total_tokens ?? inputTokens + outputTokens,
+    // This single function feeds both non-streaming responses and the streaming finalUsage
+    // path (event.response.usage on 'response.completed'), so both paths get this for free.
+    ...(reasoningTokens !== undefined && { reasoningTokens }),
   };
 }
 
@@ -237,6 +245,18 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
 
+          // reasoningEffort (v6.3.0+) — merge into reasoning, never overwrite. Known live-API
+          // risk (not a request-shape bug): OpenAI returns 400 if reasoning is sent to a
+          // non-reasoning model (e.g. gpt-4.1) — that 400 normalizes to LlmError({kind:'bad_request'})
+          // via the existing error path; no internal capability pre-check (see brief §OpenAI).
+          const effort = resolveReasoningEffort(options?.reasoningEffort, 'openai');
+          if (effort !== undefined) {
+            params.reasoning = {
+              ...params.reasoning,
+              effort: effort as NonNullable<OpenAI.Reasoning['effort']>,
+            };
+          }
+
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline for this call,
           // ensuring the per-call budget matches the AbortController budget (Fix A, v0.4.2).
           const response = await client.responses.create(params, {
@@ -284,6 +304,15 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) params.temperature = temperature;
+
+    // reasoningEffort (v6.3.0+) — merge into reasoning, never overwrite (see complete()).
+    const streamEffort = resolveReasoningEffort(options?.reasoningEffort, 'openai');
+    if (streamEffort !== undefined) {
+      params.reasoning = {
+        ...params.reasoning,
+        effort: streamEffort as NonNullable<OpenAI.Reasoning['effort']>,
+      };
+    }
 
     const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
     let sdkStream: Awaited<ReturnType<typeof client.responses.create>>;
@@ -381,6 +410,15 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
+
+          // reasoningEffort (v6.3.0+) — merge into reasoning, never overwrite (see complete()).
+          const structuredEffort = resolveReasoningEffort(options?.reasoningEffort, 'openai');
+          if (structuredEffort !== undefined) {
+            params.reasoning = {
+              ...params.reasoning,
+              effort: structuredEffort as NonNullable<OpenAI.Reasoning['effort']>,
+            };
+          }
 
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
           return await client.responses.create(params, {
@@ -499,6 +537,15 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) params.temperature = temperature;
 
+    // reasoningEffort (v6.3.0+) — merge into reasoning, never overwrite (see complete()).
+    const streamStructuredEffort = resolveReasoningEffort(options?.reasoningEffort, 'openai');
+    if (streamStructuredEffort !== undefined) {
+      params.reasoning = {
+        ...params.reasoning,
+        effort: streamStructuredEffort as NonNullable<OpenAI.Reasoning['effort']>,
+      };
+    }
+
     const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
     let sdkStream: Awaited<ReturnType<typeof client.responses.create>>;
 
@@ -615,6 +662,15 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
 
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) params.temperature = temperature;
+
+          // reasoningEffort (v6.3.0+) — merge into reasoning, never overwrite (see complete()).
+          const fallbackEffort = resolveReasoningEffort(options?.reasoningEffort, 'openai');
+          if (fallbackEffort !== undefined) {
+            params.reasoning = {
+              ...params.reasoning,
+              effort: fallbackEffort as NonNullable<OpenAI.Reasoning['effort']>,
+            };
+          }
 
           // timeout: effectiveTimeoutMs overrides the SDK socket deadline (Fix A, v0.4.2).
           return await client.responses.create(params, {
@@ -751,6 +807,15 @@ export function createOpenAIProvider(config: LlmClientConfig): LlmClient {
           // undefined / true → omit (default is parallel-enabled)
           if (options?.parallelToolCalls === false) {
             params.parallel_tool_calls = false;
+          }
+
+          // reasoningEffort (v6.3.0+) — merge into reasoning, never overwrite (see complete()).
+          const toolsEffort = resolveReasoningEffort(options?.reasoningEffort, 'openai');
+          if (toolsEffort !== undefined) {
+            params.reasoning = {
+              ...params.reasoning,
+              effort: toolsEffort as NonNullable<OpenAI.Reasoning['effort']>,
+            };
           }
 
           return await client.responses.create(params, {

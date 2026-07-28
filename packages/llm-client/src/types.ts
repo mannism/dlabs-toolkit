@@ -516,6 +516,15 @@ export interface LlmUsage {
   totalTokens: number;
   cacheCreationTokens?: number; // Anthropic prompt cache write tokens
   cacheReadTokens?: number; // Anthropic prompt cache read tokens
+  /**
+   * Tokens spent on internal reasoning/thinking, where the provider reports it separately
+   * from outputTokens (v6.3.0+). Undefined when the provider doesn't report this breakdown
+   * or reasoningEffort wasn't set.
+   * Sources: Anthropic usage.output_tokens_details.thinking_tokens; OpenAI
+   * usage.output_tokens_details.reasoning_tokens. Gemini and the other providers do not
+   * currently report this breakdown — left undefined, never synthesized.
+   */
+  reasoningTokens?: number;
 }
 
 /**
@@ -579,6 +588,13 @@ export interface LlmResponse {
 }
 
 /**
+ * Reasoning-effort level for a call, where the target provider/model supports it (v6.3.0+).
+ * Value sets differ per provider — see LlmCallOptions.reasoningEffort and
+ * providers/reasoning-effort.ts for the exact per-provider accepted subset.
+ */
+export type LlmReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/**
  * Per-call options shared across complete(), stream(), and structured().
  * Extends the standard model/maxTokens/temperature overrides with:
  *   timeoutMs           — per-call timeout override; overrides config.timeoutMs for this call only.
@@ -624,6 +640,16 @@ export interface LlmCallOptions
    *   Unknown fields are forwarded unchanged.
    */
   providerOptions?: Record<string, unknown>;
+  /**
+   * Reasoning-effort level for this call, where the target provider/model supports it (v6.3.0+).
+   * Anthropic accepts 'low' | 'medium' | 'high' | 'xhigh' | 'max' (no 'none'/'minimal').
+   * Gemini accepts 'minimal' | 'low' | 'medium' | 'high' (no 'none'/'xhigh'/'max').
+   * OpenAI accepts all seven values.
+   * Perplexity and DeepSeek do not support this field at all.
+   * A value unsupported by the resolved provider throws LlmError({ kind: 'bad_request' })
+   * before any SDK call — see providers/reasoning-effort.ts.
+   */
+  reasoningEffort?: LlmReasoningEffort;
 }
 
 /**

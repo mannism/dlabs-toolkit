@@ -1174,3 +1174,81 @@ describe('Gemini provider — multimodal content blocks (v4.2.0)', () => {
     }
   });
 });
+
+// ─── Reasoning-effort passthrough (v6.3.0) ───────────────────────────────────
+
+describe('Gemini provider — reasoningEffort (v6.3.0)', () => {
+  let mockGenerateContent: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateContent = vi.fn().mockResolvedValue(mockGeminiResponse());
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: vi.fn(),
+        },
+      };
+    });
+  });
+
+  it.each([
+    ['minimal', 'MINIMAL'],
+    ['low', 'LOW'],
+    ['medium', 'MEDIUM'],
+    ['high', 'HIGH'],
+  ] as const)(
+    "complete(): maps reasoningEffort '%s' to thinkingConfig.thinkingLevel '%s' (uppercase)",
+    async (value, expected) => {
+      const client = createGeminiProvider(TEST_CONFIG);
+      await client.complete([{ role: 'user', content: 'Hi' }], { reasoningEffort: value });
+
+      const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+        config?: { thinkingConfig?: { thinkingLevel?: string } };
+      };
+      expect(callArgs.config?.thinkingConfig).toEqual({ thinkingLevel: expected });
+    }
+  );
+
+  it.each(['none', 'xhigh', 'max'] as const)(
+    "complete(): '%s' throws bad_request naming 'gemini' before any SDK call",
+    async (value) => {
+      const client = createGeminiProvider(TEST_CONFIG);
+      await expect(
+        client.complete([{ role: 'user', content: 'Hi' }], { reasoningEffort: value })
+      ).rejects.toThrow(LlmError);
+
+      expect(mockGenerateContent).not.toHaveBeenCalled();
+
+      try {
+        await client.complete([{ role: 'user', content: 'Hi' }], { reasoningEffort: value });
+      } catch (err) {
+        expect(err).toBeInstanceOf(LlmError);
+        const e = err as LlmError;
+        expect(e.kind).toBe('bad_request');
+        expect(e.retryable).toBe(false);
+        expect(e.message).toContain('gemini');
+      }
+    }
+  );
+
+  it('does not set thinkingConfig when reasoningEffort is unset (purely additive)', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      config?: { thinkingConfig?: unknown };
+    };
+    expect(callArgs.config?.thinkingConfig).toBeUndefined();
+  });
+
+  it('does not populate usage.reasoningTokens — Gemini does not report this breakdown', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }], {
+      reasoningEffort: 'high',
+    });
+
+    expect(result.usage.reasoningTokens).toBeUndefined();
+  });
+});
