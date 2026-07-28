@@ -78,6 +78,7 @@ import type {
 } from '../types.js';
 import { LlmError } from '../types.js';
 import { assertBlocksSupported } from './content-blocks.js';
+import { assertReasoningEffortUnsupported } from './reasoning-effort.js';
 
 const PROVIDER = 'perplexity';
 const PERPLEXITY_BASE_URL = 'https://api.perplexity.ai';
@@ -272,6 +273,8 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
   };
 
   async function complete(messages: LlmMessage[], options?: LlmCallOptions): Promise<LlmResponse> {
+    // reasoningEffort (v6.3.0+): Perplexity does not document a comparable parameter.
+    assertReasoningEffortUnsupported(options, PROVIDER);
     const model = options?.model ?? resolvedConfig.model;
     const chatMessages = buildMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
@@ -335,6 +338,8 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     messages: LlmMessage[],
     options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamChunk> {
+    // reasoningEffort (v6.3.0+): Perplexity does not document a comparable parameter.
+    assertReasoningEffortUnsupported(options, PROVIDER);
     const model = options?.model ?? resolvedConfig.model;
     const chatMessages = buildMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
@@ -402,6 +407,8 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
     schema: { parse: (data: unknown) => T },
     options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>> {
+    // reasoningEffort (v6.3.0+): Perplexity does not document a comparable parameter.
+    assertReasoningEffortUnsupported(options, PROVIDER);
     // Perplexity's response_format has limitations with reasoning models (reasoning tokens
     // appear before JSON output). Use system-prompt JSON instruction + fence stripping,
     // same as DeepSeek.
@@ -499,8 +506,17 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
   function withTools(
     _messages: LlmMessage[],
     _tools: LlmTool[],
-    _options?: LlmCallWithToolsOptions
+    options?: LlmCallWithToolsOptions
   ): Promise<LlmToolResponse> {
+    // reasoningEffort (v6.3.0+): Perplexity does not document a comparable parameter.
+    // withTools() is intentionally not async (never throws synchronously) — convert the
+    // guard's throw into a rejected promise to preserve that contract for callers that
+    // attach .catch() without awaiting immediately.
+    try {
+      assertReasoningEffortUnsupported(options, PROVIDER);
+    } catch (err) {
+      return Promise.reject(err);
+    }
     return Promise.reject(
       new LlmError({
         message:
@@ -523,8 +539,10 @@ export function createPerplexityProvider(config: LlmClientConfig): LlmClient {
   async function* streamStructured<T>(
     _messages: LlmMessage[],
     _schema: { parse: (data: unknown) => T },
-    _options?: LlmCallOptions
+    options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
+    // reasoningEffort (v6.3.0+): Perplexity does not document a comparable parameter.
+    assertReasoningEffortUnsupported(options, PROVIDER);
     throw new LlmError({
       message:
         'Perplexity provider does not support streamStructured() — search/retrieval models do not return tool-validated JSON',

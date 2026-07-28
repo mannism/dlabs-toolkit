@@ -69,6 +69,8 @@ export type {
   LlmHooks,
   LlmImageMediaType,
   LlmMessage,
+  // Reasoning-effort passthrough — v6.3.0+
+  LlmReasoningEffort,
   LlmResponse,
   LlmSkipResult,
   LlmStreamChunk,

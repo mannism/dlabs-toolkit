@@ -50,6 +50,15 @@ export type LlmProvider = LlmClientConfig['provider'];
  *                        image.url       — accepts LlmContentBlock image with source.type 'url'.
  *                        document.pdfBase64 — accepts LlmContentBlock document with base64 PDF.
  *                        All false for providers that reject media blocks before any SDK call.
+ *   reasoningEffort    — reasoning-effort dialect this model accepts (v6.3.0+).
+ *                        'anthropic-effort'       = output_config.effort (low/medium/high/xhigh/max).
+ *                        'openai-effort'          = reasoning.effort (all 7 LlmReasoningEffort values).
+ *                        'gemini-thinking-level'  = thinkingConfig.thinkingLevel (minimal/low/medium/high).
+ *                        null = this model's provider doesn't support the field, or (for Anthropic/
+ *                        OpenAI/Gemini specifically) this model has not been confirmed to support it.
+ *                        Cross-reference the tag against providers/reasoning-effort.ts's exported
+ *                        value sets for the exact accepted subset — this field is a dialect tag,
+ *                        not a per-model value-set enumeration.
  */
 export interface ModelCapabilities {
   contextWindow: number;
@@ -71,6 +80,7 @@ export interface ModelCapabilities {
     image: { base64: boolean; url: boolean };
     document: { pdfBase64: boolean };
   };
+  reasoningEffort: 'anthropic-effort' | 'openai-effort' | 'gemini-thinking-level' | null;
 }
 
 // ─── Capability table ─────────────────────────────────────────────────────────
@@ -79,7 +89,7 @@ export interface ModelCapabilities {
  * ISO 8601 date the capability table was last verified against provider documentation.
  * Compare against Date.now() to detect staleness.
  */
-export const CAPABILITIES_VERSIONED_AT = '2026-06-17';
+export const CAPABILITIES_VERSIONED_AT = '2026-07-29';
 
 /** Provider-keyed, model-keyed capability lookup table. */
 const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> = {
@@ -94,6 +104,23 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
   // streamStructured: true — Anthropic streams content_block_delta events from the
   //   forced tool-use path; accumulated + Zod-validated at end.
   anthropic: {
+    // claude-opus-5 (v6.3.0+): context window (1M) and max output tokens (128k) verified
+    // live against platform.claude.com/docs/en/about-claude/models/whats-new-opus-5 (2026-07-29).
+    // reasoningEffort confirmed via platform.claude.com/docs/en/build-with-claude/effort, which
+    // lists Claude Opus 5 among the models supporting output_config.effort at all 5 levels.
+    'claude-opus-5': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: 'ephemeral',
+      structuredOutput: 'tool-use',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'anthropic-effort',
+    },
     'claude-opus-4-7': {
       contextWindow: 1_000_000,
       maxOutputTokens: 32_000,
@@ -105,6 +132,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'anthropic-effort',
     },
     'claude-opus-4-6': {
       contextWindow: 200_000,
@@ -117,6 +145,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'anthropic-effort',
     },
     'claude-sonnet-4-6': {
       contextWindow: 200_000,
@@ -129,6 +158,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'anthropic-effort',
     },
     'claude-sonnet-4-5-20250929': {
       contextWindow: 200_000,
@@ -141,6 +171,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: null,
     },
     'claude-haiku-4-5': {
       contextWindow: 200_000,
@@ -153,6 +184,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: null,
     },
     'claude-haiku-4-5-20251001': {
       contextWindow: 200_000,
@@ -165,6 +197,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: null,
     },
     'claude-haiku-3-5': {
       contextWindow: 200_000,
@@ -177,6 +210,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: null,
     },
     'claude-haiku-3': {
       contextWindow: 200_000,
@@ -190,6 +224,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       streamStructured: true,
       // claude-haiku-3 does not support vision or document input
       mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      reasoningEffort: null,
     },
   },
 
@@ -205,6 +240,51 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
   //   against the output budget. maxOutputTokens below is the completion ceiling, not the
   //   reasoning token budget which is additional.
   openai: {
+    // gpt-5.6 family (v6.3.0+): Sol/Terra/Luna are the three tiers; 'gpt-5.6' the bare alias
+    // routes to Sol. Context window (~1.05M, rounded to 1_000_000 for consistency with sibling
+    // gpt-5.x rows) and max output tokens (128k) verified live against
+    // developers.openai.com/api/docs/guides/reasoning + /models/gpt-5.6-sol (2026-07-29).
+    // reasoningEffort: 'openai-effort' confirmed for all three — the reasoning guide explicitly
+    // names gpt-5.6-sol/terra/luna as reasoning.effort-capable models.
+    'gpt-5.6-sol': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'openai-effort',
+    },
+    'gpt-5.6-terra': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'openai-effort',
+    },
+    'gpt-5.6-luna': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'openai-effort',
+    },
     'gpt-5.5': {
       contextWindow: 1_000_000,
       maxOutputTokens: 32_768,
@@ -216,6 +296,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'openai-effort',
     },
     'gpt-5.5-pro': {
       contextWindow: 1_000_000,
@@ -228,6 +309,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'openai-effort',
     },
     'gpt-5.4': {
       contextWindow: 256_000,
@@ -240,6 +322,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'openai-effort',
     },
     'gpt-5.4-mini': {
       contextWindow: 256_000,
@@ -252,6 +335,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'openai-effort',
     },
     'gpt-4.1': {
       contextWindow: 1_000_000,
@@ -264,6 +348,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: null,
     },
     o3: {
       contextWindow: 200_000,
@@ -277,6 +362,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       streamStructured: true,
       // o3 is a reasoning model — vision support documented by OpenAI as supported.
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'openai-effort',
     },
     'o4-mini': {
       contextWindow: 200_000,
@@ -291,6 +377,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       // o4-mini is a reasoning model. OpenAI docs list vision support for o4-mini.
       // Set based on published capability docs (June 2026); reverify if model updates.
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: false } },
+      reasoningEffort: 'openai-effort',
     },
   },
 
@@ -320,6 +407,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       // Gemini accepts image/PDF via inlineData (base64 bytes only).
       // image.url is false — Gemini inlineData does not accept URLs; use base64 bytes only.
       mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      reasoningEffort: 'gemini-thinking-level',
     },
     'gemini-2.5-pro': {
       contextWindow: 1_000_000,
@@ -332,6 +420,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'synthesized',
       streamStructured: false,
       mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      reasoningEffort: null,
     },
     'gemini-2.5-flash': {
       contextWindow: 1_000_000,
@@ -344,6 +433,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'synthesized',
       streamStructured: false,
       mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      reasoningEffort: null,
     },
     'gemini-3.1-flash-lite': {
       contextWindow: 1_000_000,
@@ -356,6 +446,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'synthesized',
       streamStructured: false,
       mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      reasoningEffort: 'gemini-thinking-level',
     },
     // Google's current GA flagship Flash model (released 2026-05-19).
     // contextWindow is 2^20 (1,048,576) per ai.google.dev/gemini-api/docs/models/gemini-3.5-flash.
@@ -370,6 +461,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'synthesized',
       streamStructured: false,
       mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      reasoningEffort: 'gemini-thinking-level',
     },
   },
 
@@ -398,6 +490,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       streamStructured: true,
       // DeepSeek does not support vision or document input (June 2026).
       mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      reasoningEffort: null,
     },
     'deepseek-v4-pro': {
       contextWindow: 64_000,
@@ -410,6 +503,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      reasoningEffort: null,
     },
     // Deprecated aliases — same capabilities as their canonical counterparts.
     // deepseek-reasoner (R1) note: tool-calling support is limited and may not
@@ -425,6 +519,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      reasoningEffort: null,
     },
     'deepseek-reasoner': {
       contextWindow: 64_000,
@@ -437,6 +532,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      reasoningEffort: null,
     },
   },
 
@@ -463,6 +559,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       // Perplexity image support deferred (smoke test not run — PERPLEXITY_API_KEY absent 2026-06-06).
       // All media blocks rejected with bad_request in v4.2.0. Documents always unsupported.
       mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      reasoningEffort: null,
     },
     'sonar-pro': {
       contextWindow: 200_000,
@@ -475,6 +572,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: false,
       mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      reasoningEffort: null,
     },
     'sonar-reasoning-pro': {
       contextWindow: 127_072,
@@ -487,6 +585,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: false,
       mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      reasoningEffort: null,
     },
     'sonar-deep-research': {
       contextWindow: 127_072,
@@ -499,6 +598,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: false,
       mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      reasoningEffort: null,
     },
   },
 };
