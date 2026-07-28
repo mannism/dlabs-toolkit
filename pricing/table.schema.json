@@ -99,6 +99,10 @@
         "sourceUrl": {
           "type": "string",
           "description": "Source URL — official provider docs or best available cross-reference."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Free-text annotation surfaced to editors — not consumed by computeCost() or any runtime logic."
         }
       }
     }

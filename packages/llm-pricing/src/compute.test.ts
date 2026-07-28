@@ -827,3 +827,115 @@ describe('computeCost — new model rows (patch 1)', () => {
     expect(cost.isPartial).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// New model pricing rows — Claude 5 family + GPT-5.6 tiers + Gemini 3.6 (2026-07-25)
+// ---------------------------------------------------------------------------
+
+describe('computeCost — new model rows (2026-07-25 drift-check reconciliation)', () => {
+  const oneMillionEach = basicUsage(1_000_000, 1_000_000);
+
+  it('claude-fable-5: resolves and totals $60.00 for 1M in + 1M out', () => {
+    const cost = computeCost({
+      usage: oneMillionEach,
+      provider: 'anthropic',
+      model: 'claude-fable-5',
+    });
+
+    // Input: 1M × $10.00 = $10.00, Output: 1M × $50.00 = $50.00
+    expect(cost.input).toBeCloseTo(10.0, 5);
+    expect(cost.output).toBeCloseTo(50.0, 5);
+    expect(round(cost.total)).toBe(60.0);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('claude-opus-5: resolves, same tier as claude-opus-4-8', () => {
+    const cost = computeCost({
+      usage: oneMillionEach,
+      provider: 'anthropic',
+      model: 'claude-opus-5',
+    });
+
+    expect(cost.input).toBeCloseTo(5.0, 5);
+    expect(cost.output).toBeCloseTo(25.0, 5);
+    expect(round(cost.total)).toBe(30.0);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('claude-sonnet-5: resolves and totals $18.00 for 1M in + 1M out (standard, not intro, rate)', () => {
+    const cost = computeCost({
+      usage: oneMillionEach,
+      provider: 'anthropic',
+      model: 'claude-sonnet-5',
+    });
+
+    // Input: 1M × $3.00 = $3.00, Output: 1M × $15.00 = $15.00
+    expect(cost.input).toBeCloseTo(3.0, 5);
+    expect(cost.output).toBeCloseTo(15.0, 5);
+    expect(round(cost.total)).toBe(18.0);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('claude-mythos-5: resolves, same tier as claude-fable-5', () => {
+    const cost = computeCost({
+      usage: oneMillionEach,
+      provider: 'anthropic',
+      model: 'claude-mythos-5',
+    });
+
+    expect(cost.input).toBeCloseTo(10.0, 5);
+    expect(cost.output).toBeCloseTo(50.0, 5);
+    expect(round(cost.total)).toBe(60.0);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gpt-5.6-sol: resolves and totals $35.00 for 1M in + 1M out, isPartial (invisible reasoning)', () => {
+    const cost = computeCost({ usage: oneMillionEach, provider: 'openai', model: 'gpt-5.6-sol' });
+
+    // Input: 1M × $5.00 = $5.00, Output: 1M × $30.00 = $30.00
+    expect(cost.input).toBeCloseTo(5.0, 5);
+    expect(cost.output).toBeCloseTo(30.0, 5);
+    expect(round(cost.total)).toBe(35.0);
+    expect(cost.isPartial).toBe(true); // hasInvisibleReasoningTokens
+  });
+
+  it('gpt-5.6-terra: resolves, mid tier of the 5.6 family', () => {
+    const cost = computeCost({ usage: oneMillionEach, provider: 'openai', model: 'gpt-5.6-terra' });
+
+    expect(cost.input).toBeCloseTo(2.5, 5);
+    expect(cost.output).toBeCloseTo(15.0, 5);
+    expect(cost.isPartial).toBe(true);
+  });
+
+  it('gpt-5.6-luna: resolves, lowest tier of the 5.6 family', () => {
+    const cost = computeCost({ usage: oneMillionEach, provider: 'openai', model: 'gpt-5.6-luna' });
+
+    expect(cost.input).toBeCloseTo(1.0, 5);
+    expect(cost.output).toBeCloseTo(6.0, 5);
+    expect(cost.isPartial).toBe(true);
+  });
+
+  it('gemini-3.6-flash: resolves at flat rate, no long-context tier', () => {
+    const cost = computeCost({
+      usage: oneMillionEach,
+      provider: 'gemini',
+      model: 'gemini-3.6-flash',
+    });
+
+    expect(cost.input).toBeCloseTo(1.5, 5);
+    expect(cost.output).toBeCloseTo(7.5, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gemini-3.5-flash-lite: resolves at flat rate', () => {
+    const cost = computeCost({
+      usage: oneMillionEach,
+      provider: 'gemini',
+      model: 'gemini-3.5-flash-lite',
+    });
+
+    expect(cost.input).toBeCloseTo(0.3, 5);
+    expect(cost.output).toBeCloseTo(2.5, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+});
