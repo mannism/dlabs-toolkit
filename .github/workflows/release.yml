@@ -71,7 +71,13 @@ jobs:
           title: 'chore: version packages'
           commit: 'chore: version packages'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A fine-grained PAT, not the default GITHUB_TOKEN. GitHub now requires
+          # manual workflow-run approval on any PR authored by github-actions[bot]
+          # (rolled out 2026-06, see github.blog/changelog/2026-06-11-bot-created-pull-requests-can-run-workflows-if-approved),
+          # which silently stalled the "Version Packages" PR's CI every release
+          # cycle. Using a PAT makes changesets/action author that PR/commit as
+          # a real user, exempting it from the bot-PR approval gate.
+          GITHUB_TOKEN: ${{ secrets.CHANGESETS_PAT }}
           # NPM_TOKEN: read by changesets/action to choose token auth over OIDC.
           # NODE_AUTH_TOKEN: read by the npm CLI (configured via setup-node's registry-url).
           # Both required — different layers of the publish stack read different names.
