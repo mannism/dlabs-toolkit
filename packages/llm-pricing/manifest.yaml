@@ -71,10 +71,16 @@ notes: |
   Sync script: node pricing/sync-bundled.mjs — regenerates packages/llm-pricing/src/table.ts from table.json.
   Run after any pricing/table.json change and commit both files together.
 
-  DeepSeek v4-pro has a 75% promotional discount active through 2026-05-31.
-  Post-discount rates will be ~4× current table values. Monitor via the monthly drift check.
+  DeepSeek v4-pro's promotional discount expired 2026-05-31; table rates reflect the
+  post-discount price. The stale promo note was removed from the table.ts generator header
+  in the v1.3.0 refresh (PR #218).
 
   OpenAI pricing sourced from third-party cross-references (primary page 403'd as of 2026-05-13).
   Verify against official OpenAI page at next quarterly refresh.
 
   pnpm pricing:verify requires PERPLEXITY_API_KEY. Run before merging any pricing table PR.
+
+  v1.3.0 (2026-07-29, PR #218): 9 new model entries — claude-fable-5, claude-opus-5,
+  claude-sonnet-5, claude-mythos-5, gpt-5.6-{sol,terra,luna} (hasInvisibleReasoningTokens),
+  gemini-3.5-flash-lite, gemini-3.6-flash. All verified live against official provider pages
+  2026-07-25. versionedAt bumped to 2026-07-25.
