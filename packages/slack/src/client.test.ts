@@ -13,6 +13,7 @@
  *  - Retry-After header extraction for webhooks
  */
 
+import { WebAPIHTTPError, WebAPIPlatformError, WebAPIRateLimitedError } from '@slack/web-api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createSlackNotifier,
@@ -38,14 +39,18 @@ const { mockPostMessage } = vi.hoisted(() => ({
   mockPostMessage: vi.fn(),
 }));
 
-vi.mock('@slack/web-api', () => {
+vi.mock('@slack/web-api', async () => {
+  // Preserve the real WebAPI*Error classes so mapSdkError's `instanceof` checks
+  // still work against genuine SDK instances constructed in tests below —
+  // only WebClient itself is mocked.
+  const actual = await vi.importActual<typeof import('@slack/web-api')>('@slack/web-api');
   class MockWebClient {
     chat: { postMessage: typeof mockPostMessage };
     constructor() {
       this.chat = { postMessage: mockPostMessage };
     }
   }
-  return { WebClient: MockWebClient };
+  return { ...actual, WebClient: MockWebClient };
 });
 
 // ─────────────────────────────────────────────
@@ -172,6 +177,63 @@ describe('mapSdkError — error mapping', () => {
   it('maps unknown non-Error value to SlackError (generic)', () => {
     expect(mapSdkError('string error')).toBeInstanceOf(SlackError);
   });
+
+  // Regression: a genuine WebAPIPlatformError instance (not just a duck-typed
+  // mock) must classify identically to the existing duck-typed test cases above.
+  it('maps a real WebAPIPlatformError instance (invalid_auth) to SlackAuthError', () => {
+    const err = new WebAPIPlatformError({ ok: false, error: 'invalid_auth' });
+    expect(mapSdkError(err)).toBeInstanceOf(SlackAuthError);
+  });
+
+  it('maps a real WebAPIPlatformError instance (channel_not_found) to SlackChannelNotFoundError', () => {
+    const err = new WebAPIPlatformError({ ok: false, error: 'channel_not_found' });
+    expect(mapSdkError(err)).toBeInstanceOf(SlackChannelNotFoundError);
+  });
+
+  // Previously-uncovered SDK error type: raw HTTP-layer failure, no `.data` field.
+  it('maps a WebAPIHTTPError with statusCode 503 to SlackUnavailableError', () => {
+    const err = new WebAPIHTTPError(503, 'Service Unavailable', {});
+    expect(mapSdkError(err)).toBeInstanceOf(SlackUnavailableError);
+  });
+
+  it('maps a WebAPIHTTPError with statusCode 401 to SlackAuthError', () => {
+    const err = new WebAPIHTTPError(401, 'Unauthorized', {});
+    expect(mapSdkError(err)).toBeInstanceOf(SlackAuthError);
+  });
+
+  it('maps a WebAPIHTTPError with statusCode 429 to SlackRateLimitError', () => {
+    const err = new WebAPIHTTPError(429, 'Too Many Requests', {});
+    const mapped = mapSdkError(err);
+    expect(mapped).toBeInstanceOf(SlackRateLimitError);
+    expect((mapped as SlackRateLimitError).kind).toBe('exceeded');
+  });
+
+  it('maps a WebAPIHTTPError with statusCode 400 to generic SlackError', () => {
+    const err = new WebAPIHTTPError(400, 'Bad Request', {});
+    const mapped = mapSdkError(err);
+    expect(mapped).toBeInstanceOf(SlackError);
+    expect(mapped).not.toBeInstanceOf(SlackAuthError);
+    expect(mapped).not.toBeInstanceOf(SlackUnavailableError);
+    expect(mapped).not.toBeInstanceOf(SlackRateLimitError);
+  });
+
+  // Previously-uncovered SDK error type: dedicated rate-limit exception (only
+  // thrown when the client is constructed with rejectRateLimitedCalls: true —
+  // currently dormant in this wrapper, but must classify correctly regardless).
+  it('maps a WebAPIRateLimitedError to SlackRateLimitError with retryAfterMs from the instance', () => {
+    const err = new WebAPIRateLimitedError(30);
+    const mapped = mapSdkError(err);
+    expect(mapped).toBeInstanceOf(SlackRateLimitError);
+    expect((mapped as SlackRateLimitError).kind).toBe('exceeded');
+    expect((mapped as SlackRateLimitError).retryAfterMs).toBe(30_000);
+  });
+
+  it('maps a WebAPIRateLimitedError with retryAfter=0 to SlackRateLimitError with null retryAfterMs', () => {
+    const err = new WebAPIRateLimitedError(0);
+    const mapped = mapSdkError(err);
+    expect(mapped).toBeInstanceOf(SlackRateLimitError);
+    expect((mapped as SlackRateLimitError).retryAfterMs).toBeNull();
+  });
 });
 
 // ─────────────────────────────────────────────
@@ -182,6 +244,11 @@ describe('extractRetryAfterMs', () => {
   it('returns retryAfter * 1000 when present', () => {
     const err = makeSlackApiError('ratelimited', 429, { retryAfter: 30 });
     expect(extractRetryAfterMs(err)).toBe(30_000);
+  });
+
+  it('returns retryAfter * 1000 for a real WebAPIRateLimitedError instance', () => {
+    const err = new WebAPIRateLimitedError(45);
+    expect(extractRetryAfterMs(err)).toBe(45_000);
   });
 
   it('returns null when retryAfter is absent', () => {
