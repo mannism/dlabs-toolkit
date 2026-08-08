@@ -337,6 +337,46 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
       reasoningEffort: 'openai-effort',
     },
+    // gpt-5.4-nano (v6.4.0+): diverges from sibling gpt-5.4/gpt-5.4-mini — context window
+    // (400k) and max output tokens (128k) verified live against
+    // developers.openai.com/api/docs/models/gpt-5.4-nano (2026-08-08). Function calling,
+    // vision, and file_search/PDF input all confirmed supported on the same page.
+    // reasoningEffort: 'openai-effort' confirmed — page lists reasoning.effort levels
+    // none/low/medium/high/xhigh.
+    'gpt-5.4-nano': {
+      contextWindow: 400_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'openai-effort',
+    },
+    // gpt-5.4-pro (v6.4.0+): priced at extended-reasoning-workload rates identical to
+    // gpt-5.5-pro ($30/$180 per 1M, pricing/table.json), but its capability shape diverges
+    // from gpt-5.5-pro's maxOutputTokens (32_768) — verified live against
+    // developers.openai.com/api/docs/models/gpt-5.4-pro (2026-08-08): context window
+    // 1,050,000 (rounded to 1_000_000 per the gpt-5.6 rounding convention above) and max
+    // output tokens 128,000. Function calling, vision, and file_search/PDF input confirmed
+    // supported on the same page. reasoningEffort: 'openai-effort' confirmed — page lists
+    // reasoning.effort levels medium/high/xhigh.
+    'gpt-5.4-pro': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'openai-effort',
+    },
     'gpt-4.1': {
       contextWindow: 1_000_000,
       maxOutputTokens: 32_768,
@@ -451,6 +491,41 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
     // Google's current GA flagship Flash model (released 2026-05-19).
     // contextWindow is 2^20 (1,048,576) per ai.google.dev/gemini-api/docs/models/gemini-3.5-flash.
     'gemini-3.5-flash': {
+      contextWindow: 1_048_576,
+      maxOutputTokens: 65_536,
+      streaming: true,
+      tools: true,
+      parallelTools: false,
+      promptCache: null,
+      structuredOutput: 'response-schema',
+      responseIds: 'synthesized',
+      streamStructured: false,
+      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      reasoningEffort: 'gemini-thinking-level',
+    },
+    // gemini-3.5-flash-lite (v6.4.0+): input token limit 1,048,576 and output token limit
+    // 65,536 verified live against ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite
+    // (2026-08-08) — same shape as sibling gemini-3.5-flash, not gemini-3.1-flash-lite's
+    // lower 8_192 output ceiling. Thinking and function calling both confirmed supported
+    // on the same page.
+    'gemini-3.5-flash-lite': {
+      contextWindow: 1_048_576,
+      maxOutputTokens: 65_536,
+      streaming: true,
+      tools: true,
+      parallelTools: false,
+      promptCache: null,
+      structuredOutput: 'response-schema',
+      responseIds: 'synthesized',
+      streamStructured: false,
+      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      reasoningEffort: 'gemini-thinking-level',
+    },
+    // gemini-3.6-flash (v6.4.0+): input token limit 1,048,576 and output token limit
+    // 65,536 verified live against ai.google.dev/gemini-api/docs/models/gemini-3.6-flash
+    // (2026-08-08) — same shape as sibling gemini-3.5-flash. Thinking and function calling
+    // both confirmed supported on the same page.
+    'gemini-3.6-flash': {
       contextWindow: 1_048_576,
       maxOutputTokens: 65_536,
       streaming: true,

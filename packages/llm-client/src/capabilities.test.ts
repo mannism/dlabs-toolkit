@@ -225,6 +225,43 @@ describe('getModelCapabilities', () => {
     );
   });
 
+  // ── reasoningEffort (v6.4.0) — gpt-5.4-pro/nano + gemini-3.5-flash-lite/3.6-flash ──
+
+  describe('reasoningEffort — gpt-5.4-pro/nano + gemini-3.5-flash-lite/3.6-flash rows', () => {
+    it('gpt-5.4-nano (openai): openai-effort, verified capability figures', () => {
+      const caps = getModelCapabilities('openai', 'gpt-5.4-nano');
+      expect(caps).not.toBeNull();
+      const c = caps as ModelCapabilities;
+      expect(c.contextWindow).toBe(400_000);
+      expect(c.maxOutputTokens).toBe(128_000);
+      expect(c.reasoningEffort).toBe('openai-effort');
+    });
+
+    it('gpt-5.4-pro (openai): openai-effort, verified capability figures', () => {
+      const caps = getModelCapabilities('openai', 'gpt-5.4-pro');
+      expect(caps).not.toBeNull();
+      const c = caps as ModelCapabilities;
+      expect(c.contextWindow).toBe(1_000_000);
+      expect(c.maxOutputTokens).toBe(128_000);
+      expect(c.reasoningEffort).toBe('openai-effort');
+    });
+
+    it.each(['gemini-3.5-flash-lite', 'gemini-3.6-flash'] as const)(
+      '%s (gemini): gemini-thinking-level, verified capability figures',
+      (model) => {
+        const caps = getModelCapabilities('gemini', model);
+        expect(caps).not.toBeNull();
+        const c = caps as ModelCapabilities;
+        expect(c.contextWindow).toBe(1_048_576);
+        expect(c.maxOutputTokens).toBe(65_536);
+        expect(c.mediaInput.image.base64).toBe(true);
+        expect(c.mediaInput.image.url).toBe(false);
+        expect(c.mediaInput.document.pdfBase64).toBe(true);
+        expect(c.reasoningEffort).toBe('gemini-thinking-level');
+      }
+    );
+  });
+
   // ── reasoningEffort — null default across every Perplexity/DeepSeek row ───
 
   describe('reasoningEffort — null across all Perplexity/DeepSeek rows', () => {
