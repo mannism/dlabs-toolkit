@@ -72,6 +72,11 @@ function isPgErrorWithCode(err: unknown, code: string): boolean {
   );
 }
 
+/**
+ * Reference `PromptStorageAdapter` implementation backed by a `pg`-shaped
+ * pool (see {@link PgPoolLike}). See the file-level comment above for the
+ * structural-typing and parameterized-query invariants this class upholds.
+ */
 export class PostgresPromptStorageAdapter implements PromptStorageAdapter {
   private readonly pool: PgPoolLike;
 

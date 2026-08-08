@@ -36,6 +36,7 @@ import {
   versionArgSchema,
 } from './types.js';
 
+/** Per-entry outcome of `seed()` — one row per input SeedPromptEntry, reporting whether it created v1 or found an existing version already in place. */
 export interface SeedResult {
   name: string;
   type: string;
@@ -43,10 +44,16 @@ export interface SeedResult {
   version: number;
 }
 
+/** Config passed to {@link createPromptRegistry}. */
 export interface PromptRegistryConfig {
   adapter: PromptStorageAdapter;
 }
 
+/**
+ * The admin-standard §S7 prompt lifecycle API: seed, get, publish, history,
+ * rollback. Backend-agnostic — every method routes through the injected
+ * PromptStorageAdapter, never touching storage directly.
+ */
 export interface PromptRegistry {
   /** Idempotent: for each entry, inserts v1 (active) only if no version exists yet for (name, type). Existing versions are never touched — safe to run on every deploy. */
   seed(entries: SeedPromptEntry[]): Promise<SeedResult[]>;
@@ -71,6 +78,12 @@ function parseOrThrow<T>(schema: z.ZodType<T>, value: unknown): T {
   return result.data;
 }
 
+/**
+ * Constructs a {@link PromptRegistry} backed by the given storage adapter.
+ * Pure factory — no I/O happens at construction time; call `ensureSchema()`
+ * on the adapter separately (typically once at app startup) before using
+ * the returned registry.
+ */
 export function createPromptRegistry(config: PromptRegistryConfig): PromptRegistry {
   const { adapter } = config;
 

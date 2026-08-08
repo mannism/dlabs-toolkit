@@ -47,29 +47,38 @@ export const seedPromptEntrySchema = z.object({
   content: promptContentSchema,
   changeNotes: z.string().max(2000).optional(),
 });
+/** Inferred TS shape of {@link seedPromptEntrySchema} — the validated input type for `seed()`. */
 export type SeedPromptEntry = z.infer<typeof seedPromptEntrySchema>;
 
+/** Options for `get()`. `type` defaults to {@link DEFAULT_PROMPT_TYPE}; `version` defaults to `'latest'` (the active version). Passing a specific version number bypasses active-state and returns that row regardless. */
 export const getOptionsSchema = z.object({
   type: promptTypeSchema.optional(),
   version: z.union([z.number().int().positive(), z.literal('latest')]).optional(),
 });
+/** Inferred TS shape of {@link getOptionsSchema}. */
 export type GetOptions = z.infer<typeof getOptionsSchema>;
 
+/** Optional metadata accepted by `publish()` alongside the new content — attribution and change notes for the inserted version row. */
 export const publishMetaSchema = z.object({
   type: promptTypeSchema.optional(),
   createdBy: z.string().max(255).optional(),
   changeNotes: z.string().max(2000).optional(),
 });
+/** Inferred TS shape of {@link publishMetaSchema}. */
 export type PublishMeta = z.infer<typeof publishMetaSchema>;
 
+/** Options for `history()` — currently just the `type` dimension to scope which prompt_type's versions are listed. */
 export const historyOptionsSchema = z.object({
   type: promptTypeSchema.optional(),
 });
+/** Inferred TS shape of {@link historyOptionsSchema}. */
 export type HistoryOptions = z.infer<typeof historyOptionsSchema>;
 
+/** Options for `rollback()` — currently just the `type` dimension to scope which prompt_type's version is re-activated. */
 export const rollbackOptionsSchema = z.object({
   type: promptTypeSchema.optional(),
 });
+/** Inferred TS shape of {@link rollbackOptionsSchema}. */
 export type RollbackOptions = z.infer<typeof rollbackOptionsSchema>;
 
 /** Zod-validated positional-argument schemas, used internally to validate (name, version) pairs before they reach the storage adapter. */
