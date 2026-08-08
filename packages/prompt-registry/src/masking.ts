@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 /** Number of leading characters kept unmasked in maskPromptBody()'s default preview mode. */
 const PREVIEW_CHARS = 60;
 
+/** Redaction strategy for {@link maskPromptBody} — see that function's doc for what each mode produces. */
 export type MaskMode = 'full' | 'preview' | 'hash';
 
 /**

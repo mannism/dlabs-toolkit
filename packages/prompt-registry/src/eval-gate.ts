@@ -19,6 +19,7 @@
 import { spawn } from 'node:child_process';
 import { PromptEvalGateFailedError } from './errors.js';
 
+/** Options for {@link runPromptEvalGate}. */
 export interface EvalGateOptions {
   /** Path to the prompt file whose content changed — passed to the eval script. */
   promptPath: string;
@@ -36,11 +37,17 @@ export interface EvalGateOptions {
   throwOnFailure?: boolean;
 }
 
+/** Outcome of a single {@link runPromptEvalGate} run. */
 export interface EvalGateResult {
+  /** True when the eval script exited 0. */
   passed: boolean;
+  /** Raw process exit code, or null if the process was killed (e.g. by the timeout). */
   exitCode: number | null;
+  /** Captured stdout from the eval script. */
   stdout: string;
+  /** Captured stderr from the eval script. */
   stderr: string;
+  /** Wall-clock duration of the eval script run, in milliseconds. */
   durationMs: number;
 }
 
