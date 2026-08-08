@@ -30,14 +30,14 @@
     "release": "turbo run build && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.4",
+    "@biomejs/biome": "^2.5.6",
     "@changesets/cli": "^2.31.1",
     "@typescript-eslint/eslint-plugin": "^8.65.0",
     "@typescript-eslint/parser": "^8.65.0",
-    "eslint": "^10.7.0",
-    "turbo": "^2.10.5",
+    "eslint": "^10.8.0",
+    "turbo": "^2.10.7",
     "typescript": "^6.0.3",
-    "vite": "^8.1.5"
+    "vite": "^8.2.0"
   },
   "packageManager": "pnpm@9.15.0",
   "pnpm": {
@@ -46,7 +46,10 @@
       "ws": ">=8.21.0",
       "protobufjs": ">=8.6.6",
       "form-data": ">=4.0.6",
-      "brace-expansion": ">=5.0.8"
+      "brace-expansion": ">=5.0.9",
+      "nanoid": ">=3.3.17",
+      "read-yaml-file>js-yaml": ">=3.15.1 <4.0.0",
+      "@changesets/parse>js-yaml": ">=4.3.1 <5.0.0"
     }
   }
 }
