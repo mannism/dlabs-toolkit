@@ -121,6 +121,57 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
       reasoningEffort: 'anthropic-effort',
     },
+    // claude-fable-5 (v6.5.0+): context window (1M) and max output tokens (128k) verified
+    // live against platform.claude.com/docs/en/about-claude/models/overview (2026-08-08).
+    // reasoningEffort confirmed via platform.claude.com/docs/en/build-with-claude/effort (2026-08-08),
+    // which lists claude-fable-5 in the "Supported models" line for output_config.effort.
+    'claude-fable-5': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: 'ephemeral',
+      structuredOutput: 'tool-use',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'anthropic-effort',
+    },
+    // claude-sonnet-5 (v6.5.0+): context window (1M) and max output tokens (128k) verified
+    // live against platform.claude.com/docs/en/about-claude/models/overview (2026-08-08).
+    // reasoningEffort confirmed via platform.claude.com/docs/en/build-with-claude/effort (2026-08-08),
+    // which lists claude-sonnet-5 in the "Supported models" line for output_config.effort.
+    'claude-sonnet-5': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: 'ephemeral',
+      structuredOutput: 'tool-use',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'anthropic-effort',
+    },
+    // claude-opus-4-8 (v6.5.0+): context window (1M) and max output tokens (128k) verified
+    // live against platform.claude.com/docs/en/about-claude/models/overview (2026-08-08).
+    // reasoningEffort confirmed via platform.claude.com/docs/en/build-with-claude/effort (2026-08-08),
+    // which lists claude-opus-4-8 in the "Supported models" line for output_config.effort.
+    'claude-opus-4-8': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: 'ephemeral',
+      structuredOutput: 'tool-use',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      reasoningEffort: 'anthropic-effort',
+    },
     'claude-opus-4-7': {
       contextWindow: 1_000_000,
       maxOutputTokens: 32_000,

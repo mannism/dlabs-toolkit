@@ -262,6 +262,25 @@ describe('getModelCapabilities', () => {
     );
   });
 
+  // ── reasoningEffort (v6.5.0) — claude-fable-5/opus-4-8/sonnet-5 rows ──────
+
+  describe('reasoningEffort — claude-fable-5/opus-4-8/sonnet-5 rows', () => {
+    it.each(['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-5'] as const)(
+      '%s (anthropic): anthropic-effort, verified capability figures',
+      (model) => {
+        const caps = getModelCapabilities('anthropic', model);
+        expect(caps).not.toBeNull();
+        const c = caps as ModelCapabilities;
+        expect(c.contextWindow).toBe(1_000_000);
+        expect(c.maxOutputTokens).toBe(128_000);
+        expect(c.mediaInput.image.base64).toBe(true);
+        expect(c.mediaInput.image.url).toBe(true);
+        expect(c.mediaInput.document.pdfBase64).toBe(true);
+        expect(c.reasoningEffort).toBe('anthropic-effort');
+      }
+    );
+  });
+
   // ── reasoningEffort — null default across every Perplexity/DeepSeek row ───
 
   describe('reasoningEffort — null across all Perplexity/DeepSeek rows', () => {
