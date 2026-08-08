@@ -1,6 +1,6 @@
 # @diabolicallabs/llm-pricing
 
-Pricing table + cost computation for `@diabolicallabs/llm-client`. Converts `LlmUsage` token counts to per-call USD cost breakdowns across all five supported providers. © Diabolical Labs
+Pricing table + cost computation for `@diabolicallabs/llm-client`. Converts `LlmUsage` token counts to per-call USD cost breakdowns across all six supported providers (Anthropic, OpenAI, Gemini, DeepSeek, Perplexity, xAI). © Diabolical Labs
 
 **Stable since 1.0.0** (2026-05-18). The public API — `computeCost`, `resolveModelPricing`, `fetchRemoteTable`, `DEFAULT_PRICING_TABLE`, and the exported type shapes — is committed. Pricing-table refreshes and new model additions ship as minor releases. Breaking schema changes (e.g. multimodal billing extensions) will be flagged in advance and shipped as a major.
 
@@ -40,12 +40,12 @@ const cost = computeCost({
 
 ## Pricing table
 
-The default table covers all five providers. Access it directly:
+The default table covers all six providers (Anthropic, OpenAI, Gemini, DeepSeek, Perplexity, xAI). Access it directly:
 
 ```typescript
 import { DEFAULT_PRICING_TABLE } from '@diabolicallabs/llm-pricing';
 
-console.log(DEFAULT_PRICING_TABLE.versionedAt); // '2026-05-18'
+console.log(DEFAULT_PRICING_TABLE.versionedAt); // '2026-07-25'
 
 // Consumer override — merge your rates over the defaults
 const cost = computeCost({
