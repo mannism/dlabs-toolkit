@@ -71,11 +71,11 @@ importers:
         specifier: ^0.115.0
         version: 0.115.0(zod@4.4.3)
       '@google/genai':
-        specifier: ^2.13.0
-        version: 2.13.0
+        specifier: ^2.15.0
+        version: 2.15.0
       openai:
         specifier: ^7.4.0
-        version: 7.4.0(ws@8.21.1)(zod@4.4.3)
+        version: 7.4.0(ws@8.21.3)(zod@4.4.3)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -587,8 +587,8 @@ packages:
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@google/genai@2.13.0':
-    resolution: {integrity: sha512-GM7C8Kaomvjz05x5JEO6+l3d/pciL9LxAG9dUjJLD7nTPZ9X0Cfsf2Z7eET6UjgWyUmxXCHtYnQoQ77F9+ZIOQ==}
+  '@google/genai@2.15.0':
+    resolution: {integrity: sha512-Q41TvqwBQ9NcmWdh6qxY5qrpg+0FaVHD7febQoH007pykxzco4ohScBUP4BBBy+Q8j5D8euIBSRIBDfWuNVCKA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.25.2
@@ -2111,8 +2111,8 @@ packages:
     engines: {node: '>=10.13.0'}
     hasBin: true
 
-  protobufjs@8.7.1:
-    resolution: {integrity: sha512-agdGHrXNTv0IrYscJPDou/PlEJk1c/hBZ9o/B5NH2i/nSPtPqacNxzgwf1CebXxFMjMrZH5sqv9uQuw96aGt/A==}
+  protobufjs@8.7.2:
+    resolution: {integrity: sha512-oTVHV+oelUBtiu5iTuTNNZ0eLYsXSMxry4cgr30mayNkgIZL6qZ0IOQVPuSWGcyAaXKl/XgqwWHIC3a0khYVBA==}
     engines: {node: '>=12.0.0'}
 
   proxy-from-env@2.1.0:
@@ -2506,8 +2506,8 @@ packages:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
     engines: {node: '>=10'}
 
-  ws@8.21.1:
-    resolution: {integrity: sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw==}
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -2869,12 +2869,12 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@google/genai@2.13.0':
+  '@google/genai@2.15.0':
     dependencies:
       google-auth-library: 10.9.1
       p-retry: 4.6.2
-      protobufjs: 8.7.1
-      ws: 8.21.1
+      protobufjs: 8.7.2
+      ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -4149,9 +4149,9 @@ snapshots:
 
   obug@2.1.4: {}
 
-  openai@7.4.0(ws@8.21.1)(zod@4.4.3):
+  openai@7.4.0(ws@8.21.3)(zod@4.4.3):
     optionalDependencies:
-      ws: 8.21.1
+      ws: 8.21.3
       zod: 4.4.3
 
   optionator@0.9.4:
@@ -4299,7 +4299,7 @@ snapshots:
 
   prettier@2.8.8: {}
 
-  protobufjs@8.7.1:
+  protobufjs@8.7.2:
     dependencies:
       long: 5.3.2
 
@@ -4650,7 +4650,7 @@ snapshots:
       string-width: 4.2.3
       strip-ansi: 6.0.1
 
-  ws@8.21.1: {}
+  ws@8.21.3: {}
 
   xtend@4.0.2: {}
 
