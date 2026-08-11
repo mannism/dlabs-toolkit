@@ -217,6 +217,8 @@ describe('complete()', () => {
     // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['model']).toBe('claude-sonnet-4-6');
     // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(body['provider']).toBe('anthropic');
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['prompt_tokens']).toBe(mockUsage.inputTokens);
     // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['completion_tokens']).toBe(mockUsage.outputTokens);
@@ -885,6 +887,8 @@ describe('withTools()', () => {
     // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['model']).toBe('claude-sonnet-4-6');
     // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
+    expect(body['provider']).toBe('anthropic');
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['prompt_tokens']).toBe(mockUsage.inputTokens);
     // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>; dot notation rejected by noPropertyAccessFromIndexSignature
     expect(body['completion_tokens']).toBe(mockUsage.outputTokens);
@@ -1068,6 +1072,9 @@ describe('requestedModel propagation from provider failover', () => {
     expect(body['model']).toBe('claude-3-haiku-20240307');
     // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>
     expect(body['requestedModel']).toBe('claude-opus-4-99');
+    // provider is invariant per instrumented client — failover changes model, not provider
+    // biome-ignore lint/complexity/useLiteralKeys: body is Record<string, unknown>
+    expect(body['provider']).toBe('anthropic');
   });
 
   it('complete(): CallRecord omits requestedModel when no failover occurred', async () => {

@@ -57,6 +57,7 @@ import type {
   LlmCallOptions,
   LlmClient,
   LlmMessage,
+  LlmProvider,
   LlmResponse,
   LlmStreamChunk,
   LlmStreamStructuredEvent,
@@ -100,19 +101,24 @@ function isValidUuid(value: string): boolean {
  * on the LlmClient. When undefined, the cost field is omitted from the record.
  * requestedModel is optional — propagated from LlmResponse.requestedModel when
  * provider failover occurred. When present, model = actually-serving fallback model.
+ * provider is always populated (v3.3.0+) — read from the wrapped LlmClient's
+ * config.provider, a required, readonly-enforced, construction-time-invariant field.
  */
-function buildCallRecord(
-  usage: LlmUsage,
-  model: string,
-  latencyMs: number,
-  config: AgentSdkConfig,
-  toolResponse?: LlmToolResponse,
-  cost?: LlmCost,
-  requestedModel?: string
-): CallRecord {
+function buildCallRecord(opts: {
+  usage: LlmUsage;
+  model: string;
+  latencyMs: number;
+  config: AgentSdkConfig;
+  provider: LlmProvider;
+  toolResponse?: LlmToolResponse;
+  cost?: LlmCost;
+  requestedModel?: string;
+}): CallRecord {
+  const { usage, model, latencyMs, config, provider, toolResponse, cost, requestedModel } = opts;
   return {
     agent_id: config.identity.agentId,
     model,
+    provider,
     prompt_tokens: usage.inputTokens,
     completion_tokens: usage.outputTokens,
     ...(usage.cacheCreationTokens !== undefined && {
@@ -227,8 +233,12 @@ async function dispatchWithRetry(record: CallRecord, config: AgentSdkConfig): Pr
  *
  * Errors in dispatch are handled by dispatchWithRetry (logs warn, drops record).
  * This function itself never throws — dispatchWithRetry is voided.
+ *
+ * provider is bound once per instrumentClient() call from client.config.provider
+ * (v3.3.0+) — a construction-time invariant of the wrapped LlmClient, not a
+ * per-call value, since a single instrumented client never changes provider mid-life.
  */
-function buildAfterCallDispatch(sdkConfig: AgentSdkConfig) {
+function buildAfterCallDispatch(sdkConfig: AgentSdkConfig, provider: LlmProvider) {
   return function dispatchAfterCall(opts: {
     usage: LlmUsage;
     model: string;
@@ -237,15 +247,16 @@ function buildAfterCallDispatch(sdkConfig: AgentSdkConfig) {
     cost?: LlmCost;
     requestedModel?: string;
   }): void {
-    const record = buildCallRecord(
-      opts.usage,
-      opts.model,
-      opts.latencyMs,
-      sdkConfig,
-      opts.toolResponse,
-      opts.cost,
-      opts.requestedModel
-    );
+    const record = buildCallRecord({
+      usage: opts.usage,
+      model: opts.model,
+      latencyMs: opts.latencyMs,
+      config: sdkConfig,
+      provider,
+      ...(opts.toolResponse !== undefined && { toolResponse: opts.toolResponse }),
+      ...(opts.cost !== undefined && { cost: opts.cost }),
+      ...(opts.requestedModel !== undefined && { requestedModel: opts.requestedModel }),
+    });
     // Non-blocking — ingestion is fire-and-forget
     void dispatchWithRetry(record, sdkConfig);
   };
@@ -311,7 +322,7 @@ export function instrumentClient(client: LlmClient, config: AgentSdkConfig): Ins
   }
 
   // Shared afterCall dispatch handler — used by all 5 call types uniformly
-  const dispatch = buildAfterCallDispatch(effectiveConfig);
+  const dispatch = buildAfterCallDispatch(effectiveConfig, client.config.provider);
 
   // complete() — non-streaming, usage available on the response
   async function complete(...args: Parameters<LlmClient['complete']>): Promise<LlmResponse> {
