@@ -20,7 +20,7 @@
  *   shapes ever diverge, the workspace typecheck will catch the boundary mismatch.
  */
 
-import type { LlmClient, LlmToolCall } from '@diabolicallabs/llm-client';
+import type { LlmClient, LlmProvider, LlmToolCall } from '@diabolicallabs/llm-client';
 
 /**
  * USD cost breakdown for a single LLM call.
@@ -83,6 +83,14 @@ export interface InstrumentedLlmClient extends LlmClient {
 export interface CallRecord {
   agent_id: string;
   model: string;
+  /**
+   * The wrapped LlmClient's provider (v3.3.0+).
+   * Populated from client.config.provider at construction time — a required,
+   * readonly-enforced, construction-time-invariant field on LlmClient. Always
+   * present; not inferred from the model string. Takes priority over the
+   * Dashboard's resolveProviderFromModel() fallback once ingested.
+   */
+  provider?: LlmProvider;
   /**
    * The originally-requested primary model (v1.2.0+).
    * Populated only when provider failover occurred — i.e. when LlmResponse.requestedModel

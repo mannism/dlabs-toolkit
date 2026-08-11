@@ -19,6 +19,9 @@ purpose: >
   and peerDependenciesMeta. The only usage was type-only imports of LlmCost (compiled away
   at build time). LlmCost is now inlined in types.ts. Prevents Changesets peer-cascade
   major-bump on future llm-pricing pre-1.0 minor boundaries. No API change.
+  v3.3.0: CallRecord.provider — optional LlmProvider field, always populated from the
+  wrapped LlmClient's config.provider. Makes the SDK the authoritative provider source
+  for the Spend Dashboard's ingest resolution chain.
 owner: Sable
 status: published
 
@@ -108,6 +111,12 @@ notes: |
           registration). No API or behavior change.
   v3.2.5: dependency bump — tracks llm-client@6.0.0 (phantom major cascade). No API change.
   v3.2.6: dependency bump — tracks llm-client@6.1.0 (CJS require exports condition). No API change.
+  v3.3.0: CallRecord.provider added — optional LlmProvider, always populated from the wrapped
+          LlmClient's config.provider (construction-time-invariant, readonly-enforced). Bound
+          once per instrumentClient() call in buildAfterCallDispatch() and emitted unconditionally
+          in buildCallRecord(). Makes the SDK the authoritative provider source for the Spend
+          Dashboard's ingest resolution chain, taking priority over its resolveProviderFromModel()
+          fallback. This IS the coordination referenced below — see brief-actor-scoped-agents-dlabs-toolkit.md.
   CallRecord shape is the ingestion contract with the Agent Spend Dashboard — do not change
   without coordinating with the Dashboard brief.
   In-memory queue deferred to v0.2 — direct dispatch with retry covers 99% of transient
