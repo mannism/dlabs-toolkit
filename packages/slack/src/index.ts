@@ -1,7 +1,7 @@
 /**
  * @diabolicallabs/slack
  *
- * Send-only Slack notifier built on @slack/web-api (v7.x).
+ * Send-only Slack notifier built on @slack/web-api (v8.x).
  * Supports chat.postMessage (bot-token path) and incoming webhooks.
  *
  * Features:
