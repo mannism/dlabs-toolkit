@@ -14,6 +14,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { fromIoredis } from '../../ioredis-adapter.js';
 import { createRateLimiter } from '../../limiter.js';
 import type { RedisExecutor } from '../../types.js';
 
@@ -31,7 +32,9 @@ describe.skipIf(!hasRedis)('@diabolicallabs/rate-limiter integration — real Re
       maxRetriesPerRequest: 1,
     });
     await client.connect();
-    redis = client as unknown as RedisExecutor;
+    // Real ioredis has no scriptLoad() — only .script("LOAD", ...) — so it
+    // must go through fromIoredis(), not a raw cast, to satisfy RedisExecutor.
+    redis = fromIoredis(client);
     ioredisInstance = client;
   });
 

@@ -9,11 +9,11 @@
  * fail-open during Redis blips.
  *
  * @example
- * import { createRateLimiter } from '@diabolicallabs/rate-limiter';
+ * import { createRateLimiter, fromIoredis } from '@diabolicallabs/rate-limiter';
  * import Redis from 'ioredis';
  *
  * const redis = new Redis(process.env.REDIS_URL);
- * const limiter = createRateLimiter({ redis, windowMs: 60_000, maxRequests: 100 });
+ * const limiter = createRateLimiter({ redis: fromIoredis(redis), windowMs: 60_000, maxRequests: 100 });
  *
  * // At request boundary:
  * await limiter.enforce(`user:${userId}`); // throws RateLimitError if over limit
@@ -22,12 +22,13 @@
  * const { allowed, remaining, resetMs } = await limiter.check(`user:${userId}`);
  */
 
+export type { IoredisLike } from './ioredis-adapter.js';
+// ioredis compatibility adapter
+export { fromIoredis } from './ioredis-adapter.js';
 // Factory function
 export { createRateLimiter } from './limiter.js';
-
 // Logger
 export { setRateLimiterLogger } from './logger.js';
-
 // Types
 export type {
   Logger,
