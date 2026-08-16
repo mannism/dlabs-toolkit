@@ -14,13 +14,13 @@ pnpm add ioredis
 
 ```typescript
 import Redis from 'ioredis';
-import { createRateLimiter, RateLimitError } from '@diabolicallabs/rate-limiter';
+import { createRateLimiter, fromIoredis, RateLimitError } from '@diabolicallabs/rate-limiter';
 
 // Provide your existing ioredis singleton — the limiter does not manage connections
 const redis = new Redis(process.env['REDIS_URL']!);
 
 const limiter = createRateLimiter({
-  redis,
+  redis: fromIoredis(redis), // ioredis has no scriptLoad() — fromIoredis() adapts it
   windowMs: 60_000,     // 1-minute sliding window
   maxRequests: 100,     // 100 requests per window
   keyPrefix: 'rl:api:', // optional, default: 'rl:'
@@ -76,7 +76,7 @@ const limiter = createRateLimiter({
 
 | Config field | Type | Default | Description |
 |---|---|---|---|
-| `redis` | `RedisExecutor` | required | Any object with `eval`, `evalsha`, `scriptLoad` (ioredis satisfies this) |
+| `redis` | `RedisExecutor` | required | Any object with `eval`, `evalsha`, `scriptLoad` — wrap a raw ioredis client with `fromIoredis()` |
 | `windowMs` | `number` | required | Sliding window duration in milliseconds |
 | `maxRequests` | `number` | required | Max requests allowed within the window |
 | `keyPrefix` | `string` | `'rl:'` | Redis key prefix |
@@ -114,6 +114,10 @@ class RateLimitError extends Error {
 
 Override the module-level logger. Default: structured JSON to stdout.
 
+### `fromIoredis(client): RedisExecutor`
+
+Wraps a raw `ioredis` client into a `RedisExecutor`, routing `scriptLoad()` through ioredis's `.script("LOAD", ...)`. `eval`/`evalsha` pass through unchanged.
+
 ## RedisExecutor interface
 
 The `redis` config option accepts any object satisfying:
@@ -126,7 +130,17 @@ interface RedisExecutor {
 }
 ```
 
-An `ioredis` `Redis` instance satisfies this interface directly.
+An `ioredis` `Redis` instance does **not** satisfy this interface directly — ioredis has no `scriptLoad()` method, only `.script("LOAD", script)`. Wrap it with `fromIoredis()`:
+
+```typescript
+import Redis from 'ioredis';
+import { fromIoredis } from '@diabolicallabs/rate-limiter';
+
+const redis = new Redis(process.env['REDIS_URL']!);
+const executor = fromIoredis(redis); // satisfies RedisExecutor
+```
+
+A hand-rolled `RedisExecutor` implementation (e.g. for `node-redis`) that already provides a real `scriptLoad()` needs no adapter — pass it directly.
 
 ## Implementation notes
 
