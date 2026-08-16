@@ -1,6 +1,6 @@
 # `@diabolicallabs/slack`
 
-Send-only Slack notifier built on `@slack/web-api` v7. Supports `chat.postMessage` (bot-token path) and incoming webhooks.
+Send-only Slack notifier built on `@slack/web-api` v8. Supports `chat.postMessage` (bot-token path) and incoming webhooks.
 
 ## Install
 
