@@ -291,14 +291,26 @@ describe('getModelCapabilities', () => {
       ['perplexity', 'sonar-deep-research'],
       ['deepseek', 'deepseek-v4-flash'],
       ['deepseek', 'deepseek-v4-pro'],
-      ['deepseek', 'deepseek-chat'],
-      ['deepseek', 'deepseek-reasoner'],
     ] as const)(
       '%s/%s has reasoningEffort: null (no comparable API parameter)',
       (provider, model) => {
         const caps = getModelCapabilities(provider, model);
         expect(caps).not.toBeNull();
         expect((caps as ModelCapabilities).reasoningEffort).toBeNull();
+      }
+    );
+  });
+
+  // ── DeepSeek retired model IDs (2026-08-18) ───────────────────────────────
+  // deepseek-chat / deepseek-reasoner were removed from the capability table when
+  // DeepSeek retired both IDs on 2026-07-24. They must resolve as unknown models
+  // (null) rather than live, routable capability entries — the client-side rejection
+  // that stops calls to these IDs lives in providers/deepseek.ts, not this lookup.
+  describe('DeepSeek retired model IDs — absent from the capability table', () => {
+    it.each(['deepseek-chat', 'deepseek-reasoner'] as const)(
+      'getModelCapabilities("deepseek", "%s") returns null',
+      (model) => {
+        expect(getModelCapabilities('deepseek', model)).toBeNull();
       }
     );
   });
