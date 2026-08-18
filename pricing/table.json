@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.schema.json",
-  "versionedAt": "2026-07-25",
+  "versionedAt": "2026-08-18",
   "anthropic": {
     "claude-opus-4-5": {
       "inputPer1M": 5.0,
@@ -401,10 +401,17 @@
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-3.6-flash": {
-      "inputPer1M": 1.5,
-      "outputPer1M": 7.5,
-      "cacheReadPer1M": 0.15,
-      "verifiedAt": "2026-07-25",
+      "inputPer1M": 0.75,
+      "outputPer1M": 3.75,
+      "cacheReadPer1M": 0.075,
+      "verifiedAt": "2026-08-18",
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
+    },
+    "gemini-3.7-flash": {
+      "inputPer1M": 0.75,
+      "outputPer1M": 3.75,
+      "cacheReadPer1M": 0.075,
+      "verifiedAt": "2026-08-18",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     }
   },
