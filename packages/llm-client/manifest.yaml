@@ -20,6 +20,11 @@ purpose: >
   Capability matrix (getModelCapabilities) with mediaInput fields. linkedAbortController fan-out
   helper. Pre-call hooks API (LlmHooks) — beforeCall (mutation + short-circuit) and afterCall
   (informational) on all 5 call types. Pluggable logger. Remote pricing table via pricing.remoteUrl.
+  Retired-model rejection (2026-08-18+): DeepSeek's deepseek-chat/deepseek-reasoner (retired by
+  DeepSeek 2026-07-24, no fallback alias) throw LlmError({ kind: 'bad_request', retryable: false })
+  client-side before any SDK call, naming deepseek-v4-flash as the replacement. Reject, not
+  auto-remap — deliberate design choice, not left to caller judgment. Absent from the capability
+  matrix (getModelCapabilities returns null for both).
   Reasoning-effort passthrough (v6.3.0+): LlmCallOptions.reasoningEffort maps to Anthropic
   output_config.effort, OpenAI reasoning.effort, Gemini thinkingConfig.thinkingLevel (uppercase);
   Perplexity/DeepSeek reject with bad_request before any SDK call. LlmUsage.reasoningTokens

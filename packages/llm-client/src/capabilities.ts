@@ -600,9 +600,17 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
   // responseIds: 'provider' — DeepSeek Chat Completions returns rawResponse.id.
   // streamStructured: true — DeepSeek streams Chat Completions deltas in json_object mode,
   //   accumulated + Zod-validated at end (v1.3.0).
-  // parallelTools: true — DeepSeek V3 (deepseek-v4-flash/pro) supports parallel_tool_calls
-  //   on Chat Completions. deepseek-reasoner (deepseek-v4-pro alias) has limited tool support.
+  // parallelTools: true — DeepSeek V4 (deepseek-v4-flash/pro) supports parallel_tool_calls
+  //   on Chat Completions.
   // deepseek-v4-pro promotional pricing note: 75% discount expires 2026-05-31.
+  //
+  // deepseek-chat / deepseek-reasoner retirement (2026-08-18): DeepSeek fully retired both
+  // IDs on 2026-07-24 15:59 UTC with no fallback alias — calls now error at DeepSeek's API.
+  // They are intentionally absent from this table (getModelCapabilities returns null for
+  // them, consistent with "unknown model — degrade gracefully"). The client-side rejection
+  // that stops a doomed request before it reaches DeepSeek lives in
+  // providers/deepseek.ts (assertNotRetiredModel), not here — this table is inspection-only
+  // and was never wired into call dispatch.
   deepseek: {
     'deepseek-v4-flash': {
       contextWindow: 64_000,
@@ -619,35 +627,6 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       reasoningEffort: null,
     },
     'deepseek-v4-pro': {
-      contextWindow: 64_000,
-      maxOutputTokens: 8_192,
-      streaming: true,
-      tools: true,
-      parallelTools: true,
-      promptCache: null,
-      structuredOutput: 'json-schema',
-      responseIds: 'provider',
-      streamStructured: true,
-      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
-      reasoningEffort: null,
-    },
-    // Deprecated aliases — same capabilities as their canonical counterparts.
-    // deepseek-reasoner (R1) note: tool-calling support is limited and may not
-    // reliably invoke tools on all task types. Prefer deepseek-v4-flash for tool use.
-    'deepseek-chat': {
-      contextWindow: 64_000,
-      maxOutputTokens: 8_192,
-      streaming: true,
-      tools: true,
-      parallelTools: true,
-      promptCache: null,
-      structuredOutput: 'json-schema',
-      responseIds: 'provider',
-      streamStructured: true,
-      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
-      reasoningEffort: null,
-    },
-    'deepseek-reasoner': {
       contextWindow: 64_000,
       maxOutputTokens: 8_192,
       streaming: true,

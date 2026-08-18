@@ -793,21 +793,33 @@ try {
 
 Retryable errors (429, 5xx, network failures, timeout) are retried automatically with exponential backoff and full jitter before throwing. Cancelled and stream-stall errors are never retried.
 
-## DeepSeek model IDs (v1.0.1+)
+## DeepSeek model IDs
 
-DeepSeek retired the `deepseek-chat` and `deepseek-reasoner` identifiers as of 2026. The canonical IDs are:
+DeepSeek fully retired the `deepseek-chat` and `deepseek-reasoner` identifiers on
+2026-07-24 15:59 UTC, with **no fallback alias** — calls using either string now error
+at DeepSeek's API. The canonical IDs are:
 
 | Model | API ID | Notes |
 |---|---|---|
 | V4 Flash | `deepseek-v4-flash` | General use and reasoning (thinking mode). **Canonical default.** |
 | V4 Pro | `deepseek-v4-pro` | High-capability tier. Promotional pricing active through 2026-05-31. |
 
-**Deprecated aliases** — DeepSeek's API still accepts these server-side (they route to V4 variants) but new code should use the canonical IDs:
+**Retired IDs are rejected client-side.** As of the 2026-08-18 retirement fix, calling
+any `llm-client` method (`complete`, `stream`, `structured`, `withTools`,
+`streamStructured`) with `model: 'deepseek-chat'` or `model: 'deepseek-reasoner'` throws
+an `LlmError({ kind: 'bad_request', retryable: false })` immediately — before any HTTP
+call reaches DeepSeek — naming the retired ID and pointing to `deepseek-v4-flash` as the
+replacement:
 
-| Deprecated ID | Now routes to | Change |
+| Retired ID | Replacement | Was |
 |---|---|---|
-| `deepseek-chat` | `deepseek-v4-flash` non-thinking | Was DeepSeek-V3; now resolves to V4 |
-| `deepseek-reasoner` | `deepseek-v4-flash` thinking mode | Was DeepSeek-R1; now resolves to V4 thinking |
+| `deepseek-chat` | `deepseek-v4-flash` | DeepSeek-V3 |
+| `deepseek-reasoner` | `deepseek-v4-flash` (thinking mode) | DeepSeek-R1 |
+
+This is a deliberate reject-fast design, not a silent remap: auto-rerouting
+`deepseek-chat` to `deepseek-v4-flash` would change which model actually serves the
+request without the caller knowing. Update call sites to the canonical IDs — there is no
+compatibility shim.
 
 Usage:
 

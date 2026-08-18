@@ -24,7 +24,7 @@ vi.mock('openai');
 
 const TEST_CONFIG: LlmClientConfig = {
   provider: 'deepseek',
-  model: 'deepseek-chat',
+  model: 'deepseek-v4-flash',
   apiKey: 'test-key',
   maxRetries: 0,
   baseDelayMs: 0,
@@ -39,7 +39,7 @@ function mockChatCompletion(
     id: 'chatcmpl-ds-123',
     object: 'chat.completion',
     created: 1234567890,
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
     choices: [
       {
         index: 0,
@@ -104,7 +104,7 @@ describe('DeepSeek provider — complete()', () => {
     const result = await client.complete([{ role: 'user', content: 'Hi' }]);
 
     expect(result.content).toBe('Hello, world!');
-    expect(result.model).toBe('deepseek-chat');
+    expect(result.model).toBe('deepseek-v4-flash');
     expect(result.usage.inputTokens).toBe(10);
     expect(result.usage.outputTokens).toBe(5);
     expect(result.usage.totalTokens).toBe(15);
@@ -127,11 +127,11 @@ describe('DeepSeek provider — complete()', () => {
 
   it('applies model override', async () => {
     const client = createDeepSeekProvider(TEST_CONFIG);
-    await client.complete([{ role: 'user', content: 'Hi' }], { model: 'deepseek-reasoner' });
+    await client.complete([{ role: 'user', content: 'Hi' }], { model: 'deepseek-v4-pro' });
 
     const callArgs = mockCreate.mock
       .calls[0]?.[0] as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming;
-    expect(callArgs.model).toBe('deepseek-reasoner');
+    expect(callArgs.model).toBe('deepseek-v4-pro');
   });
 
   it('applies maxTokens and temperature', async () => {
@@ -207,7 +207,7 @@ describe('DeepSeek provider — stream()', () => {
         id: 'chunk-1',
         object: 'chat.completion.chunk',
         created: 123,
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         choices: [{ index: 0, delta: { content: 'Hello' }, finish_reason: null, logprobs: null }],
         usage: null,
       },
@@ -215,7 +215,7 @@ describe('DeepSeek provider — stream()', () => {
         id: 'chunk-2',
         object: 'chat.completion.chunk',
         created: 123,
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         choices: [
           { index: 0, delta: { content: ', world!' }, finish_reason: 'stop', logprobs: null },
         ],
@@ -225,7 +225,7 @@ describe('DeepSeek provider — stream()', () => {
         id: 'chunk-3',
         object: 'chat.completion.chunk',
         created: 123,
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         choices: [],
         usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
       },
@@ -303,7 +303,7 @@ describe('DeepSeek provider — stream()', () => {
           id: 'c1',
           object: 'chat.completion.chunk',
           created: 1,
-          model: 'deepseek-chat',
+          model: 'deepseek-v4-flash',
           choices: [
             { index: 0, delta: { content: 'partial' }, finish_reason: null, logprobs: null },
           ],
@@ -337,7 +337,7 @@ describe('DeepSeek provider — stream()', () => {
         id: 'c1',
         object: 'chat.completion.chunk',
         created: 1,
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         choices: [{ index: 0, delta: { content: null }, finish_reason: null, logprobs: null }],
         usage: null,
       },
@@ -345,7 +345,7 @@ describe('DeepSeek provider — stream()', () => {
         id: 'c2',
         object: 'chat.completion.chunk',
         created: 1,
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         choices: [{ index: 0, delta: { content: '' }, finish_reason: null, logprobs: null }],
         usage: null,
       },
@@ -353,7 +353,7 @@ describe('DeepSeek provider — stream()', () => {
         id: 'c3',
         object: 'chat.completion.chunk',
         created: 1,
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         choices: [{ index: 0, delta: { content: 'real' }, finish_reason: 'stop', logprobs: null }],
         usage: null,
       },
@@ -572,7 +572,7 @@ describe('DeepSeek provider — abort / timeout / stall', () => {
         id: 'c1',
         object: 'chat.completion.chunk',
         created: 1,
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null, logprobs: null }],
         usage: null,
       },
@@ -621,7 +621,7 @@ describe('DeepSeek provider — structured() v0.4.0 return shape', () => {
     const mockCreate = vi
       .fn()
       .mockResolvedValue(
-        mockChatCompletion('{"value":1}', { model: 'deepseek-chat', id: 'chatcmpl-ds-xyz' })
+        mockChatCompletion('{"value":1}', { model: 'deepseek-v4-flash', id: 'chatcmpl-ds-xyz' })
       );
     vi.mocked(OpenAI).mockImplementation(function () {
       return { chat: { completions: { create: mockCreate } } };
@@ -631,7 +631,7 @@ describe('DeepSeek provider — structured() v0.4.0 return shape', () => {
     const client = createDeepSeekProvider(TEST_CONFIG);
     const result = await client.structured([{ role: 'user', content: 'Return data' }], schema);
 
-    expect(result.model).toBe('deepseek-chat');
+    expect(result.model).toBe('deepseek-v4-flash');
     expect(result.id).toBe('chatcmpl-ds-xyz');
     expect(result.data.value).toBe(1);
   });
@@ -652,7 +652,7 @@ function mockCompletionWithToolCall(
     id: 'chatcmpl-ds-tool-1',
     object: 'chat.completion',
     created: 1234567890,
-    model: 'deepseek-chat',
+    model: 'deepseek-v4-flash',
     choices: [
       {
         index: 0,
@@ -739,7 +739,7 @@ describe('DeepSeek provider — withTools()', () => {
     expect(result.toolCalls[0]?.rawArguments).toBe(JSON.stringify({ city: 'Berlin' }));
     expect(result.toolCalls[0]?.id).toBe('call_ds_abc');
     expect(result.stopReason).toBe('tool_use');
-    expect(result.model).toBe('deepseek-chat');
+    expect(result.model).toBe('deepseek-v4-flash');
     expect(result.usage.inputTokens).toBe(20);
     expect(result.usage.outputTokens).toBe(15);
   });
@@ -940,7 +940,7 @@ describe('DeepSeek provider — streamStructured()', () => {
           id: 'chunk-1',
           object: 'chat.completion.chunk',
           created: 1234567890,
-          model: 'deepseek-chat',
+          model: 'deepseek-v4-flash',
           choices: [{ index: 0, delta: { content: c }, finish_reason: null }],
           usage: null,
         }) as unknown as OpenAI.Chat.ChatCompletionChunk
@@ -950,7 +950,7 @@ describe('DeepSeek provider — streamStructured()', () => {
       id: 'chunk-1',
       object: 'chat.completion.chunk',
       created: 1234567890,
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       choices: [],
       usage: {
         prompt_tokens: inputTokens,
@@ -1031,7 +1031,7 @@ describe('DeepSeek provider — streamStructured()', () => {
           id: 'c1',
           object: 'chat.completion.chunk',
           created: 1234567890,
-          model: 'deepseek-chat',
+          model: 'deepseek-v4-flash',
           choices: [{ index: 0, delta: { content: 'plain text no json' }, finish_reason: null }],
           usage: null,
         } as unknown as OpenAI.Chat.ChatCompletionChunk;
@@ -1300,6 +1300,134 @@ describe('DeepSeek provider — reasoningEffort (v6.3.0): rejects for every publ
     mockCreate.mockResolvedValue(mockChatCompletion('ok'));
     const client = createDeepSeekProvider(TEST_CONFIG);
     await expect(client.complete([{ role: 'user', content: 'Hi' }])).resolves.toBeDefined();
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Retired model rejection (2026-08-18) ─────────────────────────────────────
+//
+// DeepSeek retired deepseek-chat and deepseek-reasoner on 2026-07-24 15:59 UTC with
+// no fallback alias. These tests verify the client rejects both IDs before any SDK
+// call is attempted — across every public method, both when the retired ID is the
+// per-call override and when it is the config-level default — and that the rejection
+// is a hard client-side throw with zero retry attempts, not a retryable error.
+
+describe('DeepSeek provider — retired model rejection (2026-08-18)', () => {
+  let mockCreate: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockChatCompletion('should never be reached'));
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { chat: { completions: { create: mockCreate } } };
+    });
+  });
+
+  function assertRejectsRetiredModel(thrown: unknown, retiredId: string): void {
+    expect(thrown).toBeInstanceOf(LlmError);
+    if (thrown instanceof LlmError) {
+      expect(thrown.kind).toBe('bad_request');
+      expect(thrown.retryable).toBe(false);
+      expect(thrown.message).toContain(retiredId);
+      expect(thrown.message).toContain('deepseek-v4-flash');
+      expect(thrown.message).toContain('retired');
+    }
+    expect(mockCreate).not.toHaveBeenCalled();
+  }
+
+  it('complete(): rejects deepseek-chat via per-call override, no SDK call', async () => {
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await client
+      .complete([{ role: 'user', content: 'Hi' }], { model: 'deepseek-chat' })
+      .catch((e: unknown) => e);
+    assertRejectsRetiredModel(thrown, 'deepseek-chat');
+  });
+
+  it('complete(): rejects deepseek-reasoner via config-level model, no SDK call', async () => {
+    const client = createDeepSeekProvider({ ...TEST_CONFIG, model: 'deepseek-reasoner' });
+    const thrown = await client
+      .complete([{ role: 'user', content: 'Hi' }])
+      .catch((e: unknown) => e);
+    assertRejectsRetiredModel(thrown, 'deepseek-reasoner');
+  });
+
+  it('stream(): rejects deepseek-chat before the generator yields anything, no SDK call', async () => {
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await (async () => {
+      for await (const _ of client.stream([{ role: 'user', content: 'Hi' }], {
+        model: 'deepseek-chat',
+      })) {
+        // must never yield
+      }
+    })().catch((e: unknown) => e);
+    assertRejectsRetiredModel(thrown, 'deepseek-chat');
+  });
+
+  it('structured(): rejects deepseek-reasoner, no SDK call', async () => {
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await client
+      .structured(
+        [{ role: 'user', content: 'Hi' }],
+        { parse: (d: unknown) => d },
+        {
+          model: 'deepseek-reasoner',
+        }
+      )
+      .catch((e: unknown) => e);
+    assertRejectsRetiredModel(thrown, 'deepseek-reasoner');
+  });
+
+  it('withTools(): rejects deepseek-chat, no SDK call', async () => {
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await client
+      .withTools(
+        [{ role: 'user', content: 'Hi' }],
+        [
+          {
+            name: 'noop',
+            description: 'no-op',
+            inputSchema: { kind: 'jsonSchema' as const, schema: { type: 'object' } },
+          },
+        ],
+        { model: 'deepseek-chat' }
+      )
+      .catch((e: unknown) => e);
+    assertRejectsRetiredModel(thrown, 'deepseek-chat');
+  });
+
+  it('streamStructured(): rejects deepseek-reasoner before the generator yields anything, no SDK call', async () => {
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const thrown = await (async () => {
+      for await (const _ of client.streamStructured(
+        [{ role: 'user', content: 'Hi' }],
+        { parse: (d: unknown) => d },
+        { model: 'deepseek-reasoner' }
+      )) {
+        // must never yield
+      }
+    })().catch((e: unknown) => e);
+    assertRejectsRetiredModel(thrown, 'deepseek-reasoner');
+  });
+
+  it('does not retry the rejection even when maxRetries > 0 is configured', async () => {
+    const client = createDeepSeekProvider({ ...TEST_CONFIG, maxRetries: 3, baseDelayMs: 0 });
+    const start = Date.now();
+    const thrown = await client
+      .complete([{ role: 'user', content: 'Hi' }], { model: 'deepseek-chat' })
+      .catch((e: unknown) => e);
+    const elapsedMs = Date.now() - start;
+
+    assertRejectsRetiredModel(thrown, 'deepseek-chat');
+    // A retry loop with baseDelayMs would take measurably longer; a synchronous
+    // pre-flight throw resolves near-instantly. Generous bound to avoid CI flakiness.
+    expect(elapsedMs).toBeLessThan(200);
+  });
+
+  it('live (non-retired) model still routes normally after this change', async () => {
+    mockCreate.mockResolvedValue(mockChatCompletion('ok'));
+    const client = createDeepSeekProvider(TEST_CONFIG);
+    const result = await client.complete([{ role: 'user', content: 'Hi' }]);
+    expect(result.content).toBe('ok');
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 });
