@@ -12,7 +12,8 @@
  * - sonar-deep-research partialCostCoverage flag
  * - Date-strip fallback for dated model IDs (e.g. gpt-5.4-mini-2026-03-17)
  * - Warn-once behavior for unknown/deprecated/date-strip warns
- * - New model rows: claude-opus-4-5, gpt-5.4-nano, gpt-4o, gemini-3.1-pro long-context
+ * - New model rows: claude-opus-4-5, gpt-5.4-nano, gpt-4o
+ * - gemini-3.1-pro (bare, non-preview) confirmed phantom (2026-08-18) → unknown model
  *
  * Diagnostic capture: tests inject a PricingLogger via setPricingLogger() that
  * pushes events into `warnCalls`. Assertions match on the stable event names
@@ -602,7 +603,7 @@ describe('DEFAULT_PRICING_TABLE integrity', () => {
 
   it('Gemini long-context models have paired threshold + rate fields', () => {
     const { gemini } = DEFAULT_PRICING_TABLE;
-    const tieredModels = ['gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-3.1-pro'];
+    const tieredModels = ['gemini-3.1-pro-preview', 'gemini-2.5-pro'];
     for (const model of tieredModels) {
       const record = gemini[model];
       expect(record?.longContextThreshold, `${model} missing longContextThreshold`).toBeDefined();
@@ -846,24 +847,20 @@ describe('computeCost — new model rows (patch 1)', () => {
     expect(cost.isPartial).toBe(false);
   });
 
-  it('gemini-3.1-pro: long-context tier applies above 200k tokens', () => {
-    // This is the non-preview variant added in patch 1.
-    const usageShort = basicUsage(100_000, 50_000);
-    const costShort = computeCost({
-      usage: usageShort,
-      provider: 'gemini',
-      model: 'gemini-3.1-pro',
-    });
-    // Short-context: $2.00/1M input, $12.00/1M output
-    expect(costShort.input).toBeCloseTo(0.2, 5);
-    expect(costShort.output).toBeCloseTo(0.6, 5);
+  it('gemini-3.1-pro (bare, non-preview): confirmed phantom → unknown model, zero cost', () => {
+    // gemini-3.1-pro (without -preview) was never actually shipped by Google — only
+    // gemini-3.1-pro-preview exists. Verified 2026-08-18 against
+    // ai.google.dev/gemini-api/docs/models (see research file cited in the brief).
+    // The pricing entry has been removed from pricing/table.json; this model now
+    // behaves like any other unknown model.
+    const usage = basicUsage(100_000, 50_000);
+    const cost = computeCost({ usage, provider: 'gemini', model: 'gemini-3.1-pro' });
 
-    const usageLong = basicUsage(250_000, 100_000);
-    const costLong = computeCost({ usage: usageLong, provider: 'gemini', model: 'gemini-3.1-pro' });
-    // Long-context: $4.00/1M input, $18.00/1M output
-    expect(costLong.input).toBeCloseTo(1.0, 5);
-    expect(costLong.output).toBeCloseTo(1.8, 5);
-    expect(costLong.isPartial).toBe(false);
+    expect(cost.input).toBe(0);
+    expect(cost.output).toBe(0);
+    expect(cost.total).toBe(0);
+    expect(cost.isPartial).toBe(true);
+    expect(warnCalls.some((w) => w.event === 'pricing_unknown_model')).toBe(true);
   });
 
   it('o3-mini: reasoning model, isPartial = true', () => {

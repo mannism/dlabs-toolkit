@@ -401,17 +401,6 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
       verifiedAt: '2026-07-25',
     },
-    'gemini-3.1-pro': {
-      cacheReadPer1M: 0.2,
-      inputPer1M: 2,
-      longContextCacheReadPer1M: 0.4,
-      longContextInputPer1M: 4,
-      longContextOutputPer1M: 18,
-      longContextThreshold: 200000,
-      outputPer1M: 12,
-      sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
-      verifiedAt: '2026-07-25',
-    },
     'gemini-3.1-pro-preview': {
       cacheReadPer1M: 0.2,
       inputPer1M: 2,
