@@ -281,23 +281,24 @@ describe('computeCost — Gemini long-context branching', () => {
 // ---------------------------------------------------------------------------
 
 describe('computeCost — DeepSeek deprecated alias resolution', () => {
-  it('deepseek-v4-flash: canonical ID, no warning', () => {
+  it('deepseek-v4-flash: canonical ID, no warning (off-peak baseline rate, 2026-08-18)', () => {
     const usage = basicUsage(1_000_000, 500_000);
     const cost = computeCost({ usage, provider: 'deepseek', model: 'deepseek-v4-flash' });
 
-    // Input: 1M × $0.14 = $0.14
-    // Output: 0.5M × $0.28 = $0.14
-    expect(cost.input).toBeCloseTo(0.14, 5);
-    expect(cost.output).toBeCloseTo(0.14, 5);
+    // Input: 1M × $0.22 = $0.22
+    // Output: 0.5M × $0.66 = $0.33
+    expect(cost.input).toBeCloseTo(0.22, 5);
+    expect(cost.output).toBeCloseTo(0.33, 5);
     expect(cost.isPartial).toBe(false);
     expect(warnCalls.filter((w) => w.event === 'pricing_deprecated_alias')).toHaveLength(0);
   });
 
-  it('deepseek-chat: emits deprecation warning, returns v4-flash rates', () => {
+  it('deepseek-chat: emits deprecation warning, returns v4-flash rates (retired 2026-07-24, historical only)', () => {
     const usage = basicUsage(1_000_000, 500_000);
     const cost = computeCost({ usage, provider: 'deepseek', model: 'deepseek-chat' });
 
-    // Same rates as deepseek-v4-flash
+    // deepseek-chat retains its own historical stored rate ($0.14/$0.28) — computeCost()
+    // does not dynamically resolve through deprecatedAliasFor to v4-flash's live rate.
     expect(cost.input).toBeCloseTo(0.14, 5);
     expect(cost.output).toBeCloseTo(0.14, 5);
     // Deprecation warning must be emitted
@@ -309,11 +310,11 @@ describe('computeCost — DeepSeek deprecated alias resolution', () => {
     expect(depWarnings[0]?.data['deprecatedAliasFor']).toBe('deepseek-v4-flash');
   });
 
-  it('deepseek-reasoner: emits deprecation warning, returns v4-flash rates', () => {
+  it('deepseek-reasoner: emits deprecation warning, returns v4-flash rates (retired 2026-07-24, historical only)', () => {
     const usage = basicUsage(500_000, 200_000);
     const cost = computeCost({ usage, provider: 'deepseek', model: 'deepseek-reasoner' });
 
-    expect(cost.input).toBeCloseTo(0.07, 5); // 0.5M × $0.14
+    expect(cost.input).toBeCloseTo(0.07, 5); // 0.5M × $0.14 (own historical stored rate)
     expect(cost.output).toBeCloseTo(0.056, 5); // 0.2M × $0.28
     const depWarnings = warnCalls.filter((w) => w.event === 'pricing_deprecated_alias');
     expect(depWarnings.length).toBeGreaterThan(0);
@@ -321,13 +322,13 @@ describe('computeCost — DeepSeek deprecated alias resolution', () => {
     expect(depWarnings[0]?.data['model']).toBe('deepseek-reasoner');
   });
 
-  it('deepseek-v4-pro: canonical ID, promotional pricing', () => {
+  it('deepseek-v4-pro: canonical ID, off-peak baseline rate (2026-08-18)', () => {
     const usage = basicUsage(1_000_000, 1_000_000);
     const cost = computeCost({ usage, provider: 'deepseek', model: 'deepseek-v4-pro' });
 
-    // Promotional: Input $0.435/1M, Output $0.87/1M
-    expect(cost.input).toBeCloseTo(0.435, 5);
-    expect(cost.output).toBeCloseTo(0.87, 5);
+    // Off-peak baseline: Input $0.66/1M, Output $1.98/1M
+    expect(cost.input).toBeCloseTo(0.66, 5);
+    expect(cost.output).toBeCloseTo(1.98, 5);
     expect(cost.isPartial).toBe(false);
     expect(warnCalls.filter((w) => w.event === 'pricing_deprecated_alias')).toHaveLength(0);
   });
@@ -336,8 +337,8 @@ describe('computeCost — DeepSeek deprecated alias resolution', () => {
     const usage = basicUsage(500_000, 200_000, { cacheReadTokens: 500_000 });
     const cost = computeCost({ usage, provider: 'deepseek', model: 'deepseek-v4-flash' });
 
-    // CacheRead: 0.5M × $0.0028 = $0.0014
-    expect(cost.cacheRead).toBeCloseTo(0.0014, 6);
+    // CacheRead: 0.5M × $0.007 = $0.0035
+    expect(cost.cacheRead).toBeCloseTo(0.0035, 6);
   });
 });
 
@@ -415,6 +416,34 @@ describe('computeCost — xAI', () => {
   it('grok-4.5: long context (>200k input) uses elevated rates — 1M+1M returns $16.00', () => {
     const usage = basicUsage(1_000_000, 1_000_000);
     const cost = computeCost({ usage, provider: 'xai', model: 'grok-4.5' });
+
+    // Long-context: Input $4.00/1M, Output $12.00/1M -> 1M x $4 + 1M x $12 = $16.00
+    expect(cost.input).toBeCloseTo(4, 5);
+    expect(cost.output).toBeCloseTo(12, 5);
+    expect(cost.total).toBeCloseTo(16, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('grok-4.6: resolves under provider xai at base (sub-200k) tier, same headline rate as grok-4.5', () => {
+    const usage = basicUsage(100_000, 100_000);
+    const cost = computeCost({ usage, provider: 'xai', model: 'grok-4.6' });
+
+    expect(cost.input).toBeCloseTo(0.2, 5); // 0.1M x $2.00
+    expect(cost.output).toBeCloseTo(0.6, 5); // 0.1M x $6.00
+    expect(cost.isPartial).toBe(false);
+    expect(warnCalls.some((w) => w.event === 'pricing_unknown_model')).toBe(false);
+  });
+
+  it('grok-4.6: cache-read rate is higher than grok-4.5 (+67%) — 1M cached tokens returns $0.50', () => {
+    const usage = basicUsage(0, 0, { cacheReadTokens: 1_000_000 });
+    const cost = computeCost({ usage, provider: 'xai', model: 'grok-4.6' });
+
+    expect(cost.cacheRead).toBeCloseTo(0.5, 5);
+  });
+
+  it('grok-4.6: long context (>200k input) uses elevated rates — 1M+1M returns $16.00', () => {
+    const usage = basicUsage(1_000_000, 1_000_000);
+    const cost = computeCost({ usage, provider: 'xai', model: 'grok-4.6' });
 
     // Long-context: Input $4.00/1M, Output $12.00/1M -> 1M x $4 + 1M x $12 = $16.00
     expect(cost.input).toBeCloseTo(4, 5);
@@ -893,17 +922,18 @@ describe('computeCost — new model rows (2026-07-25 drift-check reconciliation)
     expect(cost.isPartial).toBe(false);
   });
 
-  it('claude-sonnet-5: resolves and totals $18.00 for 1M in + 1M out (standard, not intro, rate)', () => {
+  it('claude-sonnet-5: resolves and totals $12.00 for 1M in + 1M out (permanent $2/$10 rate, 2026-08-18)', () => {
     const cost = computeCost({
       usage: oneMillionEach,
       provider: 'anthropic',
       model: 'claude-sonnet-5',
     });
 
-    // Input: 1M × $3.00 = $3.00, Output: 1M × $15.00 = $15.00
-    expect(cost.input).toBeCloseTo(3.0, 5);
-    expect(cost.output).toBeCloseTo(15.0, 5);
-    expect(round(cost.total)).toBe(18.0);
+    // Anthropic cancelled the planned 2026-08-31 increase to $3/$15 — $2/$10 is now
+    // the permanent standard rate. Input: 1M × $2.00 = $2.00, Output: 1M × $10.00 = $10.00
+    expect(cost.input).toBeCloseTo(2.0, 5);
+    expect(cost.output).toBeCloseTo(10.0, 5);
+    expect(round(cost.total)).toBe(12.0);
     expect(cost.isPartial).toBe(false);
   });
 
@@ -930,19 +960,19 @@ describe('computeCost — new model rows (2026-07-25 drift-check reconciliation)
     expect(cost.isPartial).toBe(true); // hasInvisibleReasoningTokens
   });
 
-  it('gpt-5.6-terra: resolves, mid tier of the 5.6 family', () => {
+  it('gpt-5.6-terra: resolves, mid tier of the 5.6 family (corrected 2026-08-18, was 25% overpriced)', () => {
     const cost = computeCost({ usage: oneMillionEach, provider: 'openai', model: 'gpt-5.6-terra' });
 
-    expect(cost.input).toBeCloseTo(2.5, 5);
-    expect(cost.output).toBeCloseTo(15.0, 5);
+    expect(cost.input).toBeCloseTo(2.0, 5);
+    expect(cost.output).toBeCloseTo(12.0, 5);
     expect(cost.isPartial).toBe(true);
   });
 
-  it('gpt-5.6-luna: resolves, lowest tier of the 5.6 family', () => {
+  it('gpt-5.6-luna: resolves, lowest tier of the 5.6 family (corrected 2026-08-18, was 5x overpriced)', () => {
     const cost = computeCost({ usage: oneMillionEach, provider: 'openai', model: 'gpt-5.6-luna' });
 
-    expect(cost.input).toBeCloseTo(1.0, 5);
-    expect(cost.output).toBeCloseTo(6.0, 5);
+    expect(cost.input).toBeCloseTo(0.2, 5);
+    expect(cost.output).toBeCloseTo(1.2, 5);
     expect(cost.isPartial).toBe(true);
   });
 
