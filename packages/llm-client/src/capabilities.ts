@@ -589,6 +589,61 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
       reasoningEffort: 'gemini-thinking-level',
     },
+    // gemini-3.7-flash: input token limit 1,048,576 and output token limit 65,536 verified
+    // live against ai.google.dev/gemini-api/docs/models/gemini-3.7-flash (2026-08-18) —
+    // same shape as sibling gemini-3.6-flash. Thinking and function calling both confirmed
+    // supported on the same page. Nuance: thinkingLevel: 'minimal' errors on this specific
+    // model (unlike some 3.x siblings) — callers should use 'low' or higher.
+    'gemini-3.7-flash': {
+      contextWindow: 1_048_576,
+      maxOutputTokens: 65_536,
+      streaming: true,
+      tools: true,
+      parallelTools: false,
+      promptCache: null,
+      structuredOutput: 'response-schema',
+      responseIds: 'synthesized',
+      streamStructured: false,
+      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      reasoningEffort: 'gemini-thinking-level',
+    },
+    // gemini-3-flash-preview: input token limit 1,048,576 and output token limit 65,536
+    // verified live against ai.google.dev/gemini-api/docs/models/gemini-3-flash-preview
+    // (2026-08-18) — same shape as sibling gemini 3.x Flash models.
+    'gemini-3-flash-preview': {
+      contextWindow: 1_048_576,
+      maxOutputTokens: 65_536,
+      streaming: true,
+      tools: true,
+      parallelTools: false,
+      promptCache: null,
+      structuredOutput: 'response-schema',
+      responseIds: 'synthesized',
+      streamStructured: false,
+      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      reasoningEffort: 'gemini-thinking-level',
+    },
+    // gemini-2.5-flash-lite: input token limit 1,048,576 and output token limit 65,536
+    // verified live against ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-lite
+    // (2026-08-18). reasoningEffort: null — this model DOES support Gemini thinking, but via
+    // the older thinkingConfig.thinkingBudget dialect (2.5-series), not the thinkingLevel
+    // dialect this field encodes (3.x-series). null means "not exposed via this field," not
+    // "no thinking support" — matches the existing gemini-2.5-flash entry for the same
+    // reason. Do not "fix" this to 'gemini-thinking-level': that dialect is rejected by
+    // 2.5-series models.
+    'gemini-2.5-flash-lite': {
+      contextWindow: 1_048_576,
+      maxOutputTokens: 65_536,
+      streaming: true,
+      tools: true,
+      parallelTools: false,
+      promptCache: null,
+      structuredOutput: 'response-schema',
+      responseIds: 'synthesized',
+      streamStructured: false,
+      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      reasoningEffort: null,
+    },
   },
 
   // ── DeepSeek ───────────────────────────────────────────────────────────────

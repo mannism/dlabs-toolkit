@@ -262,6 +262,49 @@ describe('getModelCapabilities', () => {
     );
   });
 
+  // ── Gemini capability matrix backfill — gemini-3.7-flash / gemini-3-flash-preview /
+  //    gemini-2.5-flash-lite (drift found + fixed 2026-08-18) ────────────────────────
+
+  describe('Gemini capability matrix backfill (2026-08-18)', () => {
+    it.each(['gemini-3.7-flash', 'gemini-3-flash-preview'] as const)(
+      '%s (gemini): gemini-thinking-level, verified capability figures',
+      (model) => {
+        const caps = getModelCapabilities('gemini', model);
+        expect(caps).not.toBeNull();
+        const c = caps as ModelCapabilities;
+        expect(c.contextWindow).toBe(1_048_576);
+        expect(c.maxOutputTokens).toBe(65_536);
+        expect(c.tools).toBe(true);
+        expect(c.mediaInput.image.base64).toBe(true);
+        expect(c.mediaInput.image.url).toBe(false);
+        expect(c.mediaInput.document.pdfBase64).toBe(true);
+        expect(c.reasoningEffort).toBe('gemini-thinking-level');
+      }
+    );
+
+    it('gemini-2.5-flash-lite (gemini): reasoningEffort null (thinkingBudget dialect, not thinkingLevel)', () => {
+      const caps = getModelCapabilities('gemini', 'gemini-2.5-flash-lite');
+      expect(caps).not.toBeNull();
+      const c = caps as ModelCapabilities;
+      expect(c.contextWindow).toBe(1_048_576);
+      expect(c.maxOutputTokens).toBe(65_536);
+      expect(c.tools).toBe(true);
+      expect(c.mediaInput.image.base64).toBe(true);
+      expect(c.mediaInput.image.url).toBe(false);
+      expect(c.mediaInput.document.pdfBase64).toBe(true);
+      // null here means "not exposed via reasoningEffort" (2.5-series uses the older
+      // thinkingBudget dialect), not "no thinking support" — see gemini-2.5-flash above.
+      expect(c.reasoningEffort).toBeNull();
+    });
+
+    it('gemini-3.1-pro (bare, non-preview): confirmed phantom, not present in capability matrix', () => {
+      // gemini-3.1-pro (without -preview) was never actually shipped by Google — only
+      // gemini-3.1-pro-preview exists. Verified 2026-08-18 against
+      // ai.google.dev/gemini-api/docs/models. Must remain null (unknown model).
+      expect(getModelCapabilities('gemini', 'gemini-3.1-pro')).toBeNull();
+    });
+  });
+
   // ── reasoningEffort (v6.5.0) — claude-fable-5/opus-4-8/sonnet-5 rows ──────
 
   describe('reasoningEffort — claude-fable-5/opus-4-8/sonnet-5 rows', () => {
