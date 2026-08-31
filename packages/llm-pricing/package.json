@@ -38,10 +38,10 @@
     "pricing:verify": "tsx scripts/verify-pricing.ts"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@types/node": "^26.4.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "tsx": "^4.23.12",
     "tsup": "^8.3.5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }
