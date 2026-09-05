@@ -1,5 +1,12 @@
 # @diabolicallabs/agent-sdk
 
+## 3.3.4
+
+### Patch Changes
+
+- Updated dependencies [48a8b93]
+  - @diabolicallabs/llm-client@6.8.0
+
 ## 3.3.3
 
 ### Patch Changes
