@@ -19,15 +19,23 @@
  *   - File blocks whose ref.provider mismatches the receiving provider throw bad_request.
  *   - File blocks with ref.state !== 'active' throw bad_request (Gemini only for now).
  *
+ * v6.7.0: mapGeminiParts() honors LlmContentBlock.mediaResolution on image/document/file
+ *   blocks, attaching Part.mediaResolution via toPartMediaResolution(). A 'document' block
+ *   with mediaResolution: 'ultra_high' throws bad_request pre-flight (image-only per
+ *   Google). mapOpenAIContent() and mapAnthropicContent() ignore the field entirely — it
+ *   is Gemini-only.
+ *
  * Never issue an SDK call if unsupported media is detected — guard must throw first.
  * All provider-specific mapper functions are exported so their callers in the per-provider
  * files can import them without adding any new inter-provider dependencies.
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
+import type { PartMediaResolution } from '@google/genai';
 import type OpenAI from 'openai';
 import type { LlmContentBlock, LlmFileRef, LlmMessage } from '../types.js';
 import { LlmError } from '../types.js';
+import { toPartMediaResolution } from './media-resolution.js';
 
 // ─── Detection helpers ────────────────────────────────────────────────────────
 
@@ -360,11 +368,15 @@ export function mapOpenAIContent(
  *            The bare resource name ('files/abc123') is NOT accepted by the Gemini
  *            message API — verified by live smoke 2026-06-16.
  *   mimeType: the MIME type declared at upload time.
+ *
+ * mediaResolution: Gemini 3.x per-part quality/cost override (v6.7.0+). Omitted entirely
+ *   when the source LlmContentBlock did not set mediaResolution. See media-resolution.ts.
  */
 export interface GeminiPart {
   text?: string;
   inlineData?: { mimeType: string; data: string };
   fileData?: { fileUri: string; mimeType: string };
+  mediaResolution?: PartMediaResolution;
 }
 
 /**
@@ -387,6 +399,11 @@ export interface GeminiPart {
  * IMPORTANT — fileUri must be the full HTTPS URI, not the bare resource name.
  * Gemini API error when using bare name: "Unsupported file URI type: files/<id>".
  * LlmFileRef.uri holds the authoritative full URI returned by ai.files.upload().
+ *
+ * mediaResolution (v6.7.0+): when block.mediaResolution is set on image/document/file,
+ * the emitted part carries Part.mediaResolution via toPartMediaResolution(). Omitted
+ * entirely when unset. A 'document' block with mediaResolution: 'ultra_high' throws
+ * bad_request pre-flight — Google documents 'ultra_high' as image-only.
  */
 export function mapGeminiParts(blocks: LlmContentBlock[]): GeminiPart[] {
   const result: GeminiPart[] = [];
@@ -399,24 +416,42 @@ export function mapGeminiParts(blocks: LlmContentBlock[]): GeminiPart[] {
 
     if (block.type === 'image') {
       if (block.source.type === 'base64') {
-        result.push({
+        const part: GeminiPart = {
           inlineData: {
             mimeType: block.source.mediaType,
             data: block.source.data,
           },
-        });
+        };
+        if (block.mediaResolution !== undefined) {
+          part.mediaResolution = toPartMediaResolution(block.mediaResolution);
+        }
+        result.push(part);
         // image.url is guarded by assertBlocksSupported before this is called
       }
       continue;
     }
 
     if (block.type === 'document') {
-      result.push({
+      if (block.mediaResolution === 'ultra_high') {
+        throw new LlmError({
+          message:
+            "[llm-client] 'ultra_high' mediaResolution is image-only on Gemini — document" +
+            " blocks accept 'low' | 'medium' | 'high' only.",
+          provider: 'gemini',
+          kind: 'bad_request',
+          retryable: false,
+        });
+      }
+      const part: GeminiPart = {
         inlineData: {
           mimeType: 'application/pdf',
           data: block.source.data,
         },
-      });
+      };
+      if (block.mediaResolution !== undefined) {
+        part.mediaResolution = toPartMediaResolution(block.mediaResolution);
+      }
+      result.push(part);
       continue;
     }
 
@@ -436,12 +471,16 @@ export function mapGeminiParts(blocks: LlmContentBlock[]): GeminiPart[] {
       // bare resource name (ref.id). Live smoke 2026-06-16 confirmed the Gemini API
       // rejects bare names: "Unsupported file URI type: files/<id>. File URI must be
       // a File API (e.g. https://generativelanguage.googleapis.com/files/<id>)..."
-      result.push({
+      const part: GeminiPart = {
         fileData: {
           fileUri: block.ref.uri,
           mimeType: block.ref.mediaType,
         },
-      });
+      };
+      if (block.mediaResolution !== undefined) {
+        part.mediaResolution = toPartMediaResolution(block.mediaResolution);
+      }
+      result.push(part);
     }
   }
 

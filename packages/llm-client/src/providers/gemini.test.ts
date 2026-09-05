@@ -12,10 +12,10 @@
  * does not mock @google/genai, allowing real ApiError instanceof checks to work correctly.
  */
 
-import { GoogleGenAI, MediaResolution } from '@google/genai';
+import { GoogleGenAI, MediaResolution, PartMediaResolutionLevel } from '@google/genai';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { z } from 'zod';
-import type { LlmClientConfig, LlmUsage } from '../types.js';
+import type { LlmClientConfig, LlmFileRef, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createGeminiProvider } from './gemini.js';
 
@@ -1352,6 +1352,148 @@ describe('Gemini provider — mediaResolution (v6.7.0)', () => {
     const client = createGeminiProvider(TEST_CONFIG);
     await expect(
       client.complete([{ role: 'user', content: 'Hi' }], { mediaResolution: 'ultra_high' })
+    ).rejects.toMatchObject({ kind: 'bad_request', retryable: false, provider: 'gemini' });
+
+    expect(mockGenerateContent).not.toHaveBeenCalled();
+  });
+});
+
+// ─── mediaResolution — per-part on image/document/file blocks (v6.7.0) ──────
+
+describe('Gemini provider — multimodal content blocks mediaResolution (v6.7.0)', () => {
+  let mockGenerateContent: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateContent = vi.fn().mockResolvedValue(mockGeminiResponse());
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: vi.fn(),
+        },
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('image block mediaResolution sets Part.mediaResolution.level', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'base64', mediaType: 'image/png', data: 'pngdata' },
+            mediaResolution: 'high',
+          },
+        ],
+      },
+    ]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      contents: { parts: { mediaResolution?: { level: PartMediaResolutionLevel } }[] }[];
+    };
+    const parts = callArgs.contents[0]?.parts ?? [];
+    expect(parts[0]?.mediaResolution).toEqual({
+      level: PartMediaResolutionLevel.MEDIA_RESOLUTION_HIGH,
+    });
+  });
+
+  it('document block mediaResolution sets Part.mediaResolution.level', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfdata' },
+            mediaResolution: 'medium',
+          },
+        ],
+      },
+    ]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      contents: { parts: { mediaResolution?: { level: PartMediaResolutionLevel } }[] }[];
+    };
+    const parts = callArgs.contents[0]?.parts ?? [];
+    expect(parts[0]?.mediaResolution).toEqual({
+      level: PartMediaResolutionLevel.MEDIA_RESOLUTION_MEDIUM,
+    });
+  });
+
+  it('file block mediaResolution sets Part.mediaResolution.level on fileData part', async () => {
+    const ref: LlmFileRef = {
+      id: 'files/abc123',
+      uri: 'https://generativelanguage.googleapis.com/v1beta/files/abc123',
+      provider: 'gemini',
+      mediaType: 'video/mp4',
+      sizeBytes: 1024,
+      state: 'active',
+    };
+
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [{ type: 'file', ref, mediaResolution: 'low' }],
+      },
+    ]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      contents: {
+        parts: {
+          fileData?: { fileUri: string };
+          mediaResolution?: { level: PartMediaResolutionLevel };
+        }[];
+      }[];
+    };
+    const parts = callArgs.contents[0]?.parts ?? [];
+    expect(parts[0]?.fileData).toMatchObject({ fileUri: ref.uri });
+    expect(parts[0]?.mediaResolution).toEqual({
+      level: PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW,
+    });
+  });
+
+  it('omits Part.mediaResolution when block field unset', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.complete([
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', mediaType: 'image/png', data: 'pngdata' } },
+        ],
+      },
+    ]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      contents: { parts: { mediaResolution?: unknown }[] }[];
+    };
+    const parts = callArgs.contents[0]?.parts ?? [];
+    expect(parts[0]?.mediaResolution).toBeUndefined();
+  });
+
+  it('document block ultra_high throws bad_request pre-flight', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await expect(
+      client.complete([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfdata' },
+              mediaResolution: 'ultra_high',
+            },
+          ],
+        },
+      ])
     ).rejects.toMatchObject({ kind: 'bad_request', retryable: false, provider: 'gemini' });
 
     expect(mockGenerateContent).not.toHaveBeenCalled();
