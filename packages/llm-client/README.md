@@ -307,6 +307,7 @@ interface LlmCallOptions {
   timeoutMs?: number;              // Per-call timeout (ms). Overrides config.timeoutMs.
   signal?: AbortSignal;            // Caller-supplied cancel signal. Never retried.
   streamStallTimeoutMs?: number;   // Per-chunk silence timeout for stream(). Default 30000.
+  mediaResolution?: LlmMediaResolution; // Gemini-only. See "Media resolution (Gemini)" below.
   providerOptions?: Record<string, unknown>;  // Perplexity search filters, etc.
 }
 ```
@@ -533,6 +534,7 @@ interface ModelCapabilities {
   mediaInput: {                   // multimodal content block support (v4.2.0+)
     image: { base64: boolean; url: boolean };
     document: { pdfBase64: boolean };
+    mediaResolution: 'request' | 'part' | null; // Gemini media-resolution tier (v6.7.0+)
   };
   reasoningEffort: 'anthropic-effort' | 'openai-effort' | 'gemini-thinking-level' | null; // v6.3.0+
 }
@@ -556,10 +558,10 @@ interface ModelCapabilities {
 |---|---|---|
 | `'anthropic-effort'` | `low`, `medium`, `high`, `xhigh`, `max` | `claude-opus-5`, `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6` |
 | `'openai-effort'` | all 7 values | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-mini`, `o3`, `o4-mini` |
-| `'gemini-thinking-level'` | `minimal`, `low`, `medium`, `high` | `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite`, `gemini-3.5-flash` |
+| `'gemini-thinking-level'` | `minimal`, `low`, `medium`, `high` | `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`, `gemini-3.7-flash`, `gemini-3.8-flash` |
 | `null` | not supported | every Perplexity/DeepSeek row; `gpt-4.1`; Gemini 2.5-series (`thinkingBudget`, not `thinkingLevel`); Anthropic models not listed above |
 
-`getModelCapabilities` covers all models in `@diabolicallabs/llm-pricing`'s `DEFAULT_PRICING_TABLE`. The table is versioned at `CAPABILITIES_VERSIONED_AT: '2026-07-29'` — import it to detect staleness.
+`getModelCapabilities` covers all models in `@diabolicallabs/llm-pricing`'s `DEFAULT_PRICING_TABLE`, including `gemini-3.8-flash` (v6.7.0+, GA 2026-09-02). The table is versioned at `CAPABILITIES_VERSIONED_AT: '2026-09-05'` — import it to detect staleness.
 
 ## Reasoning-effort passthrough (v6.3.0)
 
@@ -601,6 +603,49 @@ await client.complete(messages, { model: 'claude-opus-5', reasoningEffort: 'none
 **`LlmUsage.reasoningTokens`** is populated from both providers that report a reasoning/thinking token breakdown separately from `outputTokens` — Anthropic (`usage.output_tokens_details.thinking_tokens`) and OpenAI (`usage.output_tokens_details.reasoning_tokens`) — in both the streaming and non-streaming paths. Undefined for Gemini, Perplexity, and DeepSeek, which don't report this breakdown, and undefined when `reasoningEffort` wasn't set.
 
 Cross-reference `getModelCapabilities(provider, model).reasoningEffort` against the table above to know which values a specific model accepts before setting `reasoningEffort` — see [Provider capability matrix](#provider-capability-matrix-v140).
+
+## Media resolution (Gemini) (v6.7.0)
+
+Set `mediaResolution` to control how many tokens a Gemini image, document, or file content block consumes. Gemini-only — silently ignored by Anthropic, OpenAI, DeepSeek, and Perplexity (not a value-set mismatch; those providers simply don't read this field).
+
+```typescript
+import { createClient } from '@diabolicallabs/llm-client';
+
+const client = createClient({
+  provider: 'gemini',
+  model: 'gemini-3.8-flash',
+  apiKey: process.env.GOOGLE_AI_API_KEY!,
+  mediaResolution: 'medium', // config-level default for every media part
+});
+
+// Per-call override — applies to every media part in this call
+await client.complete(messages, { mediaResolution: 'low' });
+
+// Per-block override — applies to this part only, beats call- and config-level
+const blocks = [
+  {
+    type: 'document' as const,
+    source: { type: 'base64' as const, mediaType: 'application/pdf' as const, data: pdfBase64 },
+    mediaResolution: 'high' as const,
+  },
+];
+```
+
+**Precedence:** block-level > call-level > config-level.
+
+**Live token measurements (one PDF page, verified 2026-09-05):**
+
+| Model | unspecified | `low` | `medium` | `high` |
+|---|---|---|---|---|
+| gemini-3.8-flash | 520 (= medium) | 266 | 520 | 1102 |
+| gemini-3.7-flash | 520 (= medium) | 266 | 520 | 1102 |
+| gemini-2.5-flash | 258 | 66 | 258 | 258 |
+
+**Per-part support is Gemini 3.x only.** Gemini 2.5-series models (`gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`) return HTTP 400 when a per-part `mediaResolution` is set on a content block — request-level `mediaResolution` still works on 2.5. Cross-reference `getModelCapabilities(provider, model).mediaInput.mediaResolution` (`'part'` | `'request'` | `null`) before setting a per-block value.
+
+**`'ultra_high'` is image-only.** It has no request-level `MediaResolution` enum member — setting `mediaResolution: 'ultra_high'` on `LlmClientConfig` or `LlmCallOptions` throws `bad_request` before any SDK call. Per-block, it is valid on `image` blocks but throws `bad_request` pre-flight on `document` blocks (Google documents `ultra_high` as image-only; the Gemini API itself returns HTTP 400 for it on documents).
+
+**Google's guidance:** `'medium'` for document pages (quality saturates beyond it), `'high'` for small type in standalone images, `'low'` to roughly halve token cost. Gemini 3's default for PDF pages is already `'medium'` — explicitly setting `mediaResolution: 'medium'` on a Gemini 3 document call changes nothing; the lever worth pulling is `'low'` for cost or `'high'` for small-type misses.
 
 ## Linked AbortController helper (v1.4.0)
 
@@ -690,6 +735,16 @@ const client = createClient({
 
 // This call gets 90 seconds — useful for sonar-deep-research or long reasoning
 const response = await client.complete(messages, { timeoutMs: 90_000 });
+```
+
+**Multimodal and reasoning calls commonly need ≥ 90 seconds.** A whole-document (`document`/`file` content block) call, especially combined with `reasoningEffort`, routinely exceeds the 30 second default — the default itself is unchanged, but raise `timeoutMs` explicitly for these calls:
+
+```typescript
+// A whole-PDF extraction call with reasoning — 30s is not enough for this shape of call.
+const response = await client.complete(
+  [{ role: 'user', content: [documentBlock, { type: 'text', text: 'Extract the brand guidelines.' }] }],
+  { timeoutMs: 90_000, reasoningEffort: 'medium' }
+);
 ```
 
 On timeout, `LlmError.kind === 'timeout'` and `retryable === true`. Each retry attempt gets a fresh deadline — the timeout resets per attempt, not across the full retry sequence.
@@ -1035,6 +1090,10 @@ Both compose: `instrumentClient()` merges its `afterCall` handler with any hooks
 Gemini only accepts images via `inlineData` (base64 bytes). Image URL source is not supported on Gemini — the toolkit throws `LlmError({ kind: 'bad_request' })` before making any SDK call.
 
 Use `getModelCapabilities(provider, model).mediaInput` to check support programmatically before constructing a multimodal message.
+
+### Per-block `mediaResolution` (Gemini, v6.7.0+)
+
+`image`, `document`, and `file` blocks all accept an optional `mediaResolution?: LlmMediaResolution` field — a Gemini-only per-part override of the request-level media-resolution knob. Ignored entirely by Anthropic, OpenAI, DeepSeek, and Perplexity. See [Media resolution (Gemini)](#media-resolution-gemini-v670) for the full semantics, precedence rules, and the `'ultra_high'` image-only caveat.
 
 ### Usage example
 

@@ -50,6 +50,12 @@ export type LlmProvider = LlmClientConfig['provider'];
  *                        image.url       — accepts LlmContentBlock image with source.type 'url'.
  *                        document.pdfBase64 — accepts LlmContentBlock document with base64 PDF.
  *                        All false for providers that reject media blocks before any SDK call.
+ *                        mediaResolution — Gemini media-resolution knob support (v6.7.0+).
+ *                        'part'    = per-part AND request-level both honored (Gemini 3.x rows).
+ *                        'request' = request-level only; per-part returns HTTP 400 (Gemini 2.5-series).
+ *                        null      = provider ignores LlmClientConfig/LlmCallOptions/
+ *                        LlmContentBlock.mediaResolution entirely (every non-Gemini row).
+ *                        Advisory only — no provider call site gates on this field at runtime.
  *   reasoningEffort    — reasoning-effort dialect this model accepts (v6.3.0+).
  *                        'anthropic-effort'       = output_config.effort (low/medium/high/xhigh/max).
  *                        'openai-effort'          = reasoning.effort (all 7 LlmReasoningEffort values).
@@ -79,6 +85,8 @@ export interface ModelCapabilities {
   mediaInput: {
     image: { base64: boolean; url: boolean };
     document: { pdfBase64: boolean };
+    /** Gemini media-resolution support tier (v6.7.0+). See the field doc above. */
+    mediaResolution: 'request' | 'part' | null;
   };
   reasoningEffort: 'anthropic-effort' | 'openai-effort' | 'gemini-thinking-level' | null;
 }
@@ -89,7 +97,7 @@ export interface ModelCapabilities {
  * ISO 8601 date the capability table was last verified against provider documentation.
  * Compare against Date.now() to detect staleness.
  */
-export const CAPABILITIES_VERSIONED_AT = '2026-07-29';
+export const CAPABILITIES_VERSIONED_AT = '2026-09-05';
 
 /** Provider-keyed, model-keyed capability lookup table. */
 const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> = {
@@ -118,7 +126,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'anthropic-effort',
     },
     // claude-fable-5 (v6.5.0+): context window (1M) and max output tokens (128k) verified
@@ -135,7 +147,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'anthropic-effort',
     },
     // claude-sonnet-5 (v6.5.0+): context window (1M) and max output tokens (128k) verified
@@ -152,7 +168,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'anthropic-effort',
     },
     // claude-opus-4-8 (v6.5.0+): context window (1M) and max output tokens (128k) verified
@@ -169,7 +189,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'anthropic-effort',
     },
     'claude-opus-4-7': {
@@ -182,7 +206,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'anthropic-effort',
     },
     'claude-opus-4-6': {
@@ -195,7 +223,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'anthropic-effort',
     },
     'claude-sonnet-4-6': {
@@ -208,7 +240,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'anthropic-effort',
     },
     'claude-sonnet-4-5-20250929': {
@@ -221,7 +257,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
     'claude-haiku-4-5': {
@@ -234,7 +274,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
     'claude-haiku-4-5-20251001': {
@@ -247,7 +291,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
     'claude-haiku-3-5': {
@@ -260,7 +308,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'tool-use',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
     'claude-haiku-3': {
@@ -274,7 +326,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       // claude-haiku-3 does not support vision or document input
-      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      mediaInput: {
+        image: { base64: false, url: false },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
   },
@@ -307,7 +363,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.6-terra': {
@@ -320,7 +380,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.6-luna': {
@@ -333,7 +397,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.5': {
@@ -346,7 +414,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.5-pro': {
@@ -359,7 +431,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.4': {
@@ -372,7 +448,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.4-mini': {
@@ -385,7 +465,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
     // gpt-5.4-nano (v6.4.0+): diverges from sibling gpt-5.4/gpt-5.4-mini — context window
@@ -404,7 +488,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
     // gpt-5.4-pro (v6.4.0+): priced at extended-reasoning-workload rates identical to
@@ -425,7 +513,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
     'gpt-4.1': {
@@ -438,7 +530,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
     o3: {
@@ -452,7 +548,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       // o3 is a reasoning model — vision support documented by OpenAI as supported.
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
     'o4-mini': {
@@ -467,7 +567,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       streamStructured: true,
       // o4-mini is a reasoning model. OpenAI docs list vision support for o4-mini.
       // Set based on published capability docs (June 2026); reverify if model updates.
-      mediaInput: { image: { base64: true, url: true }, document: { pdfBase64: false } },
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
       reasoningEffort: 'openai-effort',
     },
   },
@@ -497,7 +601,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       streamStructured: false,
       // Gemini accepts image/PDF via inlineData (base64 bytes only).
       // image.url is false — Gemini inlineData does not accept URLs; use base64 bytes only.
-      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'part',
+      },
       reasoningEffort: 'gemini-thinking-level',
     },
     'gemini-2.5-pro': {
@@ -510,7 +618,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
-      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'request',
+      },
       reasoningEffort: null,
     },
     'gemini-2.5-flash': {
@@ -523,7 +635,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
-      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'request',
+      },
       reasoningEffort: null,
     },
     'gemini-3.1-flash-lite': {
@@ -536,7 +652,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
-      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'part',
+      },
       reasoningEffort: 'gemini-thinking-level',
     },
     // Google's current GA flagship Flash model (released 2026-05-19).
@@ -551,7 +671,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
-      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'part',
+      },
       reasoningEffort: 'gemini-thinking-level',
     },
     // gemini-3.5-flash-lite (v6.4.0+): input token limit 1,048,576 and output token limit
@@ -569,7 +693,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
-      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'part',
+      },
       reasoningEffort: 'gemini-thinking-level',
     },
     // gemini-3.6-flash (v6.4.0+): input token limit 1,048,576 and output token limit
@@ -586,7 +714,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
-      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'part',
+      },
       reasoningEffort: 'gemini-thinking-level',
     },
     // gemini-3.7-flash: input token limit 1,048,576 and output token limit 65,536 verified
@@ -604,7 +736,35 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
-      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'part',
+      },
+      reasoningEffort: 'gemini-thinking-level',
+    },
+    // gemini-3.8-flash: GA 2026-09-02 per Google's changelog; live `models` endpoint lists
+    // input token limit 1,048,576 and output token limit 65,536 — same shape as sibling
+    // gemini-3.7-flash. Structured outputs, function calling, and context caching all
+    // confirmed supported on the model page. Nuance: thinkingLevel: 'minimal' errors on
+    // this model too (same caveat as gemini-3.7-flash) — callers should use 'low' or
+    // higher. Pricing identical to gemini-3.7-flash (see pricing/table.json).
+    // mediaResolution: 'part' — per-part support verified live 2026-09-05 (Gemini 3.x row).
+    'gemini-3.8-flash': {
+      contextWindow: 1_048_576,
+      maxOutputTokens: 65_536,
+      streaming: true,
+      tools: true,
+      parallelTools: false,
+      promptCache: null,
+      structuredOutput: 'response-schema',
+      responseIds: 'synthesized',
+      streamStructured: false,
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'part',
+      },
       reasoningEffort: 'gemini-thinking-level',
     },
     // gemini-3-flash-preview: input token limit 1,048,576 and output token limit 65,536
@@ -620,7 +780,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
-      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'part',
+      },
       reasoningEffort: 'gemini-thinking-level',
     },
     // gemini-2.5-flash-lite: input token limit 1,048,576 and output token limit 65,536
@@ -641,7 +805,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'response-schema',
       responseIds: 'synthesized',
       streamStructured: false,
-      mediaInput: { image: { base64: true, url: false }, document: { pdfBase64: true } },
+      mediaInput: {
+        image: { base64: true, url: false },
+        document: { pdfBase64: true },
+        mediaResolution: 'request',
+      },
       reasoningEffort: null,
     },
   },
@@ -678,7 +846,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       responseIds: 'provider',
       streamStructured: true,
       // DeepSeek does not support vision or document input (June 2026).
-      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      mediaInput: {
+        image: { base64: false, url: false },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
     'deepseek-v4-pro': {
@@ -691,7 +863,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      mediaInput: {
+        image: { base64: false, url: false },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
   },
@@ -718,7 +894,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       streamStructured: false,
       // Perplexity image support deferred (smoke test not run — PERPLEXITY_API_KEY absent 2026-06-06).
       // All media blocks rejected with bad_request in v4.2.0. Documents always unsupported.
-      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      mediaInput: {
+        image: { base64: false, url: false },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
     'sonar-pro': {
@@ -731,7 +911,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: null,
       responseIds: 'provider',
       streamStructured: false,
-      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      mediaInput: {
+        image: { base64: false, url: false },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
     'sonar-reasoning-pro': {
@@ -744,7 +928,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: null,
       responseIds: 'provider',
       streamStructured: false,
-      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      mediaInput: {
+        image: { base64: false, url: false },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
     'sonar-deep-research': {
@@ -757,7 +945,11 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: null,
       responseIds: 'provider',
       streamStructured: false,
-      mediaInput: { image: { base64: false, url: false }, document: { pdfBase64: false } },
+      mediaInput: {
+        image: { base64: false, url: false },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
       reasoningEffort: null,
     },
   },

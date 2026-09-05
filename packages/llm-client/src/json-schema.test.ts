@@ -188,6 +188,34 @@ describe('toProviderSchema() — gemini profile', () => {
     // openapi-3.0 target does not emit $schema — confirm it is absent
     expect(result.$schema).toBeUndefined();
   });
+
+  // geminiPostprocess: preserves Zod declaration order of properties (2026-09-05).
+  //
+  // Google's structured-outputs update (blog, 2025-11-05) made the API preserve schema key
+  // order for all Gemini 2.5+ models — verified live 2026-09-05 against a non-alphabetical
+  // schema (zebra, apple, mango, nested{yak, ant}) on gemini-3.8-flash, gemini-3.7-flash, and
+  // gemini-2.5-flash (two runs each, all in declared order). Zod 4's z.toJSONSchema already
+  // emits `properties` in declaration order, and geminiPostprocess's key-by-key rebuild
+  // (`for (const key of Object.keys(props))`) preserves insertion order per the JS spec for
+  // string keys — so no `propertyOrdering` injection is needed on Gemini 2.5+. This is why
+  // the toolkit does not inject one (see brief rev 2, "Not a gap — propertyOrdering").
+  it('geminiPostprocess: preserves Zod declaration order of properties (top-level and nested)', () => {
+    const schema = z.object({
+      zebra: z.string(),
+      apple: z.number(),
+      mango: z.boolean(),
+      nested: z.object({
+        yak: z.string(),
+        ant: z.number(),
+      }),
+    });
+    const result = toProviderSchema(schema, 'gemini');
+
+    expect(Object.keys(result.properties ?? {})).toEqual(['zebra', 'apple', 'mango', 'nested']);
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const nested = result.properties?.['nested'];
+    expect(Object.keys(nested?.properties ?? {})).toEqual(['yak', 'ant']);
+  });
 });
 
 // ─── toProviderSchema — error cases ───────────────────────────────────────────

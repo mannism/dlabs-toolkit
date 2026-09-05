@@ -997,6 +997,18 @@ describe('computeCost — new model rows (2026-07-25 drift-check reconciliation)
     expect(cost.isPartial).toBe(false);
   });
 
+  it('gemini-3.8-flash: resolves at flat rate, no long-context tier', () => {
+    const cost = computeCost({
+      usage: oneMillionEach,
+      provider: 'gemini',
+      model: 'gemini-3.8-flash',
+    });
+
+    expect(cost.input).toBeCloseTo(0.75, 5);
+    expect(cost.output).toBeCloseTo(3.75, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+
   it('gemini-3.5-flash-lite: resolves at flat rate', () => {
     const cost = computeCost({
       usage: oneMillionEach,

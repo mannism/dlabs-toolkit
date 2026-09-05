@@ -19,7 +19,7 @@
 import type { PricingTable } from './types.js';
 
 export const DEFAULT_PRICING_TABLE: PricingTable = {
-  versionedAt: '2026-08-18',
+  versionedAt: '2026-09-05',
 
   anthropic: {
     'claude-fable-5': {
@@ -439,6 +439,13 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       outputPer1M: 3.75,
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
       verifiedAt: '2026-08-18',
+    },
+    'gemini-3.8-flash': {
+      cacheReadPer1M: 0.075,
+      inputPer1M: 0.75,
+      outputPer1M: 3.75,
+      sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
+      verifiedAt: '2026-09-05',
     },
   },
 
