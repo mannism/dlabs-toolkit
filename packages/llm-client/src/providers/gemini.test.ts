@@ -12,7 +12,7 @@
  * does not mock @google/genai, allowing real ApiError instanceof checks to work correctly.
  */
 
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, MediaResolution } from '@google/genai';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { z } from 'zod';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
@@ -1250,5 +1250,110 @@ describe('Gemini provider — reasoningEffort (v6.3.0)', () => {
     });
 
     expect(result.usage.reasoningTokens).toBeUndefined();
+  });
+});
+
+// ─── mediaResolution — request-level (v6.7.0) ───────────────────────────────
+
+describe('Gemini provider — mediaResolution (v6.7.0)', () => {
+  let mockGenerateContent: MockInstance;
+  let mockGenerateContentStream: MockInstance;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateContent = vi.fn().mockResolvedValue(mockGeminiResponse());
+    async function* fakeStream() {
+      yield { text: 'Hi', usageMetadata: undefined };
+    }
+    mockGenerateContentStream = vi.fn().mockResolvedValue(fakeStream());
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: {
+          generateContent: mockGenerateContent,
+          generateContentStream: mockGenerateContentStream,
+        },
+      };
+    });
+  });
+
+  it('complete(): passes config.mediaResolution as GenerateContentConfig.mediaResolution', async () => {
+    const client = createGeminiProvider({ ...TEST_CONFIG, mediaResolution: 'high' });
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      config?: { mediaResolution?: MediaResolution };
+    };
+    expect(callArgs.config?.mediaResolution).toBe(MediaResolution.MEDIA_RESOLUTION_HIGH);
+  });
+
+  it('stream(): passes config.mediaResolution as GenerateContentConfig.mediaResolution', async () => {
+    const client = createGeminiProvider({ ...TEST_CONFIG, mediaResolution: 'low' });
+    for await (const _ of client.stream([{ role: 'user', content: 'Hi' }])) {
+      // consume
+    }
+
+    const callArgs = mockGenerateContentStream.mock.calls[0]?.[0] as {
+      config?: { mediaResolution?: MediaResolution };
+    };
+    expect(callArgs.config?.mediaResolution).toBe(MediaResolution.MEDIA_RESOLUTION_LOW);
+  });
+
+  it('structured(): passes config.mediaResolution as GenerateContentConfig.mediaResolution', async () => {
+    const zodSchema = z.object({ ok: z.boolean() });
+    mockGenerateContent.mockResolvedValue(mockGeminiResponse({ text: '{"ok":true}' }));
+
+    const client = createGeminiProvider({ ...TEST_CONFIG, mediaResolution: 'medium' });
+    await client.structured([{ role: 'user', content: 'Return data' }], zodSchema);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      config?: { mediaResolution?: MediaResolution };
+    };
+    expect(callArgs.config?.mediaResolution).toBe(MediaResolution.MEDIA_RESOLUTION_MEDIUM);
+  });
+
+  it('withTools(): passes config.mediaResolution as GenerateContentConfig.mediaResolution', async () => {
+    mockGenerateContent.mockResolvedValue(mockGeminiTextResponse('sunny'));
+    const weatherTool = {
+      name: 'get_weather',
+      description: 'Get the current weather for a city.',
+      inputSchema: { kind: 'zod' as const, schema: z.object({ city: z.string() }) },
+    };
+
+    const client = createGeminiProvider({ ...TEST_CONFIG, mediaResolution: 'high' });
+    await client.withTools([{ role: 'user', content: 'Weather?' }], [weatherTool]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      config?: { mediaResolution?: MediaResolution };
+    };
+    expect(callArgs.config?.mediaResolution).toBe(MediaResolution.MEDIA_RESOLUTION_HIGH);
+  });
+
+  it('call-level mediaResolution overrides config-level', async () => {
+    const client = createGeminiProvider({ ...TEST_CONFIG, mediaResolution: 'low' });
+    await client.complete([{ role: 'user', content: 'Hi' }], { mediaResolution: 'high' });
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      config?: { mediaResolution?: MediaResolution };
+    };
+    expect(callArgs.config?.mediaResolution).toBe(MediaResolution.MEDIA_RESOLUTION_HIGH);
+  });
+
+  it('omits mediaResolution when unset', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+
+    const callArgs = mockGenerateContent.mock.calls[0]?.[0] as {
+      config?: { mediaResolution?: MediaResolution };
+    };
+    expect(callArgs.config?.mediaResolution).toBeUndefined();
+  });
+
+  it('request-level ultra_high throws bad_request before any SDK call', async () => {
+    const client = createGeminiProvider(TEST_CONFIG);
+    await expect(
+      client.complete([{ role: 'user', content: 'Hi' }], { mediaResolution: 'ultra_high' })
+    ).rejects.toMatchObject({ kind: 'bad_request', retryable: false, provider: 'gemini' });
+
+    expect(mockGenerateContent).not.toHaveBeenCalled();
   });
 });

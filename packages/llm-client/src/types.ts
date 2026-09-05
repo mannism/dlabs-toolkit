@@ -336,6 +336,10 @@ export interface LlmFilesApi {
  * media type and provider, so callers don't repeat that information in the block.
  * Cross-provider refs are rejected pre-flight with bad_request.
  *
+ * v6.7.0: `mediaResolution` field on `image`/`document`/`file` blocks — Gemini-only
+ * per-part override of the request-level media-resolution knob. See LlmMediaResolution.
+ * Silently ignored by every non-Gemini provider (not read at all).
+ *
  * Use toolkit identifier `mediaType` (camelCase), not the provider-specific `media_type`.
  * Use `type: 'url'` source only for images — document URL support is out of scope.
  */
@@ -347,15 +351,27 @@ export type LlmContentBlock =
         | { type: 'base64'; mediaType: LlmImageMediaType; data: string }
         | { type: 'url'; url: string };
       detail?: 'low' | 'high' | 'auto';
+      /** Gemini-only per-part override (v6.7.0+). See LlmMediaResolution. */
+      mediaResolution?: LlmMediaResolution;
     }
   | {
       type: 'document';
       source: { type: 'base64'; mediaType: LlmDocumentMediaType; data: string; filename?: string };
+      /**
+       * Gemini-only per-part override (v6.7.0+). `'ultra_high'` throws bad_request
+       * pre-flight — Google documents `ultra_high` as image-only. See LlmMediaResolution.
+       */
+      mediaResolution?: LlmMediaResolution;
     }
   // v5.1.0: file block for provider Files API references (video, large images, PDFs).
   // ref.provider must match the receiving provider — cross-provider refs throw bad_request.
   // For Gemini refs, ensure ref.state === 'active' before use; call waitForActive() first.
-  | { type: 'file'; ref: LlmFileRef };
+  | {
+      type: 'file';
+      ref: LlmFileRef;
+      /** Gemini-only per-part override (v6.7.0+). See LlmMediaResolution. */
+      mediaResolution?: LlmMediaResolution;
+    };
 
 /**
  * A single conversation turn passed to complete(), stream(), structured(), and withTools().
@@ -394,7 +410,21 @@ export interface LlmClientConfig {
   baseDelayMs?: number; // default: 1000 — exponential backoff base
   maxTokens?: number; // provider default if omitted
   temperature?: number; // provider default if omitted
-  timeoutMs?: number; // default: 30000
+  /**
+   * Per-call default timeout (ms). Default: 30000.
+   * Multimodal calls (`document`/`file` content blocks) and `reasoningEffort` calls
+   * commonly need ≥ 90_000 — a whole-document + thinking call routinely exceeds the
+   * 30s default. The default itself is unchanged; raise it explicitly for these calls
+   * via config.timeoutMs or the per-call LlmCallOptions.timeoutMs override.
+   * See README "Per-call timeout override".
+   */
+  timeoutMs?: number;
+  /**
+   * Default Gemini media-resolution level applied to every image/document/file part in
+   * every call, where not overridden per-call or per-block (v6.7.0+). See
+   * LlmMediaResolution for the full semantics. Ignored by non-Gemini providers.
+   */
+  mediaResolution?: LlmMediaResolution;
   /**
    * Default stall timeout for stream() calls (ms). Fires when no chunk is received
    * for this duration. Independent of timeoutMs — tolerant of reasoning-model think-pauses.
@@ -595,20 +625,52 @@ export interface LlmResponse {
 export type LlmReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 /**
+ * Media-resolution level for Gemini image/document/file content blocks (v6.7.0+).
+ * Gemini-only — a quality/cost knob controlling how many tokens a media part consumes.
+ * Silently ignored by Anthropic, OpenAI, DeepSeek, and Perplexity: this is a quality/cost
+ * knob those providers simply don't read, not a value-set mismatch requiring rejection.
+ *
+ * Request-level (LlmClientConfig.mediaResolution / LlmCallOptions.mediaResolution) accepts
+ * `'low' | 'medium' | 'high'` only. `'ultra_high'` throws `bad_request` pre-flight at
+ * request level — Gemini's request-level `MediaResolution` enum has no ULTRA_HIGH member.
+ *
+ * Per-block (LlmContentBlock.mediaResolution on `image`/`document`/`file`) accepts all four
+ * levels. `'ultra_high'` is documented by Google as image-only: setting it on a `document`
+ * block throws `bad_request` pre-flight (the Gemini API itself returns HTTP 400).
+ *
+ * Per-part support is Gemini 3.x only. Gemini 2.5-series models return HTTP 400 when a
+ * per-part `mediaResolution` is set (request-level still works on 2.5). Advisory only via
+ * `getModelCapabilities(...).mediaInput.mediaResolution` — the toolkit does not gate calls
+ * against this at runtime.
+ *
+ * Precedence: block-level > call-level > config-level. Call/config level applies to every
+ * media part in the request; a block-level value overrides for that specific part only.
+ *
+ * See providers/media-resolution.ts for the resolution and mapping helpers.
+ */
+export type LlmMediaResolution = 'low' | 'medium' | 'high' | 'ultra_high';
+
+/**
  * Per-call options shared across complete(), stream(), and structured().
  * Extends the standard model/maxTokens/temperature overrides with:
  *   timeoutMs           — per-call timeout override; overrides config.timeoutMs for this call only.
+ *                         Multimodal (`document`/`file` blocks) and `reasoningEffort` calls
+ *                         commonly need ≥ 90_000 — the default stays 30_000.
  *   signal              — caller-supplied AbortSignal; aborts the in-flight call immediately.
  *                         A pre-aborted signal throws without making an SDK call (no retry).
  *                         A mid-call abort throws kind:'cancelled', retryable:false (no retry).
  *   streamStallTimeoutMs — per-call stall detection for stream(); overrides config default.
+ *   mediaResolution     — Gemini-only media-resolution override for this call; overrides
+ *                         config.mediaResolution. See LlmMediaResolution.
  *   providerOptions     — generic escape hatch for provider-specific parameters.
  *                         The Perplexity provider reads search_domain_filter and
  *                         search_recency_filter from this field; other providers ignore it.
  *                         Unknown fields are passed through unchanged.
  */
 export interface LlmCallOptions
-  extends Partial<Pick<LlmClientConfig, 'maxTokens' | 'temperature' | 'timeoutMs'>> {
+  extends Partial<
+    Pick<LlmClientConfig, 'maxTokens' | 'temperature' | 'timeoutMs' | 'mediaResolution'>
+  > {
   /**
    * Per-call model override. Must be a single string (unlike LlmClientConfig.model which
    * accepts an array for failover). Overrides the config-level model for this call only.
