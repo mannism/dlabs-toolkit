@@ -154,6 +154,27 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       },
       reasoningEffort: 'anthropic-effort',
     },
+    // claude-fable-5-1: context window (1M) and max output tokens (128k) verified live against
+    // platform.claude.com/docs/en/about-claude/pricing (2026-09-05) — same tier as claude-fable-5.
+    // No schema field exists in this file for forced-tool-choice or prefill support, so this row
+    // mirrors claude-fable-5's shape exactly for those fields rather than guessing new ones.
+    'claude-fable-5-1': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: 'ephemeral',
+      structuredOutput: 'tool-use',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'anthropic-effort',
+    },
     // claude-sonnet-5 (v6.5.0+): context window (1M) and max output tokens (128k) verified
     // live against platform.claude.com/docs/en/about-claude/models/overview (2026-08-08).
     // reasoningEffort confirmed via platform.claude.com/docs/en/build-with-claude/effort (2026-08-08),
@@ -389,6 +410,29 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
     },
     'gpt-5.6-luna': {
       contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'openai-effort',
+    },
+    // gpt-6-astra (v6.8.0+): context window 1,050,000 (max input 922,000) and max output
+    // tokens 128,000 per developers.openai.com/api/docs/models/gpt-6-astra (2026-09-05).
+    // Reasoning model — charges invisible reasoning tokens like the gpt-5.6/o-series family
+    // (see pricing/table.json hasInvisibleReasoningTokens). Same input/output modality shape
+    // as gpt-5.6-sol (image + text in, text out). Long-context billing tier (>272K input)
+    // is a pricing-only concern, not modeled here.
+    'gpt-6-astra': {
+      contextWindow: 1_050_000,
       maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
