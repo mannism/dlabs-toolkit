@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CAPABILITIES_VERSIONED_AT,
   getModelCapabilities,
+  type LlmProvider,
   type ModelCapabilities,
 } from './capabilities.js';
 
@@ -144,6 +145,10 @@ describe('getModelCapabilities', () => {
     expect(new Date(CAPABILITIES_VERSIONED_AT).getTime()).not.toBeNaN();
   });
 
+  it('CAPABILITIES_VERSIONED_AT is 2026-09-05 (mediaResolution + gemini-3.8-flash backfill)', () => {
+    expect(CAPABILITIES_VERSIONED_AT).toBe('2026-09-05');
+  });
+
   // ── mediaInput capabilities (v4.2.0) ──────────────────────────────────────
 
   it('Anthropic claude-sonnet-4-6: full media support', () => {
@@ -266,7 +271,7 @@ describe('getModelCapabilities', () => {
   //    gemini-2.5-flash-lite (drift found + fixed 2026-08-18) ────────────────────────
 
   describe('Gemini capability matrix backfill (2026-08-18)', () => {
-    it.each(['gemini-3.7-flash', 'gemini-3-flash-preview'] as const)(
+    it.each(['gemini-3.7-flash', 'gemini-3-flash-preview', 'gemini-3.8-flash'] as const)(
       '%s (gemini): gemini-thinking-level, verified capability figures',
       (model) => {
         const caps = getModelCapabilities('gemini', model);
@@ -302,6 +307,59 @@ describe('getModelCapabilities', () => {
       // gemini-3.1-pro-preview exists. Verified 2026-08-18 against
       // ai.google.dev/gemini-api/docs/models. Must remain null (unknown model).
       expect(getModelCapabilities('gemini', 'gemini-3.1-pro')).toBeNull();
+    });
+  });
+
+  // ── mediaInput.mediaResolution (v6.7.0) ───────────────────────────────────
+
+  describe('mediaInput.mediaResolution (v6.7.0)', () => {
+    it.each([
+      'gemini-3.1-pro-preview',
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.6-flash',
+      'gemini-3.7-flash',
+      'gemini-3-flash-preview',
+      'gemini-3.8-flash',
+    ] as const)("%s (gemini): mediaInput.mediaResolution is 'part'", (model) => {
+      const caps = getModelCapabilities('gemini', model);
+      expect(caps).not.toBeNull();
+      expect((caps as ModelCapabilities).mediaInput.mediaResolution).toBe('part');
+    });
+
+    it.each(['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] as const)(
+      "%s (gemini): mediaInput.mediaResolution is 'request'",
+      (model) => {
+        const caps = getModelCapabilities('gemini', model);
+        expect(caps).not.toBeNull();
+        expect((caps as ModelCapabilities).mediaInput.mediaResolution).toBe('request');
+      }
+    );
+
+    it('every non-Gemini row has mediaInput.mediaResolution null', () => {
+      const nonGeminiSamples: Array<[LlmProvider, string]> = [
+        ['anthropic', 'claude-opus-5'],
+        ['anthropic', 'claude-haiku-3'],
+        ['openai', 'gpt-5.5'],
+        ['openai', 'o4-mini'],
+        ['deepseek', 'deepseek-v4-flash'],
+        ['perplexity', 'sonar-pro'],
+      ];
+      for (const [provider, model] of nonGeminiSamples) {
+        const caps = getModelCapabilities(provider, model);
+        expect(caps).not.toBeNull();
+        expect((caps as ModelCapabilities).mediaInput.mediaResolution).toBeNull();
+      }
+    });
+
+    it('gemini-3.8-flash: same contextWindow/maxOutputTokens/reasoningEffort as gemini-3.7-flash', () => {
+      const v37 = getModelCapabilities('gemini', 'gemini-3.7-flash') as ModelCapabilities;
+      const v38 = getModelCapabilities('gemini', 'gemini-3.8-flash') as ModelCapabilities;
+      expect(v38.contextWindow).toBe(v37.contextWindow);
+      expect(v38.maxOutputTokens).toBe(v37.maxOutputTokens);
+      expect(v38.reasoningEffort).toBe(v37.reasoningEffort);
+      expect(v38.mediaInput).toEqual(v37.mediaInput);
     });
   });
 
