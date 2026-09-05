@@ -84,3 +84,19 @@ notes: |
   claude-sonnet-5, claude-mythos-5, gpt-5.6-{sol,terra,luna} (hasInvisibleReasoningTokens),
   gemini-3.5-flash-lite, gemini-3.6-flash. All verified live against official provider pages
   2026-07-25. versionedAt bumped to 2026-07-25.
+
+  v1.4.2 (2026-08-18, PR #264): pricing-drift correction sweep across Anthropic,
+  OpenAI, DeepSeek, xAI — claude-sonnet-5's planned 2026-08-31 increase cancelled ($2/$10
+  stays permanent), claude-haiku-3/3-5 retirement notes, gpt-5.6-terra/luna repriced
+  (both had been overpriced in the table), scheduled-shutdown notes for gpt-4.1/o1/o3/
+  o3-mini/o4-mini, deepseek-chat/reasoner retirement notes, deepseek-v4-flash/pro moved
+  to the new off-peak baseline rate, grok-4.6 added.
+  v1.4.3 (PR #268): removed the phantom gemini-3.1-pro pricing row — verified live
+  against Google's model docs that only gemini-3.1-pro-preview ever existed; llm-client@6.6.0
+  tracks the same correction on the capability-matrix side.
+
+  v1.5.0 (2026-09-05, PR #283): gemini-3.8-flash pricing row added — $0.75 / $3.75 / $0.075
+  per 1M input/output/cache-read tokens, same rate as gemini-3.7-flash. Promotional pricing
+  for both models ends 2027-01-01, after which the list price rises to $1.50 / $7.50 / $0.15
+  per 1M tokens — expect the January drift check to flag this. versionedAt bumped to
+  2026-09-05.
