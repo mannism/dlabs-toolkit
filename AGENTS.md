@@ -85,7 +85,7 @@ pnpm release              # build + changeset publish
 
 ## Testing
 
-No fleet tier currently assigned. Apply per-package judgement; new packages must ship with tests, and Turborepo-level `pnpm run test` should always be green before publishing.
+Tier 1 — Library adaptation, per `/Users/mann/Documents/Claude/testing-policy.md` (ratified `decisions.md` 2026-07-06). Each package's `vitest.config.ts` enforces an 80% coverage floor (ratchet — never lowered) in CI. New packages must ship with tests, and Turborepo-level `pnpm run test` must be green before publishing.
 
 ## Where things live
 
