@@ -163,9 +163,14 @@ Anthropic has two cache write tiers. The toolkit's `providerOptions.promptCache:
 
 `gemini-2.5-flash` has flat pricing — no tiering.
 
-### OpenAI — reasoning models (`o3`, `o4-mini`)
+### OpenAI — reasoning models (`o3`, `o4-mini`, `gpt-5.6-sol/terra/luna`, `gpt-5`/`gpt-5-mini`/`gpt-5-nano`/`gpt-5-pro`, `gpt-6-astra`)
 
-O-series models bill reasoning tokens against `outputPer1M` but do not return them in the response. `usage.outputTokens` is therefore higher than visible output tokens. `computeCost()` returns the correct billing total but sets `isPartial: true` so consumers know the visible output cost is a floor, not the exact computation cost.
+O-series and `gpt-5.x`/`gpt-6` reasoning-family models bill reasoning tokens against `outputPer1M` but do not return them in the response. `usage.outputTokens` is therefore higher than visible output tokens. `computeCost()` returns the correct billing total but sets `isPartial: true` so consumers know the visible output cost is a floor, not the exact computation cost.
+
+`gpt-6-astra` additionally has a long-context tier, same mechanism as the Gemini models above but with its own threshold:
+
+- `inputTokens ≤ 272 000` → standard rates (`inputPer1M` $10.00, `outputPer1M` $50.00)
+- `inputTokens > 272 000` → the **entire request** bills at `longContextInputPer1M` ($20.00, 2x) and `longContextOutputPer1M` ($75.00, 1.5x) — not just the excess over the threshold.
 
 ### DeepSeek — deprecated aliases
 

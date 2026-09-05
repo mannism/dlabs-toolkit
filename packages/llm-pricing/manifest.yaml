@@ -100,3 +100,15 @@ notes: |
   for both models ends 2027-01-01, after which the list price rises to $1.50 / $7.50 / $0.15
   per 1M tokens — expect the January drift check to flag this. versionedAt bumped to
   2026-09-05.
+
+  v1.6.0 (2026-09-05, PR #287): claude-fable-5-1 and claude-mythos-5-1 added
+  ($10/$50, same tier as fable-5/mythos-5; cache reads priced at 0.025x input — a documented
+  Anthropic exception to the standard 0.1x multiplier, not an error). gpt-6-astra added
+  ($10/$50/$1.00 standard, with a long-context tier billing the full request at 2x
+  input/cache and 1.5x output above 272K input tokens). gpt-5/gpt-5-mini/gpt-5-nano/
+  gpt-5-pro added (coverage gap fill — live on OpenAI's pricing page but previously absent).
+  gpt-5.6-sol corrected from stale $5.00/$30.00/$0.50 to live $4.00/$20.00/$0.40 (was
+  sourced from a secondary aggregator) — downstream consumers on caret ranges will see
+  reported Sol output costs drop ~33%; this is a correction, not a regression.
+  gemini-3.6-flash/3.7-flash/3.8-flash gained notes flagging the 2027-01-01 introductory-
+  pricing sunset. All figures live-verified against vendor primary sources 2026-09-05.

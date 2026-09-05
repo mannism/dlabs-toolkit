@@ -31,6 +31,17 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
       verifiedAt: '2026-07-25',
     },
+    'claude-fable-5-1': {
+      cacheReadPer1M: 0.25,
+      cacheWrite1hPer1M: 20,
+      cacheWritePer1M: 12.5,
+      inputPer1M: 10,
+      notes:
+        "Cache reads priced at 0.025x base input (not the standard 0.1x multiplier every other Claude model uses) — this is Anthropic's documented rate, not an error. Do not 'correct' cacheReadPer1M toward inputPer1M * 0.1.",
+      outputPer1M: 50,
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-09-05',
+    },
     'claude-haiku-3': {
       cacheReadPer1M: 0.03,
       cacheWrite1hPer1M: 0.5,
@@ -80,6 +91,17 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       outputPer1M: 50,
       sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
       verifiedAt: '2026-07-25',
+    },
+    'claude-mythos-5-1': {
+      cacheReadPer1M: 0.25,
+      cacheWrite1hPer1M: 20,
+      cacheWritePer1M: 12.5,
+      inputPer1M: 10,
+      notes:
+        'Project Glasswing limited-availability model — same pricing tier as claude-fable-5-1, including the 0.025x cache-read multiplier.',
+      outputPer1M: 50,
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-09-05',
     },
     'claude-opus-4-5': {
       cacheReadPer1M: 0.5,
@@ -190,6 +212,33 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       sourceUrl: 'https://pricepertoken.com/pricing-page/model/openai-gpt-4o-mini',
       verifiedAt: '2026-05-18',
     },
+    'gpt-5': {
+      cacheReadPer1M: 0.125,
+      inputPer1M: 1.25,
+      outputPer1M: 10,
+      sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+      verifiedAt: '2026-09-05',
+    },
+    'gpt-5-mini': {
+      cacheReadPer1M: 0.025,
+      inputPer1M: 0.25,
+      outputPer1M: 2,
+      sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+      verifiedAt: '2026-09-05',
+    },
+    'gpt-5-nano': {
+      cacheReadPer1M: 0.005,
+      inputPer1M: 0.05,
+      outputPer1M: 0.4,
+      sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+      verifiedAt: '2026-09-05',
+    },
+    'gpt-5-pro': {
+      inputPer1M: 15,
+      outputPer1M: 120,
+      sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+      verifiedAt: '2026-09-05',
+    },
     'gpt-5.1': {
       cacheReadPer1M: 0.125,
       inputPer1M: 1.25,
@@ -289,12 +338,14 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       verifiedAt: '2026-08-18',
     },
     'gpt-5.6-sol': {
-      cacheReadPer1M: 0.5,
+      cacheReadPer1M: 0.4,
       hasInvisibleReasoningTokens: true,
-      inputPer1M: 5,
-      outputPer1M: 30,
-      sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-5.6-sol',
-      verifiedAt: '2026-07-25',
+      inputPer1M: 4,
+      notes:
+        'Corrected 2026-09-05: was 5.00/30.00/0.50 (stale, sourced from a secondary aggregator). Live OpenAI pricing confirms 4.00/20.00/0.40, independently corroborated by gpt-6-astra pricing being exactly 2.5x this rate. Downstream consumers on caret ranges will see reported Sol output costs drop ~33% — this is a correction, not a regression.',
+      outputPer1M: 20,
+      sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+      verifiedAt: '2026-09-05',
     },
     'gpt-5.6-terra': {
       cacheReadPer1M: 0.2,
@@ -303,6 +354,21 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       outputPer1M: 12,
       sourceUrl: 'https://developers.openai.com/api/docs/pricing',
       verifiedAt: '2026-08-18',
+    },
+    'gpt-6-astra': {
+      cacheReadPer1M: 1,
+      cacheWritePer1M: 12.5,
+      hasInvisibleReasoningTokens: true,
+      inputPer1M: 10,
+      longContextCacheReadPer1M: 2,
+      longContextInputPer1M: 20,
+      longContextOutputPer1M: 75,
+      longContextThreshold: 272000,
+      notes:
+        'Prompts over 272K input tokens bill at 2x input/cache rates and 1.5x output for the FULL request (not just the excess). No schema field exists for long-context cache write; if a doubled write rate matters downstream, it would be $25.00/MTok by the same 2x rule — not modeled here.',
+      outputPer1M: 50,
+      sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6-astra',
+      verifiedAt: '2026-09-05',
     },
     o1: {
       cacheReadPer1M: 7.5,
@@ -429,20 +495,26 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
     'gemini-3.6-flash': {
       cacheReadPer1M: 0.075,
       inputPer1M: 0.75,
+      notes:
+        'Introductory pricing through 2026-12-31; standard pricing from 2027-01-01 is 1.50/7.50 input/output, cacheRead 0.15. Do not flag the January change as drift.',
       outputPer1M: 3.75,
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
-      verifiedAt: '2026-08-18',
+      verifiedAt: '2026-09-05',
     },
     'gemini-3.7-flash': {
       cacheReadPer1M: 0.075,
       inputPer1M: 0.75,
+      notes:
+        'Introductory pricing through 2026-12-31; standard pricing from 2027-01-01 is 1.50/7.50 input/output, cacheRead 0.15. Do not flag the January change as drift.',
       outputPer1M: 3.75,
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
-      verifiedAt: '2026-08-18',
+      verifiedAt: '2026-09-05',
     },
     'gemini-3.8-flash': {
       cacheReadPer1M: 0.075,
       inputPer1M: 0.75,
+      notes:
+        'Introductory pricing through 2026-12-31; standard pricing from 2027-01-01 is 1.50/7.50 input/output, cacheRead 0.15. Do not flag the January change as drift.',
       outputPer1M: 3.75,
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
       verifiedAt: '2026-09-05',

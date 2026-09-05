@@ -618,6 +618,14 @@ describe('DEFAULT_PRICING_TABLE integrity', () => {
       ).toBeGreaterThan(record?.inputPer1M ?? 0);
     }
   });
+
+  it('gpt-6-astra has paired long-context threshold + rate fields, elevated over standard', () => {
+    const record = DEFAULT_PRICING_TABLE.openai['gpt-6-astra'];
+    expect(record?.longContextThreshold).toBe(272000);
+    expect(record?.longContextInputPer1M).toBeGreaterThan(record?.inputPer1M ?? 0);
+    expect(record?.longContextOutputPer1M).toBeGreaterThan(record?.outputPer1M ?? 0);
+    expect(record?.longContextCacheReadPer1M).toBeGreaterThan(record?.cacheReadPer1M ?? 0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -947,13 +955,16 @@ describe('computeCost — new model rows (2026-07-25 drift-check reconciliation)
     expect(cost.isPartial).toBe(false);
   });
 
-  it('gpt-5.6-sol: resolves and totals $35.00 for 1M in + 1M out, isPartial (invisible reasoning)', () => {
+  it('gpt-5.6-sol: resolves and totals $24.00 for 1M in + 1M out, isPartial (invisible reasoning) — corrected 2026-09-05, was 5.00/30.00', () => {
     const cost = computeCost({ usage: oneMillionEach, provider: 'openai', model: 'gpt-5.6-sol' });
 
-    // Input: 1M × $5.00 = $5.00, Output: 1M × $30.00 = $30.00
-    expect(cost.input).toBeCloseTo(5.0, 5);
-    expect(cost.output).toBeCloseTo(30.0, 5);
-    expect(round(cost.total)).toBe(35.0);
+    // Input: 1M × $4.00 = $4.00, Output: 1M × $20.00 = $20.00
+    // Corrected from stale 5.00/30.00 (secondary-aggregator sourcing); confirmed against
+    // developers.openai.com/api/docs/pricing and cross-checked against gpt-6-astra
+    // being exactly 2.5x this rate.
+    expect(cost.input).toBeCloseTo(4.0, 5);
+    expect(cost.output).toBeCloseTo(20.0, 5);
+    expect(round(cost.total)).toBe(24.0);
     expect(cost.isPartial).toBe(true); // hasInvisibleReasoningTokens
   });
 
@@ -1019,5 +1030,105 @@ describe('computeCost — new model rows (2026-07-25 drift-check reconciliation)
     expect(cost.input).toBeCloseTo(0.3, 5);
     expect(cost.output).toBeCloseTo(2.5, 5);
     expect(cost.isPartial).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// New model rows — 2026-09-05 flagship-tier refresh
+// ---------------------------------------------------------------------------
+
+describe('computeCost — new model rows (2026-09-05 flagship-tier refresh)', () => {
+  const oneMillionEach = basicUsage(1_000_000, 1_000_000);
+
+  it('claude-fable-5-1: resolves and totals $60.00 for 1M in + 1M out, same tier as claude-fable-5', () => {
+    const cost = computeCost({
+      usage: oneMillionEach,
+      provider: 'anthropic',
+      model: 'claude-fable-5-1',
+    });
+
+    expect(cost.input).toBeCloseTo(10.0, 5);
+    expect(cost.output).toBeCloseTo(50.0, 5);
+    expect(round(cost.total)).toBe(60.0);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('claude-fable-5-1: cache read is 0.25/1M (0.025x input, NOT the standard 0.1x multiplier)', () => {
+    const { anthropic } = DEFAULT_PRICING_TABLE;
+    expect(anthropic['claude-fable-5-1']?.cacheReadPer1M).toBe(0.25);
+
+    const cost = computeCost({
+      usage: basicUsage(0, 0, { cacheReadTokens: 1_000_000 }),
+      provider: 'anthropic',
+      model: 'claude-fable-5-1',
+    });
+    expect(cost.total).toBeCloseTo(0.25, 5);
+  });
+
+  it('claude-mythos-5-1: resolves, same tier as claude-fable-5-1 including the cache-read anomaly', () => {
+    const cost = computeCost({
+      usage: oneMillionEach,
+      provider: 'anthropic',
+      model: 'claude-mythos-5-1',
+    });
+
+    expect(cost.input).toBeCloseTo(10.0, 5);
+    expect(cost.output).toBeCloseTo(50.0, 5);
+    expect(round(cost.total)).toBe(60.0);
+    expect(DEFAULT_PRICING_TABLE.anthropic['claude-mythos-5-1']?.cacheReadPer1M).toBe(0.25);
+  });
+
+  it('gpt-5: resolves and totals $11.25 for 1M in + 1M out', () => {
+    const cost = computeCost({ usage: oneMillionEach, provider: 'openai', model: 'gpt-5' });
+
+    expect(cost.input).toBeCloseTo(1.25, 5);
+    expect(cost.output).toBeCloseTo(10.0, 5);
+    expect(round(cost.total)).toBe(11.25);
+  });
+
+  it('gpt-5-mini: resolves and totals $2.25 for 1M in + 1M out', () => {
+    const cost = computeCost({ usage: oneMillionEach, provider: 'openai', model: 'gpt-5-mini' });
+
+    expect(cost.input).toBeCloseTo(0.25, 5);
+    expect(cost.output).toBeCloseTo(2.0, 5);
+    expect(round(cost.total)).toBe(2.25);
+  });
+
+  it('gpt-5-nano: resolves and totals $0.45 for 1M in + 1M out', () => {
+    const cost = computeCost({ usage: oneMillionEach, provider: 'openai', model: 'gpt-5-nano' });
+
+    expect(cost.input).toBeCloseTo(0.05, 5);
+    expect(cost.output).toBeCloseTo(0.4, 5);
+    expect(round(cost.total)).toBe(0.45);
+  });
+
+  it('gpt-5-pro: resolves and totals $135.00 for 1M in + 1M out', () => {
+    const cost = computeCost({ usage: oneMillionEach, provider: 'openai', model: 'gpt-5-pro' });
+
+    expect(cost.input).toBeCloseTo(15.0, 5);
+    expect(cost.output).toBeCloseTo(120.0, 5);
+    expect(round(cost.total)).toBe(135.0);
+  });
+
+  it('gpt-6-astra: resolves at standard rate under the 272K long-context threshold', () => {
+    const usage = basicUsage(200_000, 100_000);
+    const cost = computeCost({ usage, provider: 'openai', model: 'gpt-6-astra' });
+
+    // Input: 0.2M × $10.00 = $2.00, Output: 0.1M × $50.00 = $5.00
+    expect(cost.input).toBeCloseTo(2.0, 5);
+    expect(cost.output).toBeCloseTo(5.0, 5);
+    expect(cost.isPartial).toBe(true); // hasInvisibleReasoningTokens
+  });
+
+  it('gpt-6-astra: long context (>272K input) bills the FULL request at 2x input / 1.5x output', () => {
+    const usage = basicUsage(300_000, 100_000);
+    const cost = computeCost({ usage, provider: 'openai', model: 'gpt-6-astra' });
+
+    // Long-context: Input $20.00/1M, Output $75.00/1M applied to the whole request
+    // 0.3M × $20.00 = $6.00, 0.1M × $75.00 = $7.50
+    expect(cost.input).toBeCloseTo(6.0, 5);
+    expect(cost.output).toBeCloseTo(7.5, 5);
+    expect(round(cost.total)).toBe(13.5);
+    expect(cost.isPartial).toBe(true);
   });
 });
