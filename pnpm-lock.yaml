@@ -69,16 +69,16 @@ importers:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.115.0
-        version: 0.115.0(zod@4.4.3)
+        version: 0.115.0(zod@4.5.4)
       '@google/genai':
         specifier: ^2.17.0
         version: 2.17.0
       openai:
         specifier: ^7.4.0
-        version: 7.4.0(ws@8.21.3)(zod@4.4.3)
+        version: 7.4.0(ws@8.21.3)(zod@4.5.4)
       zod:
-        specifier: ^4.4.3
-        version: 4.4.3
+        specifier: ^4.5.4
+        version: 4.5.4
     devDependencies:
       '@diabolicallabs/llm-pricing':
         specifier: workspace:*
@@ -154,8 +154,8 @@ importers:
   packages/prompt-registry:
     dependencies:
       zod:
-        specifier: ^4.4.3
-        version: 4.4.3
+        specifier: ^4.5.4
+        version: 4.5.4
     devDependencies:
       '@types/node':
         specifier: ^26.2.0
@@ -2575,17 +2575,17 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+  zod@4.5.4:
+    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
 
 snapshots:
 
-  '@anthropic-ai/sdk@0.115.0(zod@4.4.3)':
+  '@anthropic-ai/sdk@0.115.0(zod@4.5.4)':
     dependencies:
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.0.0
     optionalDependencies:
-      zod: 4.4.3
+      zod: 4.5.4
 
   '@babel/helper-string-parser@7.29.7': {}
 
@@ -4148,10 +4148,10 @@ snapshots:
 
   obug@2.1.4: {}
 
-  openai@7.4.0(ws@8.21.3)(zod@4.4.3):
+  openai@7.4.0(ws@8.21.3)(zod@4.5.4):
     optionalDependencies:
       ws: 8.21.3
-      zod: 4.4.3
+      zod: 4.5.4
 
   optionator@0.9.4:
     dependencies:
@@ -4700,4 +4700,4 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zod@4.4.3: {}
+  zod@4.5.4: {}
