@@ -2,7 +2,7 @@
 
 Module manifest index for the dlabs-toolkit monorepo. Each row points to the package's `manifest.yaml` for the full contract: exports, dependencies, consumers, failure modes, and performance notes.
 
-Schema: [`/Users/mann/Documents/Claude/manifest-schema.md`](https://github.com/mannism/dlabs-toolkit)
+Schema: [`/Users/mann/Claude/manifest-schema.md`](https://github.com/mannism/dlabs-toolkit)
 
 Versions decay — `package.json` in each package directory is the source of truth. Versions below are correct as of the most recent shipped wave.
 

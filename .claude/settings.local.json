@@ -2,8 +2,8 @@
   "permissions": {
     "allow": [
       "Skill(update-config)",
-      "Read(//Users/mann/Documents/Claude/proj-plan/agent-spend-dashboard/**)",
-      "Read(//Users/mann/Documents/Claude/proj-plan/agent-spend-dashboard/briefs/**)",
+      "Read(//Users/mann/Claude/proj-plan/agent-spend-dashboard/**)",
+      "Read(//Users/mann/Claude/proj-plan/agent-spend-dashboard/briefs/**)",
       "Bash(pnpm:*)",
       "Bash(pnpm install:*)",
       "Bash(pnpm test:*)",
@@ -25,7 +25,7 @@
       "Bash(npx biome:*)"
     ],
     "additionalDirectories": [
-      "/Users/mann/Documents/Claude/proj-plan/dlabs-toolkit"
+      "/Users/mann/Claude/proj-plan/dlabs-toolkit"
     ]
   }
 }

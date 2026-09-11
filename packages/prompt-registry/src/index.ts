@@ -3,7 +3,7 @@
  *
  * Versioned LLM prompt lifecycle — the admin-standard (§S7, ratified
  * 2026-07-06) prompt_versions pattern extracted into a reusable package.
- * See /Users/mann/Documents/Claude/admin-standard.md for the canonical spec
+ * See /Users/mann/Claude/admin-standard.md for the canonical spec
  * this package implements, and README.md for the migration guide.
  *
  *   - createPromptRegistry({ adapter })  — seed/get/publish/history/rollback
