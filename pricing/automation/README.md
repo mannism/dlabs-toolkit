@@ -114,7 +114,7 @@ Table updates **never delete existing model keys**. Consumers may still call old
 
 ## Links
 
-- **Narrative spec:** `/Users/mann/Documents/Claude/routines/llm-pricing-drift-check.md`
-- **Brief:** `/Users/mann/Documents/Claude/proj-plan/dlabs-toolkit/briefs/brief-llm-pricing-drift-n8n.md`
-- **Fleet scheduler registry:** `/Users/mann/Documents/Claude/schedulers.md` — the canonical entry for this job lives there
+- **Narrative spec:** `/Users/mann/Claude/routines/llm-pricing-drift-check.md`
+- **Brief:** `/Users/mann/Claude/proj-plan/dlabs-toolkit/briefs/brief-llm-pricing-drift-n8n.md`
+- **Fleet scheduler registry:** `/Users/mann/Claude/schedulers.md` — the canonical entry for this job lives there
 - **Pricing data + refresh workflow:** [`../README.md`](../README.md)

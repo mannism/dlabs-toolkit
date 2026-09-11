@@ -49,10 +49,10 @@ pnpm release              # build + changeset publish
 
 - **TypeScript strict.** No `any`, no implicit `any`, no unused locals/params.
 - **ESM-only.** Modern Node (≥ 20) and modern bundlers only. No CJS dual-publish.
-- **US English** in docs, code identifiers, and copy. Per `/Users/mann/Documents/Claude/decisions.md` (2026-05-04): dlabs-toolkit and `@diabolicallabs` packages are commercial-surface infrastructure, not personal-brand. Use `normalize`, `serialize`, `color`, `behavior`, `analyze` — not the `-ise`/`-our` UK variants. Applies to function names, variable names, JSDoc, error messages, READMEs, and all public API surface.
+- **US English** in docs, code identifiers, and copy. Per `/Users/mann/Claude/decisions.md` (2026-05-04): dlabs-toolkit and `@diabolicallabs` packages are commercial-surface infrastructure, not personal-brand. Use `normalize`, `serialize`, `color`, `behavior`, `analyze` — not the `-ise`/`-our` UK variants. Applies to function names, variable names, JSDoc, error messages, READMEs, and all public API surface.
 - **Independent versioning per package** via Changesets. Semver discipline mandatory.
 - **No package ships without tests.**
-- **Manifest files per package** following the global manifest schema at `/Users/mann/Documents/Claude/manifest-schema.md`.
+- **Manifest files per package** following the global manifest schema at `/Users/mann/Claude/manifest-schema.md`.
 
 ### Naming case
 
@@ -85,12 +85,12 @@ pnpm release              # build + changeset publish
 
 ## Testing
 
-Tier 1 — Library adaptation, per `/Users/mann/Documents/Claude/testing-policy.md` (ratified `decisions.md` 2026-07-06). Each package's `vitest.config.ts` enforces an 80% coverage floor (ratchet — never lowered) in CI. New packages must ship with tests, and Turborepo-level `pnpm run test` must be green before publishing.
+Tier 1 — Library adaptation, per `/Users/mann/Claude/testing-policy.md` (ratified `decisions.md` 2026-07-06). Each package's `vitest.config.ts` enforces an 80% coverage floor (ratchet — never lowered) in CI. New packages must ship with tests, and Turborepo-level `pnpm run test` must be green before publishing.
 
 ## Where things live
 
-- Platform brief and design docs: `/Users/mann/Documents/Claude/proj-plan/dlabs-toolkit/`
-- Cross-project decisions affecting this repo: `/Users/mann/Documents/Claude/decisions.md`
+- Platform brief and design docs: `/Users/mann/Claude/proj-plan/dlabs-toolkit/`
+- Cross-project decisions affecting this repo: `/Users/mann/Claude/decisions.md`
 
 ## Related projects
 

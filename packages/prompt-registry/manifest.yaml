@@ -1,7 +1,7 @@
 name: "@diabolicallabs/prompt-registry"
 purpose: >
   Versioned LLM prompt lifecycle package implementing the fleet admin standard
-  (§S7, /Users/mann/Documents/Claude/admin-standard.md, ratified 2026-07-06).
+  (§S7, /Users/mann/Claude/admin-standard.md, ratified 2026-07-06).
   seed() loads repo-file prompts into a prompt_versions table on first run
   (idempotent — never overwrites existing versions). get(name, {version|latest})
   reads the active version or a specific historical one. publish(name, text, meta)
