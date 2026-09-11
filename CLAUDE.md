@@ -4,7 +4,7 @@
 
 Scope rule: if a session starts from this repo, work only on this project. Do not touch other repos unless the Owner explicitly says otherwise.
 
-Fleet rules: `~/.claude/CLAUDE.md`. Orchestration scope: `/Users/mann/Documents/Claude/CLAUDE.md`.
+Fleet rules: `~/.claude/CLAUDE.md`. Orchestration scope: `/Users/mann/Claude/CLAUDE.md`.
 
 ## Persona pointers
 
