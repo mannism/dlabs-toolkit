@@ -10,8 +10,9 @@
  *   - mapGeminiParts(): block → Gemini Part array
  */
 
+import { PartMediaResolutionLevel } from '@google/genai';
 import { describe, expect, it } from 'vitest';
-import type { LlmContentBlock, LlmMessage } from '../types.js';
+import type { LlmContentBlock, LlmFileRef, LlmMessage } from '../types.js';
 import { LlmError } from '../types.js';
 import {
   assertBlocksSupported,
@@ -458,6 +459,131 @@ describe('mapGeminiParts()', () => {
     const result = mapGeminiParts(blocks);
     // image.url block is skipped by mapGeminiParts (guard is the rejection point)
     expect(result).toHaveLength(0);
+  });
+});
+
+// ─── mapGeminiParts — mediaResolution (v6.7.0) ────────────────────────────────
+
+describe('mapGeminiParts() — mediaResolution (v6.7.0)', () => {
+  it('image low → MEDIA_RESOLUTION_LOW', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'image',
+        source: { type: 'base64', mediaType: 'image/png', data: 'pngdata' },
+        mediaResolution: 'low',
+      },
+    ];
+    const result = mapGeminiParts(blocks);
+    expect(result[0]?.mediaResolution).toEqual({
+      level: PartMediaResolutionLevel.MEDIA_RESOLUTION_LOW,
+    });
+  });
+
+  it('document medium → MEDIA_RESOLUTION_MEDIUM', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'document',
+        source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfdata' },
+        mediaResolution: 'medium',
+      },
+    ];
+    const result = mapGeminiParts(blocks);
+    expect(result[0]?.mediaResolution).toEqual({
+      level: PartMediaResolutionLevel.MEDIA_RESOLUTION_MEDIUM,
+    });
+  });
+
+  it('file high → MEDIA_RESOLUTION_HIGH on fileData part', () => {
+    const ref: LlmFileRef = {
+      id: 'files/abc123',
+      uri: 'https://generativelanguage.googleapis.com/v1beta/files/abc123',
+      provider: 'gemini',
+      mediaType: 'video/mp4',
+      sizeBytes: 1024,
+      state: 'active',
+    };
+    const blocks: LlmContentBlock[] = [{ type: 'file', ref, mediaResolution: 'high' }];
+    const result = mapGeminiParts(blocks);
+    expect(result[0]?.fileData).toMatchObject({ fileUri: ref.uri });
+    expect(result[0]?.mediaResolution).toEqual({
+      level: PartMediaResolutionLevel.MEDIA_RESOLUTION_HIGH,
+    });
+  });
+
+  it('image ultra_high → MEDIA_RESOLUTION_ULTRA_HIGH', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'image',
+        source: { type: 'base64', mediaType: 'image/png', data: 'pngdata' },
+        mediaResolution: 'ultra_high',
+      },
+    ];
+    const result = mapGeminiParts(blocks);
+    expect(result[0]?.mediaResolution).toEqual({
+      level: PartMediaResolutionLevel.MEDIA_RESOLUTION_ULTRA_HIGH,
+    });
+  });
+
+  it('omits mediaResolution when unset', () => {
+    const blocks: LlmContentBlock[] = [
+      { type: 'image', source: { type: 'base64', mediaType: 'image/png', data: 'pngdata' } },
+    ];
+    const result = mapGeminiParts(blocks);
+    expect(result[0]?.mediaResolution).toBeUndefined();
+  });
+
+  it('document ultra_high throws bad_request pre-flight (image-only)', () => {
+    const blocks: LlmContentBlock[] = [
+      {
+        type: 'document',
+        source: { type: 'base64', mediaType: 'application/pdf', data: 'pdfdata' },
+        mediaResolution: 'ultra_high',
+      },
+    ];
+    expect(() => mapGeminiParts(blocks)).toThrow(LlmError);
+    try {
+      mapGeminiParts(blocks);
+    } catch (err) {
+      expect(err).toBeInstanceOf(LlmError);
+      const e = err as LlmError;
+      expect(e.kind).toBe('bad_request');
+      expect(e.retryable).toBe(false);
+      expect(e.provider).toBe('gemini');
+      expect(e.message).toContain('ultra_high');
+      expect(e.message).toContain('image-only');
+    }
+  });
+});
+
+// ─── mapOpenAIContent / mapAnthropicContent ignore block.mediaResolution ──────
+
+describe('mapOpenAIContent() / mapAnthropicContent() ignore block.mediaResolution (v6.7.0)', () => {
+  it('mapOpenAIContent: image block maps identically with or without mediaResolution', () => {
+    const withoutRes: LlmContentBlock[] = [
+      { type: 'image', source: { type: 'base64', mediaType: 'image/png', data: 'pngdata' } },
+    ];
+    const withRes: LlmContentBlock[] = [
+      {
+        type: 'image',
+        source: { type: 'base64', mediaType: 'image/png', data: 'pngdata' },
+        mediaResolution: 'high',
+      },
+    ];
+    expect(mapOpenAIContent(withRes)).toEqual(mapOpenAIContent(withoutRes));
+  });
+
+  it('mapAnthropicContent: image block maps identically with or without mediaResolution', () => {
+    const withoutRes: LlmContentBlock[] = [
+      { type: 'image', source: { type: 'base64', mediaType: 'image/jpeg', data: 'abc123' } },
+    ];
+    const withRes: LlmContentBlock[] = [
+      {
+        type: 'image',
+        source: { type: 'base64', mediaType: 'image/jpeg', data: 'abc123' },
+        mediaResolution: 'high',
+      },
+    ];
+    expect(mapAnthropicContent(withRes)).toEqual(mapAnthropicContent(withoutRes));
   });
 });
 

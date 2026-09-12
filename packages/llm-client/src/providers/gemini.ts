@@ -82,6 +82,7 @@ import type {
 } from '../types.js';
 import { LlmError } from '../types.js';
 import { assertBlocksSupported, mapGeminiParts } from './content-blocks.js';
+import { resolveMediaResolution } from './media-resolution.js';
 import { resolveReasoningEffort } from './reasoning-effort.js';
 
 const PROVIDER = 'gemini';
@@ -276,6 +277,11 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) geminiConfig.temperature = temperature;
 
+          // mediaResolution (v6.7.0+) — Gemini-only quality/cost knob for media parts.
+          // Call-level overrides config-level; throws bad_request pre-flight on 'ultra_high'.
+          const mediaRes = resolveMediaResolution(config.mediaResolution, options?.mediaResolution);
+          if (mediaRes !== undefined) geminiConfig.mediaResolution = mediaRes;
+
           // reasoningEffort (v6.3.0+) — merge into thinkingConfig, never overwrite.
           // resolveReasoningEffort returns the uppercase provider-native value ('high' -> 'HIGH').
           const effort = resolveReasoningEffort(options?.reasoningEffort, 'gemini');
@@ -329,6 +335,10 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
     if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
     const temperature = options?.temperature ?? config.temperature;
     if (temperature !== undefined) geminiConfig.temperature = temperature;
+
+    // mediaResolution (v6.7.0+) — Gemini-only quality/cost knob for media parts (see complete()).
+    const streamMediaRes = resolveMediaResolution(config.mediaResolution, options?.mediaResolution);
+    if (streamMediaRes !== undefined) geminiConfig.mediaResolution = streamMediaRes;
 
     // reasoningEffort (v6.3.0+) — merge into thinkingConfig, never overwrite (see complete()).
     const streamEffort = resolveReasoningEffort(options?.reasoningEffort, 'gemini');
@@ -414,6 +424,13 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) geminiConfig.temperature = temperature;
+
+          // mediaResolution (v6.7.0+) — Gemini-only quality/cost knob for media parts (see complete()).
+          const structuredMediaRes = resolveMediaResolution(
+            config.mediaResolution,
+            options?.mediaResolution
+          );
+          if (structuredMediaRes !== undefined) geminiConfig.mediaResolution = structuredMediaRes;
 
           // reasoningEffort (v6.3.0+) — merge into thinkingConfig, never overwrite (see complete()).
           const structuredEffort = resolveReasoningEffort(options?.reasoningEffort, 'gemini');
@@ -524,6 +541,13 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) geminiConfig.temperature = temperature;
+
+          // mediaResolution (v6.7.0+) — Gemini-only quality/cost knob for media parts (see complete()).
+          const fallbackMediaRes = resolveMediaResolution(
+            config.mediaResolution,
+            options?.mediaResolution
+          );
+          if (fallbackMediaRes !== undefined) geminiConfig.mediaResolution = fallbackMediaRes;
 
           // reasoningEffort (v6.3.0+) — merge into thinkingConfig, never overwrite (see complete()).
           const fallbackEffort = resolveReasoningEffort(options?.reasoningEffort, 'gemini');
@@ -656,6 +680,13 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
           if (maxTokens !== undefined) geminiConfig.maxOutputTokens = maxTokens;
           const temperature = options?.temperature ?? config.temperature;
           if (temperature !== undefined) geminiConfig.temperature = temperature;
+
+          // mediaResolution (v6.7.0+) — Gemini-only quality/cost knob for media parts (see complete()).
+          const toolsMediaRes = resolveMediaResolution(
+            config.mediaResolution,
+            options?.mediaResolution
+          );
+          if (toolsMediaRes !== undefined) geminiConfig.mediaResolution = toolsMediaRes;
 
           // reasoningEffort (v6.3.0+) — merge into thinkingConfig, never overwrite (see complete()).
           const toolsEffort = resolveReasoningEffort(options?.reasoningEffort, 'gemini');

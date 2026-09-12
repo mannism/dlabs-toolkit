@@ -8,9 +8,11 @@
  *   deepseek-v4-flash  — general + reasoning (thinking mode via providerOptions)
  *   deepseek-v4-pro    — high-capability tier
  *
- * Deprecated aliases (still accepted server-side but resolve to deepseek-v4-flash):
- *   deepseek-chat      — was DeepSeek-V3; now routes to deepseek-v4-flash non-thinking
- *   deepseek-reasoner  — was DeepSeek-R1; now routes to deepseek-v4-flash thinking mode
+ * Retired IDs (DeepSeek retired both on 2026-07-24 15:59 UTC, no fallback alias —
+ * llm-client rejects them client-side as of the 2026-08-18 fix; see deepseek.test.ts
+ * "retired model rejection" for the automated coverage):
+ *   deepseek-chat      — was DeepSeek-V3; now throws LlmError(kind:'bad_request')
+ *   deepseek-reasoner  — was DeepSeek-R1; now throws LlmError(kind:'bad_request')
  *
  * Requires: DEEPSEEK_API_KEY in environment.
  * Run: set -a; source .env; set +a && npx tsx scripts/smoke-deepseek.ts

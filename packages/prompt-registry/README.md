@@ -2,7 +2,7 @@
 
 Versioned LLM prompt lifecycle. Implements the fleet admin standard (§S7) as a package: `seed()` from repo files, `get()` the active or a specific version, `publish()` a new version, `history()`, `rollback()`. Storage is adapter-based; `PostgresPromptStorageAdapter` is the shipped reference. © Diabolical Labs
 
-**Canonical source:** [`/Users/mann/Documents/Claude/admin-standard.md`](/Users/mann/Documents/Claude/admin-standard.md) (ratified 2026-07-06) — this package implements §S7 ("LLM prompt storage — prompts live in the DB, versioned"). If the standard and this README disagree, the standard wins; file a PR to reconcile.
+**Canonical source:** [`/Users/mann/Claude/admin-standard.md`](/Users/mann/Claude/admin-standard.md) (ratified 2026-07-06) — this package implements §S7 ("LLM prompt storage — prompts live in the DB, versioned"). If the standard and this README disagree, the standard wins; file a PR to reconcile.
 
 ## Install
 

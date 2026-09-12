@@ -1,5 +1,119 @@
 # @diabolicallabs/llm-pricing
 
+## 1.6.0
+
+### Minor Changes
+
+- 48a8b93: feat(pricing): add claude-fable-5-1, claude-mythos-5-1, gpt-6-astra, gpt-5/mini/nano/pro rows; fix gpt-5.6-sol drift
+
+  **New rows:**
+
+  - `claude-fable-5-1` / `claude-mythos-5-1`: $10/$50 per 1M input/output, same tier as
+    `claude-fable-5`/`claude-mythos-5`. Cache reads are priced at **0.25/1M — a 0.025x
+    multiplier on base input**, not the standard 0.1x every other Claude model in this
+    table uses. This is Anthropic's own documented rate (pricing page footnote), not an
+    error — do not "correct" it toward `inputPer1M * 0.1`.
+  - `gpt-6-astra`: $10/$50/$1.00 standard tier, reasoning model (invisible reasoning
+    tokens like the rest of the o-series/gpt-5.6 family). Carries a long-context billing
+    tier: prompts over 272K input tokens bill the **entire request** at 2x input/cache
+    and 1.5x output rates (`longContextThreshold`/`longContextInputPer1M`/
+    `longContextOutputPer1M`/`longContextCacheReadPer1M`).
+  - `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-pro`: coverage gap fill — these were live
+    on OpenAI's pricing page but absent from the table entirely.
+
+  **Correction — `gpt-5.6-sol` was mispriced by up to 33%.** The table had $5.00/$30.00/
+  $0.50 (sourced from a secondary aggregator, `verifiedAt: 2026-07-25`). Live
+  `developers.openai.com/api/docs/pricing` confirms **$4.00/$20.00/$0.40** — independently
+  corroborated by `gpt-6-astra` pricing being exactly 2.5x this corrected rate.
+  **Downstream consumers on caret ranges (GEOAudit is a confirmed live consumer) will see
+  reported Sol output costs drop ~33% on upgrade. This is a correction of a pre-existing
+  overcharge in cost reporting, not a regression — do not revert.**
+
+  **Notes-only (no price change):** `gemini-3.6-flash`/`3.7-flash`/`3.8-flash` now carry a
+  `notes` field flagging that current pricing is introductory through 2026-12-31, doubling
+  to $1.50/$7.50 (cacheRead $0.15) from 2027-01-01 — so the January jump isn't mis-flagged
+  as drift by the monthly n8n check.
+
+  All figures live-verified against vendor primary sources on 2026-09-05 (see
+  `proj-plan/dlabs-toolkit/research/mano-pricing-audit-2026-09-05.md`).
+
+## 1.5.0
+
+### Minor Changes
+
+- 83d1398: feat(gemini): add gemini-3.8-flash pricing row
+
+  `gemini-3.8-flash` (GA 2026-09-02) is now priced in `DEFAULT_PRICING_TABLE` at the same
+  rate as `gemini-3.7-flash`: $0.75 / $3.75 / $0.075 per 1M input/output/cache-read tokens.
+
+  **Promotional pricing ends 2027-01-01** for both `gemini-3.7-flash` and
+  `gemini-3.8-flash` — Google's list price rises to $1.50 / $7.50 / $0.15 per 1M tokens
+  from that date. Expect the January drift check to flag this as a pricing change on both
+  models when it fires.
+
+## 1.4.3
+
+### Patch Changes
+
+- a0684bf: fix(gemini): remove phantom gemini-3.1-pro pricing entry
+
+  `pricing/table.json` carried a pricing row for the bare, non-preview `gemini-3.1-pro`
+  model ID. A 2026-08-18 pricing-drift audit flagged it as a possible phantom entry;
+  that has now been verified directly against `ai.google.dev/gemini-api/docs/models` —
+  only `gemini-3.1-pro-preview` exists. Google never shipped a GA, non-preview
+  `gemini-3.1-pro`.
+
+  The entry is removed from `pricing/table.json` and `packages/llm-pricing/src/table.ts`
+  (regenerated via `node pricing/sync-bundled.mjs`, not hand-edited).
+  `computeCost({ provider: 'gemini', model: 'gemini-3.1-pro' })` now behaves like any
+  other unknown model: zero cost, `isPartial: true`, `pricing_unknown_model` warning
+  emitted.
+
+  **Patch:** removes a data entry for a model that was never real — no consumer could
+  have been correctly relying on pricing data for a nonexistent model ID. Callers
+  should use `gemini-3.1-pro-preview` (real, unaffected) instead.
+
+## 1.4.2
+
+### Patch Changes
+
+- 5c4248f: Pricing drift correction sweep (Anthropic, OpenAI, DeepSeek, xAI) — 2026-08-18
+
+  - `claude-sonnet-5`: Anthropic cancelled the planned 2026-08-31 increase to $3/$15 — the
+    $2/$10 rate is now permanent standard pricing. Updated input/output/cache rates accordingly.
+  - `claude-haiku-3`, `claude-haiku-3-5`: added retirement notes (first-party API retired
+    2026-04-20 and 2026-02-19 respectively; `claude-haiku-3-5` remains live on Bedrock/GCP).
+    No price change — retained for historical cost calculations.
+  - `gpt-5.6-terra`: corrected — table was 25% overpriced ($2.5/$15 → $2.0/$12).
+  - `gpt-5.6-luna`: corrected — table was 5x overpriced ($1.0/$6.0 → $0.20/$1.20).
+  - `gpt-4.1`, `o1`, `o3`, `o3-mini`, `o4-mini`: added scheduled-shutdown notes
+    (2026-10-23, except `o3` at 2026-12-11) per OpenAI's deprecations page.
+  - `deepseek-chat`, `deepseek-reasoner`: notes updated — fully retired 2026-07-24, no longer
+    a live alias despite the `deprecatedAliasFor` field; API calls now error.
+  - `deepseek-v4-flash`, `deepseek-v4-pro`: repriced to the new off-peak baseline rate
+    following DeepSeek's introduction of peak/off-peak differential pricing (peak windows
+    01:00-04:00 and 06:00-10:00 UTC, ~2x off-peak). Added notes warning `computeCost()`
+    does not model time-of-day pricing.
+  - Added `grok-4.6` (xAI's new flagship, launched 2026-08-12). Same headline input/output
+    rate as `grok-4.5` ($2.0/$6.0) but cached-input pricing is ~67% higher ($0.50 vs $0.30
+    base tier, $1.00 vs $0.60 long-context). Verified directly against
+    https://docs.x.ai/developers/models/grok-4.6.
+
+  All changes verified against live provider docs 2026-08-18 (4-agent research sweep,
+  Owner-approved scope). `pricing:verify` is clean except for the expected `deepseek-v4-flash`/
+  `deepseek-v4-pro` peak/off-peak gap (Owner-approved: table holds off-peak baseline, matching
+  the existing convention for Gemini's future-dated rate hikes).
+
+## 1.4.1
+
+### Patch Changes
+
+- 062e46f: Add `gemini-3.7-flash` pricing, reprice `gemini-3.6-flash` to match introductory rate
+
+  Google shipped `gemini-3.7-flash` (stable GA) on 2026-08-13 and repriced `gemini-3.6-flash`
+  down to match its introductory rate ($0.75/$3.75/$0.075 per 1M input/output/cache-read tokens,
+  in effect through 2026-12-31). Verified against https://ai.google.dev/gemini-api/docs/pricing.
+
 ## 1.4.0
 
 ### Minor Changes

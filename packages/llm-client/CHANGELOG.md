@@ -1,5 +1,132 @@
 # @diabolicallabs/llm-client
 
+## 6.8.0
+
+### Minor Changes
+
+- 48a8b93: feat(capabilities): add gpt-6-astra and claude-fable-5-1 capability rows
+
+  `gpt-6-astra` (contextWindow 1,050,000, maxOutputTokens 128,000) and `claude-fable-5-1`
+  (contextWindow 1,000,000, maxOutputTokens 128,000) are now resolvable in
+  `resolveModelCapabilities()`. `claude-fable-5-1` mirrors `claude-fable-5`'s shape exactly
+  for tool/streaming/reasoning-effort fields — same-tier model, no new schema introduced.
+  `gpt-6-astra` mirrors the `gpt-5.6-sol` shape (reasoning model, image+text input, text
+  output); its long-context pricing tier is a `@diabolicallabs/llm-pricing`-only concern
+  and is not represented here.
+
+## 6.7.0
+
+### Minor Changes
+
+- 83d1398: feat(gemini): mediaResolution option (request + per-part), gemini-3.8-flash row, multimodal timeout guidance
+
+  Whole-document extraction callers (e.g. sending a native PDF to Gemini as a `document`
+  content block) had no way to control how many tokens each media part consumes.
+  `@google/genai` exposes both a request-level `GenerateContentConfig.mediaResolution`
+  and a per-part `Part.mediaResolution`, and neither was wired into the toolkit.
+
+  Adds `mediaResolution?: 'low' | 'medium' | 'high' | 'ultra_high'` at three levels:
+
+  - `LlmClientConfig.mediaResolution` — default for every media part in every call.
+  - `LlmCallOptions.mediaResolution` — per-call override; wins over the config default.
+  - `LlmContentBlock.mediaResolution` on `image`, `document`, and `file` blocks — per-part
+    override; wins over both call- and config-level.
+
+  Gemini-only: every other provider (Anthropic, OpenAI, DeepSeek, Perplexity) ignores the
+  field entirely — it is a quality/cost knob those providers don't read, not a value-set
+  mismatch requiring rejection. `'ultra_high'` has no request-level `MediaResolution` enum
+  member on the Gemini SDK, so setting it on `LlmClientConfig`/`LlmCallOptions` throws
+  `bad_request` before any SDK call; per-block, `'ultra_high'` is valid on `image` blocks
+  but throws `bad_request` pre-flight on `document` blocks (Google documents it as
+  image-only, and the Gemini API itself returns HTTP 400 for it on documents).
+
+  Per-part support is Gemini 3.x only — Gemini 2.5-series models (`gemini-2.5-pro`,
+  `gemini-2.5-flash`, `gemini-2.5-flash-lite`) return HTTP 400 when a per-part
+  `mediaResolution` is set on a content block, though request-level still works on 2.5.
+  This is now exposed as a new **additive** capability field,
+  `ModelCapabilities.mediaInput.mediaResolution: 'request' | 'part' | null` — consumers
+  with a `satisfies ModelCapabilities` literal for a custom capability table will need to
+  add this field. It is advisory only; no provider call site gates on it at runtime.
+
+  Also adds `gemini-3.8-flash` to the capability matrix (GA 2026-09-02, same shape as
+  `gemini-3.7-flash`, `mediaInput.mediaResolution: 'part'`), and documents in
+  `LlmClientConfig.timeoutMs`'s JSDoc and the README that multimodal (`document`/`file`
+  block) and `reasoningEffort` calls commonly need `timeoutMs >= 90_000` — the 30 second
+  default is unchanged.
+
+  See the README's new "Media resolution (Gemini)" section for the live token-count table,
+  precedence rules, and Google's medium/high/low guidance.
+
+## 6.6.0
+
+### Minor Changes
+
+- a0684bf: feat(gemini): backfill capability matrix for gemini-3.7-flash, gemini-3-flash-preview, gemini-2.5-flash-lite
+
+  `pricing/table.json` (via `@diabolicallabs/llm-pricing`) has carried pricing data for
+  `gemini-3.7-flash`, `gemini-3-flash-preview`, and `gemini-2.5-flash-lite` since earlier
+  Gemini refreshes, but `capabilities.ts` never gained matching entries.
+  `getModelCapabilities('gemini', ...)` returned `null` (unknown model) for all three
+  despite each being a real, callable Gemini model with legitimate pricing data.
+
+  All three now resolve to the correct `ModelCapabilities` shape: `contextWindow:
+1_048_576`, `maxOutputTokens: 65_536`, `tools: true`, same provider-wide Gemini
+  constants as every other entry in the block (streaming, media input, structured
+  output, etc.). `gemini-3.7-flash` and `gemini-3-flash-preview` get
+  `reasoningEffort: 'gemini-thinking-level'` (3.x-series `thinkingConfig.thinkingLevel`
+  dialect); `gemini-2.5-flash-lite` gets `reasoningEffort: null` — it supports Gemini
+  thinking, but via the older 2.5-series `thinkingConfig.thinkingBudget` dialect, which
+  this field does not encode (same pattern as the existing `gemini-2.5-flash` entry).
+  Verified live against `ai.google.dev/gemini-api/docs/models/{id}` (2026-08-18).
+
+  Also confirmed and documented: the bare, non-preview `gemini-3.1-pro` ID (as opposed
+  to `gemini-3.1-pro-preview`, which is real) was never actually shipped by Google —
+  a phantom entry. It is intentionally NOT added to the capability matrix. Its pricing
+  row is removed from `pricing/table.json` in a companion `@diabolicallabs/llm-pricing`
+  patch changeset in this same PR.
+
+  **Minor, not patch:** this adds new capability data for previously-unknown model IDs —
+  additive new API surface (three new resolvable keys), not a change to any existing
+  model's behavior. Same reasoning as prior capability-matrix backfills (e.g. the
+  gpt-5.4-pro/nano + gemini-3.5-flash-lite/3.6-flash rows in 6.4.0).
+
+## 6.5.1
+
+### Patch Changes
+
+- 9740b63: fix(deepseek): reject retired deepseek-chat/deepseek-reasoner client-side instead of forwarding a doomed request
+
+  DeepSeek fully retired the `deepseek-chat` and `deepseek-reasoner` model IDs on
+  2026-07-24 15:59 UTC with no fallback alias — calls using either string already
+  errored at DeepSeek's API. `capabilities.ts` still listed both as live, routable
+  capability entries, so callers sailed past validation and got forwarded to a
+  guaranteed failure with no client-side signal of why.
+
+  Calling `complete()`, `stream()`, `structured()`, `withTools()`, or
+  `streamStructured()` with `model: 'deepseek-chat'` or `model: 'deepseek-reasoner'`
+  (as a config default or a per-call override) now throws
+  `LlmError({ kind: 'bad_request', retryable: false })` immediately — before any HTTP
+  call reaches DeepSeek — naming the retired ID and pointing to `deepseek-v4-flash`
+  as the replacement. Both IDs are removed from the capability matrix;
+  `getModelCapabilities('deepseek', 'deepseek-chat' | 'deepseek-reasoner')` now
+  returns `null` (unknown model) instead of a stale live descriptor.
+
+  **Design decision: reject, don't auto-remap.** Silently rerouting `deepseek-chat`
+  to `deepseek-v4-flash` would change which model actually serves the request
+  without the caller knowing — a silent behavior/cost change, not a fix.
+
+  **Patch, not minor:** this is a bug fix, not new API surface. The underlying
+  behavior was already broken (every call to either ID already failed at
+  DeepSeek's API) — this PR moves the failure point from "silent error deep in a
+  provider SDK call" to "immediate, clearly-worded client-side rejection." No new
+  exported functions or types; `getModelCapabilities` returning `null` instead of
+  a descriptor for two already-dead model IDs is a correction of stale data, not a
+  behavior contract change any caller could have been relying on productively.
+
+  Consumers still passing `deepseek-chat` or `deepseek-reasoner` (these IDs have
+  been non-functional since 2026-07-24 regardless of this change) must migrate to
+  `deepseek-v4-flash` or `deepseek-v4-pro`.
+
 ## 6.5.0
 
 ### Minor Changes

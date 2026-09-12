@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CAPABILITIES_VERSIONED_AT,
   getModelCapabilities,
+  type LlmProvider,
   type ModelCapabilities,
 } from './capabilities.js';
 
@@ -144,6 +145,10 @@ describe('getModelCapabilities', () => {
     expect(new Date(CAPABILITIES_VERSIONED_AT).getTime()).not.toBeNaN();
   });
 
+  it('CAPABILITIES_VERSIONED_AT is 2026-09-05 (mediaResolution + gemini-3.8-flash backfill)', () => {
+    expect(CAPABILITIES_VERSIONED_AT).toBe('2026-09-05');
+  });
+
   // ── mediaInput capabilities (v4.2.0) ──────────────────────────────────────
 
   it('Anthropic claude-sonnet-4-6: full media support', () => {
@@ -262,6 +267,102 @@ describe('getModelCapabilities', () => {
     );
   });
 
+  // ── Gemini capability matrix backfill — gemini-3.7-flash / gemini-3-flash-preview /
+  //    gemini-2.5-flash-lite (drift found + fixed 2026-08-18) ────────────────────────
+
+  describe('Gemini capability matrix backfill (2026-08-18)', () => {
+    it.each(['gemini-3.7-flash', 'gemini-3-flash-preview', 'gemini-3.8-flash'] as const)(
+      '%s (gemini): gemini-thinking-level, verified capability figures',
+      (model) => {
+        const caps = getModelCapabilities('gemini', model);
+        expect(caps).not.toBeNull();
+        const c = caps as ModelCapabilities;
+        expect(c.contextWindow).toBe(1_048_576);
+        expect(c.maxOutputTokens).toBe(65_536);
+        expect(c.tools).toBe(true);
+        expect(c.mediaInput.image.base64).toBe(true);
+        expect(c.mediaInput.image.url).toBe(false);
+        expect(c.mediaInput.document.pdfBase64).toBe(true);
+        expect(c.reasoningEffort).toBe('gemini-thinking-level');
+      }
+    );
+
+    it('gemini-2.5-flash-lite (gemini): reasoningEffort null (thinkingBudget dialect, not thinkingLevel)', () => {
+      const caps = getModelCapabilities('gemini', 'gemini-2.5-flash-lite');
+      expect(caps).not.toBeNull();
+      const c = caps as ModelCapabilities;
+      expect(c.contextWindow).toBe(1_048_576);
+      expect(c.maxOutputTokens).toBe(65_536);
+      expect(c.tools).toBe(true);
+      expect(c.mediaInput.image.base64).toBe(true);
+      expect(c.mediaInput.image.url).toBe(false);
+      expect(c.mediaInput.document.pdfBase64).toBe(true);
+      // null here means "not exposed via reasoningEffort" (2.5-series uses the older
+      // thinkingBudget dialect), not "no thinking support" — see gemini-2.5-flash above.
+      expect(c.reasoningEffort).toBeNull();
+    });
+
+    it('gemini-3.1-pro (bare, non-preview): confirmed phantom, not present in capability matrix', () => {
+      // gemini-3.1-pro (without -preview) was never actually shipped by Google — only
+      // gemini-3.1-pro-preview exists. Verified 2026-08-18 against
+      // ai.google.dev/gemini-api/docs/models. Must remain null (unknown model).
+      expect(getModelCapabilities('gemini', 'gemini-3.1-pro')).toBeNull();
+    });
+  });
+
+  // ── mediaInput.mediaResolution (v6.7.0) ───────────────────────────────────
+
+  describe('mediaInput.mediaResolution (v6.7.0)', () => {
+    it.each([
+      'gemini-3.1-pro-preview',
+      'gemini-3.1-flash-lite',
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.6-flash',
+      'gemini-3.7-flash',
+      'gemini-3-flash-preview',
+      'gemini-3.8-flash',
+    ] as const)("%s (gemini): mediaInput.mediaResolution is 'part'", (model) => {
+      const caps = getModelCapabilities('gemini', model);
+      expect(caps).not.toBeNull();
+      expect((caps as ModelCapabilities).mediaInput.mediaResolution).toBe('part');
+    });
+
+    it.each(['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'] as const)(
+      "%s (gemini): mediaInput.mediaResolution is 'request'",
+      (model) => {
+        const caps = getModelCapabilities('gemini', model);
+        expect(caps).not.toBeNull();
+        expect((caps as ModelCapabilities).mediaInput.mediaResolution).toBe('request');
+      }
+    );
+
+    it('every non-Gemini row has mediaInput.mediaResolution null', () => {
+      const nonGeminiSamples: Array<[LlmProvider, string]> = [
+        ['anthropic', 'claude-opus-5'],
+        ['anthropic', 'claude-haiku-3'],
+        ['openai', 'gpt-5.5'],
+        ['openai', 'o4-mini'],
+        ['deepseek', 'deepseek-v4-flash'],
+        ['perplexity', 'sonar-pro'],
+      ];
+      for (const [provider, model] of nonGeminiSamples) {
+        const caps = getModelCapabilities(provider, model);
+        expect(caps).not.toBeNull();
+        expect((caps as ModelCapabilities).mediaInput.mediaResolution).toBeNull();
+      }
+    });
+
+    it('gemini-3.8-flash: same contextWindow/maxOutputTokens/reasoningEffort as gemini-3.7-flash', () => {
+      const v37 = getModelCapabilities('gemini', 'gemini-3.7-flash') as ModelCapabilities;
+      const v38 = getModelCapabilities('gemini', 'gemini-3.8-flash') as ModelCapabilities;
+      expect(v38.contextWindow).toBe(v37.contextWindow);
+      expect(v38.maxOutputTokens).toBe(v37.maxOutputTokens);
+      expect(v38.reasoningEffort).toBe(v37.reasoningEffort);
+      expect(v38.mediaInput).toEqual(v37.mediaInput);
+    });
+  });
+
   // ── reasoningEffort (v6.5.0) — claude-fable-5/opus-4-8/sonnet-5 rows ──────
 
   describe('reasoningEffort — claude-fable-5/opus-4-8/sonnet-5 rows', () => {
@@ -291,14 +392,26 @@ describe('getModelCapabilities', () => {
       ['perplexity', 'sonar-deep-research'],
       ['deepseek', 'deepseek-v4-flash'],
       ['deepseek', 'deepseek-v4-pro'],
-      ['deepseek', 'deepseek-chat'],
-      ['deepseek', 'deepseek-reasoner'],
     ] as const)(
       '%s/%s has reasoningEffort: null (no comparable API parameter)',
       (provider, model) => {
         const caps = getModelCapabilities(provider, model);
         expect(caps).not.toBeNull();
         expect((caps as ModelCapabilities).reasoningEffort).toBeNull();
+      }
+    );
+  });
+
+  // ── DeepSeek retired model IDs (2026-08-18) ───────────────────────────────
+  // deepseek-chat / deepseek-reasoner were removed from the capability table when
+  // DeepSeek retired both IDs on 2026-07-24. They must resolve as unknown models
+  // (null) rather than live, routable capability entries — the client-side rejection
+  // that stops calls to these IDs lives in providers/deepseek.ts, not this lookup.
+  describe('DeepSeek retired model IDs — absent from the capability table', () => {
+    it.each(['deepseek-chat', 'deepseek-reasoner'] as const)(
+      'getModelCapabilities("deepseek", "%s") returns null',
+      (model) => {
+        expect(getModelCapabilities('deepseek', model)).toBeNull();
       }
     );
   });

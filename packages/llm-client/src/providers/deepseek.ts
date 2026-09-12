@@ -56,6 +56,41 @@ import { assertReasoningEffortUnsupported } from './reasoning-effort.js';
 const PROVIDER = 'deepseek';
 const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
 
+/**
+ * DeepSeek retired the `deepseek-chat` and `deepseek-reasoner` model IDs on
+ * 2026-07-24 15:59 UTC with no fallback alias — any call using either string now
+ * errors at DeepSeek's API. Maps each retired ID to its recommended replacement.
+ *
+ * Design decision (final — see
+ * proj-plan/dlabs-toolkit/briefs/brief-deepseek-retired-model-routing-bug.md):
+ * reject client-side, do not auto-remap. Silently rerouting `deepseek-chat` to
+ * `deepseek-v4-flash` would change which model actually serves the request without
+ * the caller knowing — a silent behavior/cost change, not a fix.
+ */
+const RETIRED_MODEL_REPLACEMENT: Readonly<Record<string, string>> = {
+  'deepseek-chat': 'deepseek-v4-flash',
+  'deepseek-reasoner': 'deepseek-v4-flash',
+};
+
+/**
+ * Reject calls to retired DeepSeek model IDs before any SDK call is attempted.
+ * Called at the top of every public method, outside the withRetry() callback, so a
+ * retired model throws synchronously with zero network calls and zero retry attempts.
+ * kind: 'bad_request' — client-side validation failure, not a transient error; the
+ * default retryOn set (rate_limit, server_error, timeout, network) already excludes it.
+ */
+function assertNotRetiredModel(model: string): void {
+  const replacement = RETIRED_MODEL_REPLACEMENT[model];
+  if (replacement !== undefined) {
+    throw new LlmError({
+      message: `[llm-client] DeepSeek model '${model}' was retired on 2026-07-24 and no longer routes to a working endpoint. Use '${replacement}' instead.`,
+      provider: PROVIDER,
+      kind: 'bad_request',
+      retryable: false,
+    });
+  }
+}
+
 /** Normalize OpenAI-format usage object to LlmUsage. */
 function normalizeUsage(usage: OpenAI.CompletionUsage | undefined | null): LlmUsage {
   const inputTokens = usage?.prompt_tokens ?? 0;
@@ -178,6 +213,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     // reasoningEffort (v6.3.0+): DeepSeek does not document a comparable parameter.
     assertReasoningEffortUnsupported(options, PROVIDER);
     const model = options?.model ?? resolvedConfig.model;
+    assertNotRetiredModel(model);
     const chatMessages = buildMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
@@ -226,6 +262,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     // reasoningEffort (v6.3.0+): DeepSeek does not document a comparable parameter.
     assertReasoningEffortUnsupported(options, PROVIDER);
     const model = options?.model ?? resolvedConfig.model;
+    assertNotRetiredModel(model);
     const chatMessages = buildMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
@@ -295,6 +332,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
 
     const augmentedMessages = [jsonSystemInstruction, ...messages];
     const model = options?.model ?? resolvedConfig.model;
+    assertNotRetiredModel(model);
     const chatMessages = buildMessages(augmentedMessages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
@@ -374,9 +412,10 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
    *   { type: 'function', function: { name, description, parameters } }
    * NOT the Responses API flat shape — DeepSeek does not support the Responses API.
    *
-   * deepseek-chat (V3) supports tool calling.
-   * deepseek-reasoner (R1) has limited tool calling support — behavior may differ.
-   * Document this limitation in README but do not block the call.
+   * deepseek-v4-flash and deepseek-v4-pro support tool calling. deepseek-chat and
+   * deepseek-reasoner were retired by DeepSeek on 2026-07-24 and are rejected
+   * client-side by assertNotRetiredModel() before this function's SDK call — they
+   * never reach this code path.
    */
   async function withTools(
     messages: LlmMessage[],
@@ -386,6 +425,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     // reasoningEffort (v6.3.0+): DeepSeek does not document a comparable parameter.
     assertReasoningEffortUnsupported(options, PROVIDER);
     const model = options?.model ?? resolvedConfig.model;
+    assertNotRetiredModel(model);
     const chatMessages = buildMessages(messages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const start = Date.now();
@@ -551,9 +591,11 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
    * If JSON.parse fails on the accumulated text, we fall back to parseJsonOrThrow
    * (handles markdown fences and prose wrapping). schema.parse() validates the result.
    *
-   * deepseek-reasoner (R1) note: reasoning models may emit chain-of-thought text before
-   * the JSON object. The parseJsonOrThrow fallback handles this by extracting the first
-   * JSON block from the accumulated text.
+   * Reasoning-mode note: DeepSeek reasoning models may emit chain-of-thought text before
+   * the JSON object (deepseek-v4-pro / deepseek-v4-flash thinking mode; the retired
+   * deepseek-reasoner ID showed the same behavior and is now rejected client-side before
+   * reaching this function). The parseJsonOrThrow fallback handles this by extracting the
+   * first JSON block from the accumulated text.
    */
   async function* streamStructured<T>(
     messages: LlmMessage[],
@@ -570,6 +612,7 @@ export function createDeepSeekProvider(config: LlmClientConfig): LlmClient {
     const augmentedMessages = [jsonSystemInstruction, ...messages];
 
     const model = options?.model ?? resolvedConfig.model;
+    assertNotRetiredModel(model);
     const chatMessages = buildMessages(augmentedMessages);
     const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
     const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
