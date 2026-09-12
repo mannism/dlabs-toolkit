@@ -59,6 +59,25 @@ export interface JsonNode {
 }
 
 /**
+ * True if a JSON Schema node's `type` keyword denotes an object — either the plain
+ * `type: 'object'` form, or the draft-2020-12 type-array form (`type: ['object', 'null']`)
+ * that a future/combined zod output could theoretically collapse onto a single node.
+ *
+ * Zod ≥4.5 changed how bare nullable primitives compile: `z.string().nullable()` now
+ * emits `type: ['string', 'null']` instead of `anyOf: [{type:'string'},{type:'null'}]`
+ * (zod 4.4.x). Empirically (probed directly against zod 4.5.4's z.toJSONSchema), nullable
+ * *objects* still emit `anyOf` — the type-array collapse only applies to schemas with no
+ * extra keywords beyond a bare type. This helper exists so the additionalProperties:false
+ * injection (OpenAI) and property recursion (Gemini) below don't silently skip an object
+ * node if a future zod version ever merges an object payload onto a type-array node
+ * instead of a separate anyOf branch.
+ */
+function isObjectType(type: unknown): boolean {
+  if (type === 'object') return true;
+  return Array.isArray(type) && type.includes('object');
+}
+
+/**
  * Runtime Zod 4 schema detector.
  *
  * Zod 4 schemas have a `_zod` property (object) that is absent in Zod 3.
@@ -166,7 +185,7 @@ function openAIStrictPostprocess(node: unknown): JsonNode {
   delete obj.examples;
 
   // Object nodes: enforce required contains all properties, additionalProperties:false
-  if (obj.type === 'object' && obj.properties !== undefined) {
+  if (isObjectType(obj.type) && obj.properties !== undefined) {
     const props = obj.properties;
     const allKeys = Object.keys(props);
 
@@ -259,7 +278,7 @@ function geminiPostprocess(node: unknown): JsonNode {
   // Recurse into object properties, then inject sentinel for empty OBJECT schemas.
   // Gemini rejects OBJECT type with empty properties:{} — inject _placeholder so the
   // API accepts the schema, then strip it from the response before Zod parse.
-  if (obj.type === 'object') {
+  if (isObjectType(obj.type)) {
     if (obj.properties !== undefined) {
       const props = obj.properties;
       const processedProps: Record<string, JsonNode> = {};
