@@ -548,7 +548,12 @@ describe('Anthropic provider — structured() v0.4.0 strict mode (tool-use)', ()
     // Verify SDK was called with tools + tool_choice
     const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
     expect(callArgs.tools).toHaveLength(1);
-    expect(callArgs.tools?.[0]?.name).toBe('extract');
+    // Narrow ToolUnion to the concrete custom-tool shape (Anthropic.Tool) — the toolkit
+    // only ever constructs { name, description, input_schema } custom tools, never the
+    // newer server-tool variants (e.g. BrowserToolset20260801) that lack `.name`.
+    const constructedTool = callArgs.tools?.[0] as Anthropic.Tool;
+    expect(constructedTool?.name).toBe('extract');
+    expect(constructedTool?.description).toBe('Return the structured data.');
     expect(callArgs.tool_choice).toMatchObject({ type: 'tool', name: 'extract' });
 
     // Verify data extracted from tool_use.input
@@ -1617,7 +1622,10 @@ describe('Anthropic provider — streamStructured()', () => {
 
     const callArgs = mockStreamFn.mock.calls[0]?.[0] as Anthropic.MessageStreamParams;
     expect(callArgs.tool_choice).toEqual({ type: 'tool', name: 'extract' });
-    expect(callArgs.tools?.[0]?.name).toBe('extract');
+    // Narrow ToolUnion to the concrete custom-tool shape (Anthropic.Tool) — see note above.
+    const constructedTool = callArgs.tools?.[0] as Anthropic.Tool;
+    expect(constructedTool?.name).toBe('extract');
+    expect(constructedTool?.input_schema).toBeDefined();
   });
 
   it('throws structured_parse_failed if accumulated text is not valid JSON', async () => {
