@@ -65,7 +65,7 @@ jobs:
         #    runs `pnpm release` (which calls `changeset publish`) to publish
         #    packages to npmjs.com under the @diabolicallabs scope, then creates
         #    git tags and GitHub Releases.
-        uses: changesets/action@v1
+        uses: changesets/action@v2
         with:
           publish: pnpm release
           title: 'chore: version packages'
