@@ -114,13 +114,32 @@ describe('toProviderSchema() — openai profile', () => {
     expect(outer?.required).toEqual(['inner']);
   });
 
-  it('handles nullable fields (anyOf with null type)', () => {
+  it('handles nullable fields on bare primitives (type array, zod ≥4.5)', () => {
     const schema = z.object({ value: z.string().nullable() });
     const result = toProviderSchema(schema, 'openai');
-    // nullable produces anyOf:[{type:string},{type:null}] — both branches preserved
+    // zod 4.5.4 collapses a bare nullable primitive (no other keywords) into the
+    // draft-2020-12 type-array form `type: ['string', 'null']` instead of zod 4.4.x's
+    // anyOf:[{type:'string'},{type:'null'}] — confirmed via a direct z.toJSONSchema() probe.
     // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
     const valueProp = result.properties?.['value'];
-    expect(valueProp?.anyOf).toBeDefined();
+    expect(valueProp?.type).toEqual(['string', 'null']);
+    expect(valueProp?.anyOf).toBeUndefined();
+  });
+
+  it('handles a nullable field wrapping a nested object (additionalProperties:false still injected)', () => {
+    // Regression coverage: a nullable field whose non-null branch is an object schema is the
+    // scenario that would silently lose additionalProperties:false if the anyOf-recursion
+    // stopped firing under zod ≥4.5's new nullable shape. Empirically, nullable *objects*
+    // (unlike bare primitives) still emit anyOf:[objectSchema, {type:'null'}] in zod 4.5.4 —
+    // this test locks in that the object branch is still fully strict-mode-compliant.
+    const schema = z.object({ value: z.object({ id: z.string() }).nullable() });
+    const result = toProviderSchema(schema, 'openai');
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const valueProp = result.properties?.['value'];
+    const objectBranch = valueProp?.anyOf?.find((branch) => branch.type === 'object');
+    expect(objectBranch).toBeDefined();
+    expect(objectBranch?.additionalProperties).toBe(false);
+    expect(objectBranch?.required).toEqual(['id']);
   });
 
   it('handles array of objects with recursive post-processing', () => {
@@ -187,6 +206,26 @@ describe('toProviderSchema() — gemini profile', () => {
     const result = toProviderSchema(schema, 'gemini');
     // openapi-3.0 target does not emit $schema — confirm it is absent
     expect(result.$schema).toBeUndefined();
+  });
+
+  it('handles a nullable field wrapping a nested object (properties still recursed, additionalProperties still absent)', () => {
+    // Regression coverage for the Gemini profile's equivalent of the OpenAI nullable-object
+    // case above. Under the openapi-3.0 target, zod 4.5.4 merges `nullable: true` directly
+    // onto the same node as the object payload (type:'object' + properties) rather than
+    // producing a separate anyOf branch — so this exercises the isObjectType() generalization
+    // that keeps additionalProperties correctly stripped and properties correctly recursed
+    // regardless of which shape zod emits.
+    const schema = z.object({ value: z.object({ id: z.string() }).nullable() });
+    const result = toProviderSchema(schema, 'gemini');
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    const valueProp = result.properties?.['value'];
+    expect(valueProp?.type).toBe('object');
+    // Gemini's responseSchema contract never accepts additionalProperties (see
+    // geminiPostprocess doc comment) — the nested object must have it stripped, not
+    // injected as `false` (that would be the OpenAI-profile behavior, not Gemini's).
+    expect(valueProp?.additionalProperties).toBeUndefined();
+    // biome-ignore lint/complexity/useLiteralKeys: Record<string,JsonNode> index signature — noPropertyAccessFromIndexSignature requires bracket notation
+    expect(valueProp?.properties?.['id']).toBeDefined();
   });
 
   // geminiPostprocess: preserves Zod declaration order of properties (2026-09-05).
