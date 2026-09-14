@@ -47,7 +47,7 @@
     "@types/node": "^26.5.1",
     "@vitest/coverage-v8": "^4.1.11",
     "tsup": "^8.3.5",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

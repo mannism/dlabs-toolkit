@@ -41,7 +41,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "msw": "^2.15.0",
     "tsup": "^8.3.5",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   },
   "dependencies": {
     "@notionhq/client": "^5.26.0"
