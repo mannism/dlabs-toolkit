@@ -9,7 +9,7 @@ purpose: >
   Files API (v5.1.0+): LlmFilesApi namespace on every LlmClient — upload/refresh/waitForActive/delete.
   Supports video (Gemini only), large images (Gemini + Anthropic), PDFs (all three).
   { type: 'file', ref: LlmFileRef } content block references uploaded assets in messages.
-  Error normalization into 16-kind LlmError taxonomy with retryability and status-code
+  Error normalization into 18-kind LlmError taxonomy with retryability and status-code
   classification. Token usage normalization into consistent LlmUsage shape regardless of
   provider. Configurable retry with 4 strategies (exponential, linear, fixed, none).
   Provider failover via model: string[] — tries each model in order on configured error kinds.
@@ -44,6 +44,19 @@ purpose: >
   only via the new mediaInput.mediaResolution: 'request' | 'part' | null capability
   field. gemini-3.8-flash added to the capability matrix (GA 2026-09-02, same shape as
   gemini-3.7-flash, mediaInput.mediaResolution: 'part').
+  Gemini structured() empty-response classification (v6.9.0+): structured() and
+  structuredPromptFallback() inspect candidates[0].finishReason and
+  promptFeedback.blockReason before JSON.parse whenever the response text is empty/
+  whitespace-only. MAX_TOKENS → kind:'max_tokens' (new). SAFETY finish reason or
+  promptFeedback.blockReason present → kind:'content_filter' (existing kind, new trigger).
+  Any other finish reason with empty text, including a genuine STOP (all-thought-parts
+  response — @google/genai's .text getter silently skips thought:true parts) →
+  kind:'empty_response' (new). structured_parse_failed is now reserved for non-empty,
+  unparseable text only (rawContent.trim().length > 0 gate). LlmStructuredResponse gained
+  an optional stopReason field mirroring the same finishReason mapping on successful
+  parses. Gemini-only — OpenAI/Anthropic/DeepSeek structured() paths have the same
+  potential gap (silent empty response on truncation/safety) but were out of scope for
+  this fix; flagged as a follow-up candidate.
 owner: Sable
 status: published
 
@@ -84,7 +97,7 @@ exports:
   - "createClient(config: LlmClientConfig): Promise<LlmClient>  — async as of v1.7.0"
   - "createClientFromEnv(provider, model, overrides?): Promise<LlmClient>  — async as of v1.7.0"
   - "LlmError (class)"
-  - "LlmErrorKind (type) — 16-kind discriminated union"
+  - "LlmErrorKind (type) — 18-kind discriminated union (v6.9.0+: adds 'max_tokens' and 'empty_response')"
   - "LlmToolSchema (type) — discriminated union for LlmTool.inputSchema: { kind:'zod'; schema: ZodType } | { kind:'jsonSchema'; schema: Record<string,unknown>; validate?: fn } (v5.0.0+)"
   - "Types: LlmMessage, LlmClientConfig, LlmCallOptions, LlmUsage, LlmResponse, LlmStreamChunk, LlmStructuredResponse, LlmToolResponse, LlmClient, LlmCost"
   - "RetryConfig, RetryStrategy (types)"
@@ -166,12 +179,33 @@ failure_modes:
   - trigger: "reasoningEffort set against a non-reasoning OpenAI model (e.g. gpt-4.1) (v6.3.0+)"
     impact: "OpenAI returns HTTP 400; normalizes to LlmError kind:'bad_request' via the existing error path. No internal pre-call capability check — deliberate, see manifest notes."
     propagation: "propagated after the live API call, not pre-flight"
+  - trigger: "Gemini structured() (or structuredPromptFallback) returns empty/whitespace-only text (v6.9.0+)"
+    impact: "Throws LlmError kind:'max_tokens' (MAX_TOKENS finish reason), kind:'content_filter' (SAFETY finish reason or promptFeedback.blockReason), or kind:'empty_response' (any other finish reason with empty text, incl. genuine STOP / all-thought-parts responses). All three non-retryable. JSON.parse is never attempted on empty text — previously this always threw kind:'structured_parse_failed' with an empty Raw: message."
+    propagation: "propagated immediately, before any JSON.parse — no retry"
 
 performance:
   expected_latency: "Passthrough to provider — no overhead beyond retry logic"
   notes: "Token counting is done from the provider response, not via tiktoken. No sync-heavy computation."
 
 notes: |
+  v6.9.0 (minor — additive): Gemini structured()/structuredPromptFallback() classify
+          empty/whitespace-only responses by candidates[0].finishReason and
+          promptFeedback.blockReason before JSON.parse instead of always throwing
+          structured_parse_failed. New LlmErrorKind members: 'max_tokens' (MAX_TOKENS
+          finish reason, no parseable text) and 'empty_response' (any other empty-text
+          case, incl. an all-thought-parts response where @google/genai's .text getter
+          silently skips thought:true parts). SAFETY finish reason / blockReason route to
+          the existing 'content_filter' kind. structured_parse_failed now gated on
+          rawContent.trim().length > 0. New optional LlmStructuredResponse.stopReason
+          ('end_turn'|'max_tokens'|'content_filter') populated by Gemini on successful
+          parses — mirrors LlmToolResponse.stopReason's vocabulary, Gemini-only for now.
+          Motivating incident: brand-compliance-saas video review hit an empty Gemini
+          response after ~91s with no way to distinguish thinking-budget exhaustion from
+          a genuine parse failure. Both new kinds are Sets-based (DEFAULT_RETRY_ON,
+          DEFAULT_FALLBACK_ON), not switch-exhaustiveness — additive, no breaking change
+          to agent-sdk or any other consumer (grepped, no LlmErrorKind usage outside this
+          package). OpenAI/Anthropic/DeepSeek structured() paths were not touched — same
+          potential gap noted as a follow-up candidate, out of scope for this brief.
   v6.8.0 (minor — additive, PR #287): added gpt-6-astra (contextWindow
           1,050,000, maxOutputTokens 128,000; reasoning model, image+text input, text
           output — same shape as gpt-5.6-sol) and claude-fable-5-1 (contextWindow
