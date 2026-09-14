@@ -22,6 +22,13 @@
  *   - Text is accessed via response.text getter on GenerateContentResponse
  *   - Structured output (v0.4.0): Zod 4 schema → responseSchema (OpenAPI 3.0) + responseMimeType.
  *     Non-Zod → prompt-only fallback with responseMimeType only.
+ *   - Structured output empty-response classification (v6.9.0): before JSON.parse, both
+ *     structured() and structuredPromptFallback() inspect candidates[0].finishReason and
+ *     promptFeedback.blockReason for empty/whitespace-only text — see
+ *     classifyGeminiEmptyStructuredResponse(). Distinguishes MAX_TOKENS truncation, SAFETY /
+ *     blockReason blocks, and an all-thought-parts response (the SDK's .text getter silently
+ *     skips thought:true parts) from a genuinely malformed non-empty response, which is the
+ *     only case that still throws 'structured_parse_failed'.
  *
  * SDK error class note:
  *   The @google/genai public API exports only ApiError (lowercase 'a'), which has status: number.
@@ -204,6 +211,89 @@ export function normalizeGeminiError(err: unknown): LlmError {
   // Network errors (ECONNRESET, ETIMEDOUT, etc.) arrive as plain Error objects.
   // normalizeThrownError classifies retryable codes and handles the unknown-error case.
   return normalizeThrownError(err, PROVIDER);
+}
+
+/**
+ * Classify an empty/whitespace-only structured() response BEFORE any JSON.parse is
+ * attempted, using candidates[0].finishReason and promptFeedback.blockReason.
+ *
+ * Returns `undefined` when rawContent is non-empty — the caller should proceed to
+ * JSON.parse and let a genuine parse failure surface as 'structured_parse_failed'.
+ * Returns a fully-formed LlmError when rawContent is empty/whitespace-only, so the
+ * generic "not valid JSON. Raw: " (empty) error is never thrown for this case (v6.9.0+).
+ *
+ * Precedence when text is empty: blockReason/SAFETY → 'content_filter' (safety wins over
+ * everything else); MAX_TOKENS → 'max_tokens'; anything else (including a genuine STOP —
+ * e.g. an all-thought-parts response where the SDK's .text getter silently skips
+ * thought:true parts) → 'empty_response'.
+ *
+ * Exported for direct unit testing.
+ */
+export function classifyGeminiEmptyStructuredResponse(
+  rawResponse: GenerateContentResponse,
+  rawContent: string
+): LlmError | undefined {
+  if (rawContent.trim().length > 0) return undefined;
+
+  const candidate = rawResponse.candidates?.[0];
+  // Cast to string — the SDK's FinishReason union may not include all values depending
+  // on SDK version (same pattern as withTools() finishReason handling below).
+  const finishReason = String(candidate?.finishReason ?? 'STOP');
+  const blockReason = rawResponse.promptFeedback?.blockReason;
+
+  const usage = rawResponse.usageMetadata;
+  const usageBits: string[] = [];
+  if (usage?.thoughtsTokenCount !== undefined) {
+    usageBits.push(`thoughtsTokenCount=${usage.thoughtsTokenCount}`);
+  }
+  if (usage?.candidatesTokenCount !== undefined) {
+    usageBits.push(`candidatesTokenCount=${usage.candidatesTokenCount}`);
+  }
+  const usageSuffix = usageBits.length > 0 ? ` (${usageBits.join(', ')})` : '';
+
+  if (blockReason !== undefined) {
+    return new LlmError({
+      message: `Gemini structured output blocked: promptFeedback.blockReason=${String(blockReason)}, finishReason=${finishReason}${usageSuffix}`,
+      provider: PROVIDER,
+      kind: 'content_filter',
+      retryable: false,
+    });
+  }
+
+  if (finishReason === 'SAFETY') {
+    return new LlmError({
+      message: `Gemini structured output blocked: finishReason=SAFETY${usageSuffix}`,
+      provider: PROVIDER,
+      kind: 'content_filter',
+      retryable: false,
+    });
+  }
+
+  if (finishReason === 'MAX_TOKENS') {
+    return new LlmError({
+      message: `Gemini structured output truncated before any parseable text was produced: finishReason=MAX_TOKENS${usageSuffix}`,
+      provider: PROVIDER,
+      kind: 'max_tokens',
+      retryable: false,
+    });
+  }
+
+  return new LlmError({
+    message: `Gemini structured output: empty response body, finishReason=${finishReason}${usageSuffix}`,
+    provider: PROVIDER,
+    kind: 'empty_response',
+    retryable: false,
+  });
+}
+
+/** Map a Gemini finishReason to LlmStructuredResponse.stopReason for a successful (parsed) response. */
+function geminiStructuredStopReason(
+  rawResponse: GenerateContentResponse
+): 'end_turn' | 'max_tokens' | 'content_filter' {
+  const finishReason = String(rawResponse.candidates?.[0]?.finishReason ?? 'STOP');
+  if (finishReason === 'SAFETY') return 'content_filter';
+  if (finishReason === 'MAX_TOKENS') return 'max_tokens';
+  return 'end_turn';
 }
 
 /**
@@ -456,6 +546,14 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
 
     const rawContent = rawResponse.text ?? '';
 
+    // Inspect finishReason / promptFeedback.blockReason BEFORE JSON.parse — an empty or
+    // whitespace-only response is classified by why it's empty (max_tokens, content_filter,
+    // empty_response) rather than falling through to a generic parse-failure error with an
+    // empty "Raw: " message (v6.9.0+). structured_parse_failed is reserved for genuinely
+    // non-empty, unparseable text.
+    const emptyResponseError = classifyGeminiEmptyStructuredResponse(rawResponse, rawContent);
+    if (emptyResponseError !== undefined) throw emptyResponseError;
+
     let parsed: unknown;
     try {
       // Belt-and-braces fence-strip — Gemini occasionally wraps JSON in fences even
@@ -502,6 +600,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
       idSource: 'synthesized' as const,
       usage: normalizeUsage(rawResponse.usageMetadata),
       latencyMs: Date.now() - start,
+      stopReason: geminiStructuredStopReason(rawResponse),
     };
   }
 
@@ -573,6 +672,12 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
 
     const rawContent = rawResponse.text ?? '';
 
+    // Same finishReason/promptFeedback classification as the strict path above — applied
+    // before parseJsonOrThrow so an empty/blocked/truncated response is correctly kinded
+    // instead of falling into parseJsonOrThrow's generic parse-failure error (v6.9.0+).
+    const emptyResponseError = classifyGeminiEmptyStructuredResponse(rawResponse, rawContent);
+    if (emptyResponseError !== undefined) throw emptyResponseError;
+
     // parseJsonOrThrow: tries extractJsonBlock first (handles fences, prose, no closing fence),
     // falls back to legacy strip+parse, then throws a non-retryable LlmError with a
     // ≥500-char raw content slice when no valid JSON can be extracted.
@@ -598,6 +703,7 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
       idSource: 'synthesized' as const,
       usage: normalizeUsage(rawResponse.usageMetadata),
       latencyMs: Date.now() - start,
+      stopReason: geminiStructuredStopReason(rawResponse),
     };
   }
 

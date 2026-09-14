@@ -11,7 +11,7 @@
  *   - streamStructured() — token streaming + Zod-validated output
  *
  * Features (all 5 providers):
- *   - 14-kind LlmErrorKind taxonomy with .kind discriminator
+ *   - 18-kind LlmErrorKind taxonomy with .kind discriminator
  *   - Configurable retry (exponential backoff + jitter, respect Retry-After)
  *   - Provider failover via fallbackOn kinds
  *   - Per-call timeoutMs, AbortSignal, stream stall detection
