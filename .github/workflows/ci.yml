@@ -53,6 +53,19 @@ jobs:
           # Disable Turbo telemetry in CI
           TURBO_TELEMETRY_DISABLED: 1
 
+      - name: Typecheck structural tests (root tests/ dir, outside turbo's packages/* scope)
+        run: pnpm run typecheck:structure
+
+      - name: Run structural tests (manifest.yaml / MODULES.md hygiene)
+        # Root-level vitest suite (tests/structure/) — not a packages/* workspace,
+        # so `turbo run test` above never touches it (turbo.json's "test" task is
+        # scoped per-package). Wired explicitly here rather than relying on the
+        # root "pnpm run test" script chain, matching how the "Run coverage" and
+        # "Prompt eval-gate demo" steps below are also called out explicitly
+        # instead of folded into the turbo pipeline step.
+        # See brief-hygiene-manifest-structural-test.md AC5.
+        run: pnpm run test:structure
+
       - name: Run coverage (CI gate — 80% required)
         # Run coverage separately from the Turbo pipeline so that:
         # 1. Coverage failures are clearly reported as a separate step
