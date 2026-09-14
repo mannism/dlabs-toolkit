@@ -4,9 +4,10 @@ Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexit
 
 ## Status
 
-**v6.3.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
+**v6.9.0.** All five providers fully implemented. See [MIGRATION.md](./MIGRATION.md) for breaking changes from v0.x.
 
 Highlights:
+- **v6.9.0** — Gemini `structured()` (and its prompt-mode fallback) now classifies empty/whitespace-only responses by `candidates[0].finishReason` / `promptFeedback.blockReason` before attempting `JSON.parse`, instead of always throwing a generic `structured_parse_failed`. New error kinds `max_tokens` (MAX_TOKENS finish reason) and `empty_response` (any other empty-text case, including an all-thought-parts response where the SDK's `.text` getter skips `thought: true` parts); `SAFETY`/`blockReason` map to the existing `content_filter` kind. `structured_parse_failed` is now reserved for genuinely non-empty, unparseable text. `LlmStructuredResponse.stopReason` (`'end_turn' | 'max_tokens' | 'content_filter'`, optional) is populated by Gemini on successful parses so callers can detect truncation even when JSON.parse still succeeded.
 - **v6.3.0** — Reasoning-effort passthrough: `reasoningEffort` on `LlmCallOptions` (Anthropic, OpenAI, Gemini — Perplexity/DeepSeek reject), `LlmUsage.reasoningTokens`, and a `reasoningEffort` dialect tag on `ModelCapabilities`. See [Reasoning-effort passthrough](#reasoning-effort-passthrough-v630).
 - **v5.1.0** — Files API: `LlmFilesApi` namespace on every `LlmClient` (`files.upload()`, `files.refresh()`, `files.waitForActive()`, `files.delete()`). New `{ type: 'file', ref: LlmFileRef }` content block for passing uploaded files in messages. Gemini supports video, large images, and PDFs via the Files API; OpenAI supports PDFs; Anthropic supports PDFs and images via the Files beta. Error kinds map to the existing taxonomy (`bad_request` for provider/state mismatches, `network`/`server_error` for SDK failures, `timeout` for waitForActive deadline exceeded). Cross-provider refs throw `bad_request` before any SDK call.
 - **v5.0.0** — **Breaking.** `LlmTool.inputSchema` now requires an `LlmToolSchema` discriminated union (`{ kind: 'zod', schema }` or `{ kind: 'jsonSchema', schema, validate? }`). The legacy `{ parse: fn }` shape throws `LlmError({ kind: 'tool_schema_invalid' })` at runtime. `LlmToolSchema` is exported from the package root. New `tool_schema_invalid` error kind added. See [Tool calling](#tool-calling-v100) for migration examples.
@@ -92,6 +93,34 @@ The toolkit checks for Zod 4's internal `_zod` marker at runtime. If the schema 
 | Gemini | `responseSchema` (OpenAPI 3.0) + `responseMimeType: 'application/json'` | Schema communicated to the model; belt-and-braces fence-strip retained | OBJECT schemas with empty `properties: {}` auto-receive a `_placeholder` sentinel (v1.0.0); stripped before Zod parse. |
 | DeepSeek | None (prompt-only, API limitation) | System-prompt nudge + schema.parse() | Same as v0.3.0 |
 | Perplexity | None (prompt-only, API limitation) | System-prompt nudge + `<think>` strip + schema.parse() | Same as v0.3.0; `citations` propagated to structured response |
+
+### Gemini empty-response classification (v6.9.0)
+
+Gemini `structured()` (both the strict `responseSchema` path and the prompt-mode fallback) inspects `candidates[0].finishReason` and `promptFeedback.blockReason` **before** attempting `JSON.parse`, so an empty or whitespace-only response is classified by *why* it's empty instead of always throwing a generic `structured_parse_failed` with an empty `Raw: ` message:
+
+| Condition (response text is empty/whitespace-only) | `LlmError.kind` | Retryable |
+|---|---|---|
+| `finishReason === 'MAX_TOKENS'` | `max_tokens` | no — raise `maxTokens`, retrying with the same options reproduces the same truncation |
+| `finishReason === 'SAFETY'` or `promptFeedback.blockReason` is set | `content_filter` | no |
+| Any other finish reason, including a genuine `STOP` (e.g. an all-thought-parts response — `@google/genai`'s `.text` getter silently skips `thought: true` parts) | `empty_response` | no |
+| Response text is **non-empty** but fails `JSON.parse` | `structured_parse_failed` (unchanged) | no |
+
+Each new error's message names the finish reason / block reason and includes `usageMetadata.thoughtsTokenCount` / `candidatesTokenCount` when present, so you can tell a genuine thinking-budget exhaustion apart from a short truncation:
+
+```typescript
+try {
+  const result = await client.structured(messages, schema);
+} catch (err) {
+  if (err instanceof LlmError && err.kind === 'max_tokens') {
+    // Retry with a higher maxTokens, or a lower reasoningEffort
+  }
+  if (err instanceof LlmError && err.kind === 'empty_response') {
+    // Model produced no visible output at all — inspect err.message for the finish reason
+  }
+}
+```
+
+A successful parse also carries `result.stopReason` (`'end_turn' | 'max_tokens' | 'content_filter'`, optional — Gemini only) so you can detect truncation even when the model's partial output happened to still be valid JSON.
 
 ### Prompt-mode escape hatch
 
@@ -806,9 +835,11 @@ type LlmErrorKind =
   | 'bad_request'             // 400
   | 'content_filter'          // model refused, safety block
   | 'context_length'          // prompt too long
+  | 'max_tokens'              // structured() output truncated by maxTokens before any parseable text (v6.9.0+, Gemini only)
   | 'tool_arguments_invalid'  // withTools() argument validation failure (Zod or validate())
   | 'tool_schema_invalid'     // withTools() — inputSchema missing kind field; legacy shape (v5+)
-  | 'structured_parse_failed' // structured() JSON parse or Zod validation failure
+  | 'structured_parse_failed' // structured() JSON parse or Zod validation failure on non-empty text
+  | 'empty_response'          // structured() returned no parseable text and no more specific reason applies (v6.9.0+, Gemini only)
   | 'network'                 // ECONNRESET, ETIMEDOUT, etc.
   | 'timeout'                 // per-call timeout
   | 'stream_stall'            // stream silence exceeded streamStallTimeoutMs

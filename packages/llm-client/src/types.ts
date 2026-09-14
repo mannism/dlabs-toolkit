@@ -113,6 +113,25 @@
  *     timeout     — waitForActive exceeded timeoutMs.
  *     network     — Files API network failure.
  *     server_error — Files API 5xx from provider.
+ *
+ * v6.9.0 additions (Gemini structured() finishReason/promptFeedback classification):
+ *   LlmErrorKind         — added 'max_tokens' and 'empty_response' (additive, not breaking).
+ *   Gemini structured() and the structuredPromptFallback() prompt-mode path now inspect
+ *   candidates[0].finishReason and promptFeedback.blockReason BEFORE attempting JSON.parse
+ *   on empty/whitespace-only text. Previously an empty response (thinking-budget exhaustion,
+ *   safety block, or an all-thought-parts response where the SDK's .text getter silently
+ *   skips thought:true parts) always threw the generic 'structured_parse_failed' with an
+ *   empty "Raw: " message. Now:
+ *     MAX_TOKENS finish reason + empty text        → kind:'max_tokens'
+ *     SAFETY finish reason or promptFeedback.blockReason → kind:'content_filter'
+ *     any other finish reason (incl. STOP) + empty text  → kind:'empty_response'
+ *     non-empty, unparseable text                  → kind:'structured_parse_failed' (unchanged)
+ *   Each new error message names the finish reason / blockReason and includes
+ *   thoughtsTokenCount / candidatesTokenCount from usageMetadata when present.
+ *   LlmStructuredResponse.stopReason — new optional field ('end_turn' | 'max_tokens' |
+ *   'content_filter'), populated by Gemini so callers can detect truncation even when
+ *   JSON.parse succeeds (e.g. a truncated-but-still-parseable partial JSON body). Undefined
+ *   for all other providers (not yet implemented there — tracked as a follow-up).
  */
 
 import type { LlmCost, PricingTable } from '@diabolicallabs/llm-pricing';
@@ -742,9 +761,11 @@ export interface LlmStreamChunk {
  * | bad_request            | no                | 400 — schema or payload error                      |
  * | content_filter         | no                | Provider refused on safety grounds                 |
  * | context_length         | no                | Input exceeded model context window                |
+ * | max_tokens             | no                | Output was truncated by the maxTokens/maxOutputTokens limit before a parseable structured response was produced (v6.9.0+, Gemini structured() only). Distinct from context_length — this is an output-side truncation, not an input-side overflow; the remediation is raising maxTokens, not trimming the prompt. Retrying with identical options reproduces the same truncation, so not retryable. |
  * | tool_arguments_invalid | no                | Tool call arguments failed Zod parse               |
- * | structured_parse_failed| no                | structured() output failed Zod parse               |
+ * | structured_parse_failed| no                | structured() output failed Zod parse. Only thrown when the raw response text is non-empty but unparseable (v6.9.0+) — empty/whitespace-only text now routes through max_tokens / content_filter / empty_response instead. |
  * | tool_schema_invalid    | no                | LlmTool.inputSchema is missing or has an unrecognized kind — legacy { parse: fn } shape or malformed object passed to withTools() |
+ * | empty_response         | no                | structured() returned no parseable text and no more specific reason (MAX_TOKENS / SAFETY / blockReason) applies — covers a genuine STOP finish reason with empty text, e.g. an all-thought-parts response where the SDK's .text getter silently skips thought:true parts (v6.9.0+, Gemini structured() only). |
  * | cancelled              | no                | AbortSignal fired (caller-initiated)               |
  * | http                   | no                | Residual fallback for unclassified HTTP errors     |
  * | unknown                | yes               | Catch-all; should be empty for instrumented paths  |
@@ -760,9 +781,11 @@ export type LlmErrorKind =
   | 'bad_request'
   | 'content_filter'
   | 'context_length'
+  | 'max_tokens'
   | 'tool_arguments_invalid'
   | 'structured_parse_failed'
   | 'tool_schema_invalid'
+  | 'empty_response'
   | 'cancelled'
   | 'http'
   | 'unknown';
@@ -861,6 +884,20 @@ export type LlmStructuredResponse<T> = {
    * Undefined when no failover happened or when model is a single string.
    */
   requestedModel?: string;
+  /**
+   * Normalized stop reason for this structured() call (v6.9.0+).
+   * Lets a caller detect truncation even when JSON.parse still succeeded (e.g. a
+   * response cut off mid-way through a trailing field but still valid JSON up to that
+   * point is not guaranteed — this mainly signals "the model may not have said everything
+   * it intended to"). Mirrors LlmToolResponse.stopReason's vocabulary, restricted to the
+   * subset structured() can distinguish.
+   *   'end_turn'       — model finished normally (finishReason STOP or unset).
+   *   'max_tokens'     — output was cut by the token limit.
+   *   'content_filter' — safety refusal (SAFETY finish reason or promptFeedback.blockReason).
+   * Currently populated by Gemini only. Undefined for OpenAI, Anthropic, DeepSeek, and
+   * Perplexity structured() calls (not yet implemented there — tracked as a follow-up).
+   */
+  stopReason?: 'end_turn' | 'max_tokens' | 'content_filter';
 };
 
 /**

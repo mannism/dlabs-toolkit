@@ -719,6 +719,300 @@ describe('Gemini provider — structured() prompt-fallback: robust JSON extracti
   });
 });
 
+// ─── v6.9.0 — structured() finishReason / promptFeedback classification ─────
+//
+// Before this fix, an empty/whitespace-only structured() response always threw the
+// generic 'structured_parse_failed' with an empty "Raw: " message, regardless of why
+// the response was empty (thinking-budget exhaustion, safety block, or an all-thought
+// response where @google/genai's .text getter silently skips thought:true parts).
+
+/**
+ * Build a GenerateContentResponse mock shaped for the empty-response classification
+ * path: candidates[0].finishReason, optional promptFeedback.blockReason, and optional
+ * thoughtsTokenCount alongside the usual usageMetadata counts.
+ */
+function mockGeminiStructuredResponse(overrides?: {
+  text?: string;
+  finishReason?: string;
+  blockReason?: string;
+  thoughtsTokenCount?: number;
+  candidatesTokenCount?: number;
+  promptTokenCount?: number;
+  parts?: Array<{ text?: string; thought?: boolean }>;
+}) {
+  const candidatesTokenCount = overrides?.candidatesTokenCount ?? 0;
+  const promptTokenCount = overrides?.promptTokenCount ?? 20;
+  return {
+    text: overrides?.text ?? '',
+    candidates: [
+      {
+        content: { role: 'model', parts: overrides?.parts ?? [] },
+        finishReason: overrides?.finishReason ?? 'STOP',
+      },
+    ],
+    ...(overrides?.blockReason !== undefined && {
+      promptFeedback: { blockReason: overrides.blockReason },
+    }),
+    usageMetadata: {
+      promptTokenCount,
+      candidatesTokenCount,
+      totalTokenCount: promptTokenCount + candidatesTokenCount,
+      ...(overrides?.thoughtsTokenCount !== undefined && {
+        thoughtsTokenCount: overrides.thoughtsTokenCount,
+      }),
+    },
+  };
+}
+
+describe('Gemini provider — structured() empty-response classification (v6.9.0, strict mode)', () => {
+  let mockGenerateContent: MockInstance;
+  const zodSchema = z.object({ ok: z.boolean() });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateContent = vi.fn();
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: { generateContent: mockGenerateContent, generateContentStream: vi.fn() },
+      };
+    });
+  });
+
+  it('(a) empty text + MAX_TOKENS finish reason → kind:max_tokens, not structured_parse_failed', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({
+        text: '',
+        finishReason: 'MAX_TOKENS',
+        thoughtsTokenCount: 8192,
+      })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    await expect(
+      client.structured([{ role: 'user', content: 'Return JSON' }], zodSchema)
+    ).rejects.toMatchObject({
+      kind: 'max_tokens',
+      retryable: false,
+      message: expect.stringContaining('MAX_TOKENS'),
+    });
+  });
+
+  it('(a) MAX_TOKENS error message includes thoughtsTokenCount and candidatesTokenCount', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({
+        text: '',
+        finishReason: 'MAX_TOKENS',
+        thoughtsTokenCount: 8192,
+        candidatesTokenCount: 0,
+      })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    try {
+      await client.structured([{ role: 'user', content: 'Return JSON' }], zodSchema);
+      expect.fail('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(LlmError);
+      if (e instanceof LlmError) {
+        expect(e.message).toContain('thoughtsTokenCount=8192');
+        expect(e.message).toContain('candidatesTokenCount=0');
+      }
+    }
+  });
+
+  it('(b) empty text + SAFETY finish reason → kind:content_filter', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({ text: '', finishReason: 'SAFETY' })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    await expect(
+      client.structured([{ role: 'user', content: 'Return JSON' }], zodSchema)
+    ).rejects.toMatchObject({
+      kind: 'content_filter',
+      retryable: false,
+      message: expect.stringContaining('SAFETY'),
+    });
+  });
+
+  it('(c) promptFeedback.blockReason present → kind:content_filter, message names the blockReason', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({
+        text: '',
+        finishReason: 'OTHER',
+        blockReason: 'PROHIBITED_CONTENT',
+      })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    await expect(
+      client.structured([{ role: 'user', content: 'Return JSON' }], zodSchema)
+    ).rejects.toMatchObject({
+      kind: 'content_filter',
+      retryable: false,
+      message: expect.stringContaining('PROHIBITED_CONTENT'),
+    });
+  });
+
+  it('(d) non-empty malformed text still throws structured_parse_failed, even with a MAX_TOKENS finish reason', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({ text: 'not valid json {{{', finishReason: 'MAX_TOKENS' })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    await expect(
+      client.structured([{ role: 'user', content: 'Return JSON' }], zodSchema)
+    ).rejects.toMatchObject({
+      kind: 'structured_parse_failed',
+      retryable: false,
+      message: expect.stringContaining('not valid JSON'),
+    });
+  });
+
+  it('(e) all-thought-parts response (empty .text getter, STOP finish reason) → kind:empty_response, not structured_parse_failed', async () => {
+    // @google/genai's .text getter silently skips thought:true parts, so an all-thought
+    // response reads as text: '' even though the candidate's parts array is non-empty and
+    // finishReason is a genuine STOP (not MAX_TOKENS/SAFETY).
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({
+        text: '',
+        finishReason: 'STOP',
+        thoughtsTokenCount: 4096,
+        parts: [{ text: 'internal reasoning the model produced', thought: true }],
+      })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    await expect(
+      client.structured([{ role: 'user', content: 'Return JSON' }], zodSchema)
+    ).rejects.toMatchObject({
+      kind: 'empty_response',
+      retryable: false,
+      message: expect.stringContaining('STOP'),
+    });
+  });
+
+  it('stopReason is end_turn on a normal successful parse (default STOP)', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({
+        text: '{"ok":true}',
+        finishReason: 'STOP',
+        candidatesTokenCount: 5,
+      })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return JSON' }], zodSchema);
+
+    expect(result.stopReason).toBe('end_turn');
+  });
+
+  it('stopReason is max_tokens on a successful parse when finishReason is MAX_TOKENS', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({
+        text: '{"ok":true}',
+        finishReason: 'MAX_TOKENS',
+        candidatesTokenCount: 5,
+      })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.structured([{ role: 'user', content: 'Return JSON' }], zodSchema);
+
+    expect(result.stopReason).toBe('max_tokens');
+  });
+});
+
+describe('Gemini provider — structuredPromptFallback() empty-response classification (v6.9.0, AC5)', () => {
+  let mockGenerateContent: MockInstance;
+  // Narrow (non-Zod) schema forces the prompt-fallback path.
+  const narrowSchema = { parse: (data: unknown) => data as { ok: boolean } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGenerateContent = vi.fn();
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return {
+        models: { generateContent: mockGenerateContent, generateContentStream: vi.fn() },
+      };
+    });
+  });
+
+  it('empty text + MAX_TOKENS finish reason → kind:max_tokens', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({
+        text: '',
+        finishReason: 'MAX_TOKENS',
+        thoughtsTokenCount: 2048,
+      })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    await expect(
+      client.structured([{ role: 'user', content: 'Return JSON' }], narrowSchema)
+    ).rejects.toMatchObject({ kind: 'max_tokens', retryable: false });
+  });
+
+  it('empty text + SAFETY finish reason → kind:content_filter', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({ text: '', finishReason: 'SAFETY' })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    await expect(
+      client.structured([{ role: 'user', content: 'Return JSON' }], narrowSchema)
+    ).rejects.toMatchObject({ kind: 'content_filter', retryable: false });
+  });
+
+  it('promptFeedback.blockReason present → kind:content_filter', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({ text: '', finishReason: 'OTHER', blockReason: 'SAFETY' })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    await expect(
+      client.structured([{ role: 'user', content: 'Return JSON' }], narrowSchema)
+    ).rejects.toMatchObject({ kind: 'content_filter', retryable: false });
+  });
+
+  it('all-thought-parts response (empty text, STOP) → kind:empty_response', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({
+        text: '',
+        finishReason: 'STOP',
+        parts: [{ text: 'reasoning', thought: true }],
+      })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    await expect(
+      client.structured([{ role: 'user', content: 'Return JSON' }], narrowSchema)
+    ).rejects.toMatchObject({ kind: 'empty_response', retryable: false });
+  });
+
+  it('non-empty malformed text still throws structured_parse_failed', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({ text: 'still not json', finishReason: 'STOP' })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+
+    await expect(
+      client.structured([{ role: 'user', content: 'Return JSON' }], narrowSchema)
+    ).rejects.toMatchObject({ kind: 'structured_parse_failed', retryable: false });
+  });
+
+  it('stopReason is populated on a successful parse via the fallback path', async () => {
+    mockGenerateContent.mockResolvedValue(
+      mockGeminiStructuredResponse({ text: '{"ok":true}', finishReason: 'MAX_TOKENS' })
+    );
+    const client = createGeminiProvider(TEST_CONFIG);
+    const result = await client.structured(
+      [{ role: 'user', content: 'Return JSON' }],
+      narrowSchema
+    );
+
+    expect(result.stopReason).toBe('max_tokens');
+  });
+});
+
 // ─── withTools() ──────────────────────────────────────────────────────────────
 
 /**
