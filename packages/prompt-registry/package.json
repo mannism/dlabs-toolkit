@@ -51,7 +51,7 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.5.1",
     "@types/pg": "^8.23.1",
     "@vitest/coverage-v8": "^4.1.11",
     "pg": "^8.23.0",
