@@ -67,9 +67,9 @@ jobs:
         #    git tags and GitHub Releases.
         uses: changesets/action@v2
         with:
-          publish: pnpm release
-          title: 'chore: version packages'
-          commit: 'chore: version packages'
+          publish-script: pnpm release
+          pr-title: 'chore: version packages'
+          commit-message: 'chore: version packages'
         env:
           # A fine-grained PAT, not the default GITHUB_TOKEN. GitHub now requires
           # manual workflow-run approval on any PR authored by github-actions[bot]
