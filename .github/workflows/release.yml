@@ -41,7 +41,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          # @changesets/cli@3.0.2's bin.js calls node:module's enableCompileCache(),
+          # added in Node 22.1.0 and not backported to the 20.x LTS line — 20 throws
+          # "TypeError: enableCompileCache is not a function" the moment `changesets
+          # version`/`changesets publish` runs. This workflow-only bump doesn't change
+          # the repo's own Node >=20 engines floor (~/AGENTS.md) — just what this job's
+          # runner uses to invoke the CLI.
+          node-version: '22'
           cache: 'pnpm'
           # Authenticate against npmjs.com for publishing
           registry-url: 'https://registry.npmjs.org'
