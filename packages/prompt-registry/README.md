@@ -166,7 +166,7 @@ A non-Postgres backend implements the same interface — the interface is the ex
 
 ## Migration guide: converting an existing per-product implementation
 
-This section shows the actual diff shape for migrating a product that already has its own `prompt_versions` implementation (the pre-package pattern from admin-standard §S7) onto this package. **FitCheckerApp** (`/Users/mann/Documents/GitHub/FitCheckerApp`) was used as the reference — admin-standard identifies it as the fleet's cleanest `prompt_versions` schema (`db/schema/prompt-versions.ts`, `lib/prompts.ts`, `scripts/seed-prompt-versions.ts`). This is a worked example, not a completed migration — no product is migrated in this PR (see "Out of scope" below); a real migration is its own per-product follow-up brief.
+This section shows the actual diff shape for migrating a product that already has its own `prompt_versions` implementation (the pre-package pattern from admin-standard §S7) onto this package. **FitCheckerApp** (`/Users/mann/GitHub/FitCheckerApp`) was used as the reference — admin-standard identifies it as the fleet's cleanest `prompt_versions` schema (`db/schema/prompt-versions.ts`, `lib/prompts.ts`, `scripts/seed-prompt-versions.ts`). This is a worked example, not a completed migration — no product is migrated in this PR (see "Out of scope" below); a real migration is its own per-product follow-up brief.
 
 ### Before — FitCheckerApp's hand-rolled implementation
 
