@@ -40,8 +40,8 @@ importers:
         specifier: ^10.10.0
         version: 10.10.0
       js-yaml:
-        specifier: ^4.1.0
-        version: 4.3.2
+        specifier: ^5.4.2
+        version: 5.4.2
       turbo:
         specifier: ^2.10.13
         version: 2.10.13
@@ -1687,8 +1687,8 @@ packages:
   js-tokens@10.0.0:
     resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
 
-  js-yaml@4.3.2:
-    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
+  js-yaml@5.4.2:
+    resolution: {integrity: sha512-m+aqu+LwO1O6sIopafj8HUVl5aawITwZQe/yHpMCKjaWBaA/d07B/QdMb3529REftiU+RMMHL3Vlsw3hON7vWg==}
     hasBin: true
 
   json-bigint@1.0.0:
@@ -3658,7 +3658,7 @@ snapshots:
 
   js-tokens@10.0.0: {}
 
-  js-yaml@4.3.2:
+  js-yaml@5.4.2:
     dependencies:
       argparse: 2.0.1
 
