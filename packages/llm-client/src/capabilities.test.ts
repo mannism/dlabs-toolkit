@@ -345,6 +345,7 @@ describe('getModelCapabilities', () => {
         ['openai', 'o4-mini'],
         ['deepseek', 'deepseek-v4-flash'],
         ['perplexity', 'sonar-pro'],
+        ['xai', 'grok-4.7'],
       ];
       for (const [provider, model] of nonGeminiSamples) {
         const caps = getModelCapabilities(provider, model);
@@ -414,5 +415,102 @@ describe('getModelCapabilities', () => {
         expect(getModelCapabilities('deepseek', model)).toBeNull();
       }
     );
+  });
+});
+
+describe('getModelCapabilities — xai', () => {
+  const MODELS = [
+    'grok-4.7',
+    'grok-4.6',
+    'grok-4.5',
+    'grok-4.3',
+    'grok-4.20-0309-reasoning',
+    'grok-4.20-0309-non-reasoning',
+    'grok-4.20-multi-agent-0309',
+    'grok-build-0.1',
+  ] as const;
+
+  it.each(MODELS)('%s: Responses-API capabilities, image-only media, provider ids', (model) => {
+    const c = getModelCapabilities('xai', model) as ModelCapabilities;
+    expect(c).not.toBeNull();
+    expect(c.tools).toBe(true);
+    expect(c.structuredOutput).toBe('json-schema');
+    expect(c.streamStructured).toBe(true);
+    expect(c.responseIds).toBe('provider');
+    expect(c.promptCache).toBeNull();
+    expect(c.mediaInput).toEqual({
+      image: { base64: true, url: true },
+      document: { pdfBase64: false },
+      mediaResolution: null,
+    });
+  });
+
+  it.each([
+    ['grok-4.7', 500_000],
+    ['grok-4.6', 500_000],
+    ['grok-4.5', 500_000],
+    ['grok-4.3', 1_000_000],
+    ['grok-4.20-0309-reasoning', 1_000_000],
+    ['grok-4.20-0309-non-reasoning', 1_000_000],
+    ['grok-4.20-multi-agent-0309', 1_000_000],
+    ['grok-build-0.1', 256_000],
+  ] as const)('%s context window is %d (GET /v1/models context_length)', (model, ctx) => {
+    expect((getModelCapabilities('xai', model) as ModelCapabilities).contextWindow).toBe(ctx);
+  });
+
+  it('reasoningEffort dialect and per-model value lists match the live probes', () => {
+    const get = (m: string) => getModelCapabilities('xai', m) as ModelCapabilities;
+    expect(get('grok-4.7').reasoningEffortValues).toEqual([
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+    ]);
+    expect(get('grok-4.6').reasoningEffortValues).toEqual([
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+    ]);
+    expect(get('grok-4.5').reasoningEffortValues).toEqual([
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+    ]);
+    // 'none' is accepted by grok-4.3 only.
+    expect(get('grok-4.3').reasoningEffortValues).toContain('none');
+    expect(get('grok-4.7').reasoningEffortValues).not.toContain('none');
+    expect(get('grok-4.20-multi-agent-0309').reasoningEffortValues).toEqual([
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+    ]);
+    for (const m of [
+      'grok-4.7',
+      'grok-4.6',
+      'grok-4.5',
+      'grok-4.3',
+      'grok-4.20-multi-agent-0309',
+    ]) {
+      expect(get(m).reasoningEffort).toBe('xai-effort');
+      expect(get(m).reasoningEffortValues).not.toContain('max');
+    }
+    for (const m of [
+      'grok-4.20-0309-reasoning',
+      'grok-4.20-0309-non-reasoning',
+      'grok-build-0.1',
+    ]) {
+      expect(get(m).reasoningEffort).toBeNull();
+      expect(get(m).reasoningEffortValues).toBeUndefined();
+    }
+  });
+
+  it('returns null for an unknown xai model', () => {
+    expect(getModelCapabilities('xai', 'grok-99')).toBeNull();
   });
 });

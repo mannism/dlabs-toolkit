@@ -170,7 +170,9 @@ async function main(): Promise<void> {
     console.log(`  data: ${JSON.stringify(r.data)}`);
     console.log(`  serverToolCalls: ${r.serverToolCalls?.map((c) => c.type).join(', ')}`);
     const costOk = reportCost('code_interpreter', r);
-    return costOk && r.data.n === 832040 && (r.usage.serverToolUsage?.codeInterpreterCalls ?? 0) >= 1;
+    return (
+      costOk && r.data.n === 832040 && (r.usage.serverToolUsage?.codeInterpreterCalls ?? 0) >= 1
+    );
   });
 
   await runCase(5, 'mcp (deepwiki)', async () => {
@@ -258,8 +260,7 @@ async function main(): Promise<void> {
       [
         {
           role: 'user',
-          content:
-            'Call the get_weather function for Singapore. Do not answer without calling it.',
+          content: 'Call the get_weather function for Singapore. Do not answer without calling it.',
         },
       ],
       [
@@ -274,8 +275,12 @@ async function main(): Promise<void> {
         providerOptions: { serverTools: [{ type: 'webSearch' }], maxToolCalls: 2 },
       }
     );
-    console.log(`  toolCalls: ${JSON.stringify(r.toolCalls.map((c) => [c.toolName, c.arguments]))}`);
-    console.log(`  serverToolCalls: ${r.serverToolCalls?.length ?? 0}  stopReason: ${r.stopReason}`);
+    console.log(
+      `  toolCalls: ${JSON.stringify(r.toolCalls.map((c) => [c.toolName, c.arguments]))}`
+    );
+    console.log(
+      `  serverToolCalls: ${r.serverToolCalls?.length ?? 0}  stopReason: ${r.stopReason}`
+    );
     const costOk = reportCost('withTools', r);
     return costOk && r.toolCalls.some((c) => c.toolName === 'get_weather');
   });

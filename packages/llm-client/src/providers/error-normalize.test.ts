@@ -20,6 +20,7 @@ import { normalizeDeepSeekError } from './deepseek.js';
 import { normalizeGeminiError } from './gemini.js';
 import { normalizeOpenAIError } from './openai.js';
 import { normalizePerplexityError } from './perplexity.js';
+import { normalizeXaiError } from './xai.js';
 
 describe('normalizeAnthropicError — real Anthropic SDK error classes', () => {
   it('maps Anthropic.APIError 429 to kind:"rate_limit", retryable LlmError', () => {
@@ -459,5 +460,78 @@ describe('normalizeDeepSeekError — OpenAI SDK error classes (same hierarchy as
     expect(result.provider).toBe('deepseek');
     expect(result.retryable).toBe(false);
     expect(result.statusCode).toBeUndefined();
+  });
+});
+
+describe('normalizeXaiError — OpenAI SDK error classes pointed at api.x.ai', () => {
+  it('maps OpenAI.APIError 429 to kind:"rate_limit", retryable LlmError with xai provider', () => {
+    const apiErr = OpenAI.APIError.generate(
+      429,
+      { error: { message: 'Rate limited', type: 'tokens', code: null, param: null } },
+      'Rate limited',
+      new Headers()
+    );
+    const result = normalizeXaiError(apiErr);
+    expect(result).toBeInstanceOf(LlmError);
+    expect(result.provider).toBe('xai');
+    expect(result.statusCode).toBe(429);
+    expect(result.kind).toBe('rate_limit');
+    expect(result.retryable).toBe(true);
+  });
+
+  it('maps OpenAI.APIError 400 (xAI invalid-argument) to non-retryable bad_request', () => {
+    const apiErr = OpenAI.APIError.generate(
+      400,
+      {
+        code: 'invalid-argument',
+        error: 'This model does not support reasoning_effort value none.',
+      },
+      'bad arg',
+      new Headers()
+    );
+    const result = normalizeXaiError(apiErr);
+    expect(result.kind).toBe('bad_request');
+    expect(result.retryable).toBe(false);
+    expect(result.provider).toBe('xai');
+  });
+
+  it('maps OpenAI.APIError 500 to retryable server_error', () => {
+    const apiErr = OpenAI.APIError.generate(
+      500,
+      { error: { message: 'boom', type: 'server_error', code: null, param: null } },
+      'boom',
+      new Headers()
+    );
+    const result = normalizeXaiError(apiErr);
+    expect(result.kind).toBe('server_error');
+    expect(result.retryable).toBe(true);
+  });
+
+  it('maps OpenAI.APIConnectionError to retryable network error', () => {
+    const result = normalizeXaiError(new OpenAI.APIConnectionError({ message: 'conn reset' }));
+    expect(result.kind).toBe('network');
+    expect(result.retryable).toBe(true);
+    expect(result.provider).toBe('xai');
+  });
+
+  it('maps OpenAI.APIConnectionTimeoutError to retryable timeout', () => {
+    const result = normalizeXaiError(new OpenAI.APIConnectionTimeoutError());
+    expect(result.kind).toBe('timeout');
+    expect(result.retryable).toBe(true);
+  });
+
+  it('maps OpenAI.APIError with undefined status to non-retryable unknown', () => {
+    const apiErr = Object.create(OpenAI.APIError.prototype) as InstanceType<typeof OpenAI.APIError>;
+    Object.assign(apiErr, { status: undefined, message: 'no status' });
+    const result = normalizeXaiError(apiErr);
+    expect(result.kind).toBe('unknown');
+    expect(result.retryable).toBe(false);
+  });
+
+  it('falls back to generic normalization for non-SDK errors and passes LlmError through', () => {
+    const netErr = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+    expect(normalizeXaiError(netErr).retryable).toBe(true);
+    const llmErr = new LlmError({ message: 'wrapped', provider: 'xai', retryable: false });
+    expect(normalizeXaiError(llmErr)).toBe(llmErr);
   });
 });

@@ -17,6 +17,8 @@
  *                            payload: { message }
  *   model_fallback         — primary model rejected; next model in the array served the call.
  *                            payload: { from, to, reason } where reason is an LlmErrorKind.
+ *   xai_unrecognized_output_item — xai returned an output item type the adapter does not map
+ *                            (a new server tool type?); payload: { type, name? }
  *   aftercall_hook_error   — afterCall hook threw; error was dropped to protect the caller.
  *                            payload: { callType, model, message }
  *

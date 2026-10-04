@@ -161,3 +161,30 @@ describe('cross-provider divergence — the same value behaves differently per p
     }
   });
 });
+
+describe('resolveReasoningEffort — xai', () => {
+  it.each(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const)(
+    "returns '%s' unchanged (provider-wide outer bound; per-model narrowing lives in xai.ts)",
+    (value) => {
+      expect(resolveReasoningEffort(value, 'xai')).toBe(value);
+    }
+  );
+
+  it("throws bad_request for 'max' naming the provider and the supported set", () => {
+    try {
+      resolveReasoningEffort('max', 'xai');
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(LlmError);
+      const e = err as LlmError;
+      expect(e.kind).toBe('bad_request');
+      expect(e.retryable).toBe(false);
+      expect(e.provider).toBe('xai');
+      expect(e.message).toContain('xhigh');
+    }
+  });
+
+  it('returns undefined when effort is unset', () => {
+    expect(resolveReasoningEffort(undefined, 'xai')).toBeUndefined();
+  });
+});

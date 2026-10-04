@@ -25,6 +25,7 @@ import { createDeepSeekProvider } from './providers/deepseek.js';
 import { createGeminiProvider } from './providers/gemini.js';
 import { createOpenAIProvider } from './providers/openai.js';
 import { createPerplexityProvider } from './providers/perplexity.js';
+import { createXaiProvider } from './providers/xai.js';
 import type { LlmClientConfig, LlmFileRef } from './types.js';
 
 // Mock @google/genai so tests never make real API calls
@@ -756,5 +757,44 @@ describe('Anthropic files.upload() — video/* rejects', () => {
       name: 'LlmError',
       kind: 'bad_request',
     });
+  });
+});
+
+// ─── xAI: Files API not supported ────────────────────────────────────────────
+
+describe('xai Files API — unsupported', () => {
+  const XAI_CONFIG: LlmClientConfig = {
+    provider: 'xai',
+    model: 'grok-4.7',
+    apiKey: 'test-key',
+    maxRetries: 0,
+    baseDelayMs: 0,
+  };
+  const ref = {
+    id: 'f1',
+    uri: 'f1',
+    provider: 'xai',
+    mediaType: 'application/pdf',
+    state: 'active',
+  } as unknown as LlmFileRef;
+
+  it('upload/refresh/waitForActive/delete all throw bad_request naming xai', async () => {
+    const client = createXaiProvider(XAI_CONFIG);
+    const calls = [
+      () => client.files.upload({ data: Buffer.from('x'), mediaType: 'application/pdf' }),
+      () => client.files.refresh(ref),
+      () => client.files.waitForActive(ref),
+      () => client.files.delete(ref),
+    ];
+    for (const call of calls) {
+      await expect(call()).rejects.toMatchObject({ kind: 'bad_request', provider: 'xai' });
+    }
+  });
+
+  it('a file block is rejected pre-flight on a message call', async () => {
+    const client = createXaiProvider(XAI_CONFIG);
+    await expect(
+      client.complete([{ role: 'user', content: [{ type: 'file', ref }] }])
+    ).rejects.toMatchObject({ kind: 'bad_request' });
   });
 });
