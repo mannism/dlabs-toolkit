@@ -311,7 +311,7 @@ describe('computeCost — DeepSeek deprecated alias resolution', () => {
     expect(depWarnings[0]?.data['deprecatedAliasFor']).toBe('deepseek-flash');
   });
 
-  it('deepseek-chat: emits deprecation warning, returns v4-flash rates (retired 2026-07-24, historical only)', () => {
+  it('deepseek-chat: emits deprecation warning, returns its own stored historical rates (retired 2026-07-24, historical only)', () => {
     const usage = basicUsage(1_000_000, 500_000);
     const cost = computeCost({ usage, provider: 'deepseek', model: 'deepseek-chat' });
 
@@ -328,7 +328,7 @@ describe('computeCost — DeepSeek deprecated alias resolution', () => {
     expect(depWarnings[0]?.data['deprecatedAliasFor']).toBe('deepseek-flash');
   });
 
-  it('deepseek-reasoner: emits deprecation warning, returns v4-flash rates (retired 2026-07-24, historical only)', () => {
+  it('deepseek-reasoner: emits deprecation warning, returns its own stored historical rates (retired 2026-07-24, historical only)', () => {
     const usage = basicUsage(500_000, 200_000);
     const cost = computeCost({ usage, provider: 'deepseek', model: 'deepseek-reasoner' });
 
@@ -1233,9 +1233,14 @@ describe('computeCost — 2026-10-04 refresh: new model rows (one golden per pro
     expect(cost.isPartial).toBe(true);
   });
 
-  it('gpt-6-sol and gpt-6-luna carry no cacheWritePer1M (OpenAI has not published one)', () => {
-    expect(DEFAULT_PRICING_TABLE.openai['gpt-6-sol']?.cacheWritePer1M).toBeUndefined();
-    expect(DEFAULT_PRICING_TABLE.openai['gpt-6-luna']?.cacheWritePer1M).toBeUndefined();
+  it('gpt-6-sol and gpt-6-luna cache-write rates ($2.50 / $0.125) are billed', () => {
+    expect(DEFAULT_PRICING_TABLE.openai['gpt-6-sol']?.cacheWritePer1M).toBe(2.5);
+    expect(DEFAULT_PRICING_TABLE.openai['gpt-6-luna']?.cacheWritePer1M).toBe(0.125);
+    const usage = basicUsage(0, 0, { cacheCreationTokens: 100_000 });
+    const sol = computeCost({ usage, provider: 'openai', model: 'gpt-6-sol' });
+    const luna = computeCost({ usage, provider: 'openai', model: 'gpt-6-luna' });
+    expect(sol.cacheWrite).toBeCloseTo(0.25, 6); // 0.1M × $2.50
+    expect(luna.cacheWrite).toBeCloseTo(0.0125, 6); // 0.1M × $0.125
   });
 
   it('deepseek-flash: $0.15 in / $0.60 out', () => {

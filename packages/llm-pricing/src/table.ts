@@ -455,6 +455,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
     },
     'gpt-6-luna': {
       cacheReadPer1M: 0.01,
+      cacheWritePer1M: 0.125,
       hasInvisibleReasoningTokens: true,
       inputPer1M: 0.1,
       longContextCacheReadPer1M: 0.02,
@@ -462,13 +463,14 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       longContextOutputPer1M: 0.75,
       longContextThreshold: 272000,
       notes:
-        'Budget tier of GPT-6. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. OpenAI has not published a cache-write rate for this model, so cacheWritePer1M is intentionally omitted.',
+        'Budget tier of GPT-6. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. Long-context cache-write (2x) is not modeled (no schema field), same as gpt-6-astra.',
       outputPer1M: 0.5,
       sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6-luna',
       verifiedAt: '2026-10-04',
     },
     'gpt-6-sol': {
       cacheReadPer1M: 0.2,
+      cacheWritePer1M: 2.5,
       hasInvisibleReasoningTokens: true,
       inputPer1M: 2,
       longContextCacheReadPer1M: 0.4,
@@ -476,7 +478,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       longContextOutputPer1M: 15,
       longContextThreshold: 272000,
       notes:
-        'Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. OpenAI has not published a cache-write rate for this model, so cacheWritePer1M is intentionally omitted.',
+        'Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. Long-context cache-write (2x) is not modeled (no schema field), same as gpt-6-astra.',
       outputPer1M: 10,
       sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6-sol',
       verifiedAt: '2026-10-04',

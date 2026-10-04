@@ -1000,7 +1000,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      // DeepSeek does not support vision or document input (June 2026).
+      // Image/document input stays false until providers/deepseek.ts sends image blocks
+      // (flash is vision-capable upstream; this toolkit does not wire it yet).
       mediaInput: {
         image: { base64: false, url: false },
         document: { pdfBase64: false },
@@ -1018,7 +1019,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       structuredOutput: 'json-schema',
       responseIds: 'provider',
       streamStructured: true,
-      // DeepSeek does not support vision or document input (June 2026).
+      // Image/document input stays false until providers/deepseek.ts sends image blocks
+      // (flash is vision-capable upstream; this toolkit does not wire it yet).
       mediaInput: {
         image: { base64: false, url: false },
         document: { pdfBase64: false },

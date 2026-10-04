@@ -4,7 +4,7 @@
 
 feat: models and pricing refresh (2026-10-04).
 
-New rows: `claude-opus-5-5` ($4 / $20, cache read $0.20), `claude-sonnet-5-5` ($2 / $10), `gpt-6-sol` ($2 / $10), `gpt-6.1-sol` ($2 / $10, cache read $0.10, cache write $2.50), `gpt-6-luna` ($0.10 / $0.50), `deepseek-flash` ($0.15 / $0.60 / cache $0.003). OpenAI has not published a cache-write rate for `gpt-6-sol` or `gpt-6-luna`, so `cacheWritePer1M` is intentionally omitted on those two.
+New rows: `claude-opus-5-5` ($4 / $20, cache read $0.20), `claude-sonnet-5-5` ($2 / $10), `gpt-6-sol` ($2 / $10), `gpt-6.1-sol` ($2 / $10, cache read $0.10, cache write $2.50), `gpt-6-luna` ($0.10 / $0.50), `deepseek-flash` ($0.15 / $0.60 / cache $0.003). Cache-write rates per OpenAI's pricing page: `gpt-6-sol` $2.50, `gpt-6.1-sol` $2.50, `gpt-6-luna` $0.125 (the 2x long-context cache-write rate is not modeled, as for `gpt-6-astra`).
 
 **Behavior change: OpenAI long-context pricing now applies.** `gpt-6-sol`, `gpt-6.1-sol`, `gpt-6-luna`, `gpt-5.6-sol/terra/luna`, `gpt-5.5`, `gpt-5.4` and `gpt-5.4-pro` now carry `longContext*` fields (threshold 272,000 prompt tokens: 2x input/cache, 1.5x output on the FULL request). `computeCost()` for any call on these models whose prompt (input + cache read + cache write tokens) exceeds 272K will now report a higher cost than before. The 5.6 trio also gains `cacheWritePer1M` (1.25x input).
 
