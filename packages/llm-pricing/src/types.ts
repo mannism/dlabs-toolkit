@@ -7,6 +7,20 @@
  * All monetary values are USD per 1 million tokens.
  */
 
+/**
+ * Provider-side server tool usage counters (xAI Grok server-side tools).
+ * Keys are the in-process camelCase form of xAI's `server_side_tool_usage_details`.
+ */
+export type ServerToolUsageKey =
+  | 'webSearchCalls'
+  | 'xSearchCalls'
+  | 'xPostsFetched'
+  | 'xUsersFetched'
+  | 'codeInterpreterCalls'
+  | 'fileSearchCalls'
+  | 'mcpCalls'
+  | 'imageGenerationCalls';
+
 /** Per-model pricing record. All prices in USD per 1M tokens. */
 export interface ModelPricing {
   /** USD per 1M input tokens (standard / cache miss rate). */
@@ -64,6 +78,13 @@ export interface ModelPricing {
    */
   partialCostCoverage?: boolean;
 
+  /**
+   * USD per single unit of provider-side server tool usage (e.g. 0.005 = $5 per 1,000 web searches).
+   * computeCost() multiplies each count in `usage.serverToolUsage` by the matching fee.
+   * A key with fee 0 is explicitly free; a key absent here with a non-zero count marks the cost partial.
+   */
+  serverToolFees?: Partial<Record<ServerToolUsageKey, number>>;
+
   /** ISO 8601 date this record was last verified against provider pricing documentation. */
   verifiedAt: string;
 
@@ -106,6 +127,11 @@ export interface LlmUsage {
   cacheCreationTokens?: number;
   /** Anthropic cache read (hit) tokens. */
   cacheReadTokens?: number;
+  /**
+   * Provider-side server tool usage counts (xAI). Zero/absent counts contribute nothing.
+   * Priced via ModelPricing.serverToolFees into LlmCost.serverTools.
+   */
+  serverToolUsage?: Partial<Record<ServerToolUsageKey, number>>;
 }
 
 /** Computed cost for a single LLM call. All monetary values in USD. */
@@ -118,7 +144,12 @@ export interface LlmCost {
   cacheRead: number;
   /** Cache write token cost (USD). */
   cacheWrite: number;
-  /** Total cost (USD) = input + output + cacheRead + cacheWrite. */
+  /**
+   * Server tool fees (USD) — web/X search, code interpreter etc. Present only when
+   * the call reported non-empty `serverToolUsage`. Optional so existing consumers are unaffected.
+   */
+  serverTools?: number;
+  /** Total cost (USD) = input + output + cacheRead + cacheWrite (+ serverTools when present). */
   total: number;
   currency: 'USD';
   /**

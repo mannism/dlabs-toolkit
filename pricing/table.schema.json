@@ -88,6 +88,21 @@
           "type": "boolean",
           "description": "True when known billing components (e.g. per-search fees) cannot be computed from token usage alone."
         },
+        "serverToolFees": {
+          "type": "object",
+          "description": "USD per unit for provider-side server tool usage (xAI web/X search, code interpreter, etc.). Keys match ServerToolUsageKey.",
+          "additionalProperties": false,
+          "properties": {
+            "webSearchCalls": { "type": "number", "minimum": 0 },
+            "xSearchCalls": { "type": "number", "minimum": 0 },
+            "xPostsFetched": { "type": "number", "minimum": 0 },
+            "xUsersFetched": { "type": "number", "minimum": 0 },
+            "codeInterpreterCalls": { "type": "number", "minimum": 0 },
+            "fileSearchCalls": { "type": "number", "minimum": 0 },
+            "mcpCalls": { "type": "number", "minimum": 0 },
+            "imageGenerationCalls": { "type": "number", "minimum": 0 }
+          }
+        },
         "deprecatedAliasFor": {
           "type": "string",
           "description": "If this model ID is a deprecated alias, the canonical model ID it resolves to."

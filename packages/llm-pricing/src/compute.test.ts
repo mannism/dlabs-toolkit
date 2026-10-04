@@ -435,11 +435,14 @@ describe('computeCost — xAI', () => {
     expect(warnCalls.some((w) => w.event === 'pricing_unknown_model')).toBe(false);
   });
 
-  it('grok-4.6: cache-read rate is higher than grok-4.5 (+67%) — 1M cached tokens returns $0.50', () => {
-    const usage = basicUsage(0, 0, { cacheReadTokens: 1_000_000 });
+  it('grok-4.6: cache-read rate is higher than grok-4.5 (+67%) — 100k cached tokens returns $0.05', () => {
+    // CHANGED from 1M cached tokens: the long-context threshold now compares TOTAL prompt tokens
+    // (inputTokens + cache tokens), so 1M cached tokens correctly take the long-context tier.
+    // 100k stays under the 200k threshold and still exercises the base-tier cache-read rate.
+    const usage = basicUsage(0, 0, { cacheReadTokens: 100_000 });
     const cost = computeCost({ usage, provider: 'xai', model: 'grok-4.6' });
 
-    expect(cost.cacheRead).toBeCloseTo(0.5, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.05, 5); // 0.1M x $0.50
   });
 
   it('grok-4.6: long context (>200k input) uses elevated rates — 1M+1M returns $16.00', () => {

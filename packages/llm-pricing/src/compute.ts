@@ -19,7 +19,14 @@
 
 import { getLogger } from './logger.js';
 import { DEFAULT_PRICING_TABLE } from './table.js';
-import type { ComputeCostInput, LlmCost, ModelPricing, PricingTable, Provider } from './types.js';
+import type {
+  ComputeCostInput,
+  LlmCost,
+  ModelPricing,
+  PricingTable,
+  Provider,
+  ServerToolUsageKey,
+} from './types.js';
 
 /** Divide token count by 1M to get the billing unit. */
 function perMillion(tokens: number): number {
@@ -183,11 +190,15 @@ export function computeCost(input: ComputeCostInput): LlmCost {
     };
   }
 
-  // Determine whether we are in the long-context tier (Gemini 3.1 Pro, 2.5 Pro).
+  // Determine whether we are in the long-context tier (Gemini 3.1 Pro, 2.5 Pro, xAI Grok).
+  // The threshold applies to TOTAL prompt tokens. Providers that split cached tokens out of
+  // inputTokens (xAI, Anthropic) would otherwise price a large, mostly-cached prompt at the base tier.
+  const totalPromptTokens =
+    usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheCreationTokens ?? 0);
   const isLongContext =
     pricing.longContextThreshold !== undefined &&
     pricing.longContextInputPer1M !== undefined &&
-    usage.inputTokens > pricing.longContextThreshold;
+    totalPromptTokens > pricing.longContextThreshold;
 
   const effectiveInputPer1M = isLongContext
     ? (pricing.longContextInputPer1M ?? pricing.inputPer1M)
@@ -219,15 +230,37 @@ export function computeCost(input: ComputeCostInput): LlmCost {
       ? perMillion(usage.cacheCreationTokens) * pricing.cacheWritePer1M
       : 0;
 
-  const total = inputCost + outputCost + cacheReadCost + cacheWriteCost;
+  // Server tool fees (xAI web/X search, code interpreter, ...). Each non-zero count is
+  // multiplied by its per-unit fee. A non-zero count with no fee entry cannot be priced:
+  // it contributes nothing and flips isPartial so the total is read as a floor.
+  let serverToolsCost = 0;
+  let serverToolsPresent = false;
+  let missingServerToolFee = false;
+  if (usage.serverToolUsage !== undefined) {
+    for (const [key, count] of Object.entries(usage.serverToolUsage)) {
+      if (count === undefined || count <= 0) continue;
+      serverToolsPresent = true;
+      const fee = pricing.serverToolFees?.[key as ServerToolUsageKey];
+      if (fee === undefined) {
+        missingServerToolFee = true;
+        continue;
+      }
+      serverToolsCost += count * fee;
+    }
+  }
+
+  const total = inputCost + outputCost + cacheReadCost + cacheWriteCost + serverToolsCost;
 
   // isPartial is true when cost components exist that we cannot compute:
   // - o-series reasoning tokens billed in output but not returned in response.
   // - sonar-deep-research citation/search/reasoning fees.
+  // - server tool usage with no configured fee.
   const isPartial =
-    (pricing.hasInvisibleReasoningTokens ?? false) || (pricing.partialCostCoverage ?? false);
+    (pricing.hasInvisibleReasoningTokens ?? false) ||
+    (pricing.partialCostCoverage ?? false) ||
+    missingServerToolFee;
 
-  return {
+  const result: LlmCost = {
     input: inputCost,
     output: outputCost,
     cacheRead: cacheReadCost,
@@ -236,4 +269,8 @@ export function computeCost(input: ComputeCostInput): LlmCost {
     currency: 'USD',
     isPartial,
   };
+  // Optional component: only attached when tool usage was reported, so existing
+  // consumers (and toEqual assertions on token-only calls) see the unchanged shape.
+  if (serverToolsPresent) result.serverTools = serverToolsCost;
+  return result;
 }
