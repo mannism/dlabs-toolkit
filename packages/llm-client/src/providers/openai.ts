@@ -16,7 +16,8 @@
  *
  * Token normalization:
  *   Responses API: response.usage.input_tokens / output_tokens / total_tokens
- *   → LlmUsage: inputTokens / outputTokens / totalTokens
+ *   → LlmUsage: inputTokens (uncached = input - cached) / outputTokens / totalTokens /
+ *     cacheReadTokens (input_tokens_details.cached_tokens, when reported)
  *
  * Error mapping:
  *   APIConnectionTimeoutError → kind:'timeout', retryable:true
@@ -63,20 +64,32 @@ import { resolveReasoningEffort } from './reasoning-effort.js';
 
 const PROVIDER = 'openai';
 
-/** Normalize OpenAI Responses API usage object to LlmUsage. */
-function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined | null): LlmUsage {
-  const inputTokens = usage?.input_tokens ?? 0;
+/**
+ * Normalize OpenAI Responses API usage object to LlmUsage.
+ *
+ * OpenAI's `input_tokens` INCLUDES `input_tokens_details.cached_tokens`. computeCost() (the
+ * Anthropic convention) bills `inputTokens` at the full input rate and `cacheReadTokens` at the
+ * cache-read rate, so we split: inputTokens = input - cached (clamped at 0), cacheReadTokens =
+ * cached. totalTokens is passed through from the wire and is unchanged by the split.
+ * Exported for unit tests.
+ */
+export function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined | null): LlmUsage {
+  const totalInput = usage?.input_tokens ?? 0;
+  // Genuinely `number | undefined` — under exactOptionalPropertyTypes the key is omitted (not
+  // assigned `undefined`) when the API didn't report cache details.
+  const cachedTokens = usage?.input_tokens_details?.cached_tokens;
+  const inputTokens = Math.max(0, totalInput - (cachedTokens ?? 0));
   const outputTokens = usage?.output_tokens ?? 0;
   // output_tokens_details.reasoning_tokens (v6.3.0+) — only meaningful for reasoning models.
-  // Genuinely `number | undefined` after optional chaining, so under exactOptionalPropertyTypes
-  // the key must be omitted (not assigned `undefined`) when the model didn't report it.
+  // Same omit-when-unreported handling as above.
   const reasoningTokens = usage?.output_tokens_details?.reasoning_tokens;
   return {
     inputTokens,
     outputTokens,
-    totalTokens: usage?.total_tokens ?? inputTokens + outputTokens,
-    // This single function feeds both non-streaming responses and the streaming finalUsage
-    // path (event.response.usage on 'response.completed'), so both paths get this for free.
+    totalTokens: usage?.total_tokens ?? totalInput + outputTokens,
+    // This single function feeds every path (complete, stream finalUsage, structured,
+    // streamStructured, withTools), so all of them get the split for free.
+    ...(cachedTokens !== undefined && { cacheReadTokens: cachedTokens }),
     ...(reasoningTokens !== undefined && { reasoningTokens }),
   };
 }

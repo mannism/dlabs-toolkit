@@ -208,7 +208,7 @@ interface LlmUsage {
   outputTokens: number;
   totalTokens: number;
   cacheCreationTokens?: number; // tokens written to cache (Anthropic only)
-  cacheReadTokens?: number;     // tokens read from cache (Anthropic only)
+  cacheReadTokens?: number;     // cached input tokens (Anthropic cache; OpenAI/xAI automatic caching — inputTokens excludes these)
 }
 ```
 
@@ -1242,6 +1242,6 @@ interface LlmUsage {
   outputTokens: number;
   totalTokens: number;
   cacheCreationTokens?: number; // Anthropic prompt cache only
-  cacheReadTokens?: number;     // Anthropic prompt cache only
+  cacheReadTokens?: number;     // Anthropic prompt cache; OpenAI/xAI cached_tokens (split out of inputTokens)
 }
 ```

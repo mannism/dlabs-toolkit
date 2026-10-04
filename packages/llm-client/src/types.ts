@@ -565,7 +565,7 @@ export interface LlmUsage {
   outputTokens: number;
   totalTokens: number;
   cacheCreationTokens?: number; // Anthropic prompt cache write tokens
-  cacheReadTokens?: number; // Anthropic prompt cache read tokens
+  cacheReadTokens?: number; // Cached input tokens (Anthropic prompt cache; OpenAI/xAI cached_tokens, split out of inputTokens)
   /**
    * Tokens spent on internal reasoning/thinking, where the provider reports it separately
    * from outputTokens (v6.3.0+). Undefined when the provider doesn't report this breakdown

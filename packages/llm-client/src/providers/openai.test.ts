@@ -23,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } fr
 import { z } from 'zod';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
-import { createOpenAIProvider } from './openai.js';
+import { createOpenAIProvider, normalizeUsage } from './openai.js';
 
 vi.mock('openai');
 
@@ -1716,5 +1716,112 @@ describe('OpenAI provider (Responses API) — reasoningEffort (v6.3.0)', () => {
     }
 
     expect(finalUsage?.reasoningTokens).toBe(55);
+  });
+});
+
+describe('OpenAI normalizeUsage — cached token split', () => {
+  it('splits cached_tokens out of inputTokens into cacheReadTokens', () => {
+    const u = normalizeUsage({
+      input_tokens: 1500,
+      input_tokens_details: { cached_tokens: 1024, cache_write_tokens: 0 },
+      output_tokens: 20,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: 1520,
+    });
+    expect(u.inputTokens).toBe(476);
+    expect(u.cacheReadTokens).toBe(1024);
+    expect(u.totalTokens).toBe(1520);
+  });
+
+  it('omits cacheReadTokens when input_tokens_details is absent', () => {
+    const u = normalizeUsage({ input_tokens: 10, output_tokens: 5, total_tokens: 15 } as never);
+    expect(u.inputTokens).toBe(10);
+    expect('cacheReadTokens' in u).toBe(false);
+  });
+
+  it('reports cacheReadTokens: 0 when the API reports zero cached tokens', () => {
+    const u = normalizeUsage({
+      input_tokens: 10,
+      input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+      output_tokens: 5,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: 15,
+    });
+    expect(u.inputTokens).toBe(10);
+    expect(u.cacheReadTokens).toBe(0);
+  });
+
+  it('clamps inputTokens at 0 when cached_tokens exceeds input_tokens', () => {
+    const u = normalizeUsage({
+      input_tokens: 100,
+      input_tokens_details: { cached_tokens: 150, cache_write_tokens: 0 },
+      output_tokens: 5,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: 105,
+    });
+    expect(u.inputTokens).toBe(0);
+    expect(u.cacheReadTokens).toBe(150);
+  });
+
+  it('handles undefined usage', () => {
+    expect(normalizeUsage(undefined)).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+  });
+
+  it('applies the split to streaming final usage (response.completed)', async () => {
+    const mockEvents = [
+      { type: 'response.output_text.delta', delta: 'Hi' },
+      {
+        type: 'response.completed',
+        response: {
+          usage: {
+            input_tokens: 2000,
+            input_tokens_details: { cached_tokens: 1536, cache_write_tokens: 0 },
+            output_tokens: 3,
+            output_tokens_details: { reasoning_tokens: 0 },
+            total_tokens: 2003,
+          },
+        },
+      },
+    ];
+    const mockStream = {
+      [Symbol.asyncIterator]: async function* () {
+        yield* mockEvents;
+      },
+    };
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return { responses: { create: vi.fn().mockResolvedValue(mockStream) } };
+    });
+    const client = createOpenAIProvider(TEST_CONFIG);
+    let usage: LlmUsage | undefined;
+    for await (const chunk of client.stream([{ role: 'user', content: 'Hi' }])) {
+      if (chunk.usage !== undefined) usage = chunk.usage;
+    }
+    expect(usage?.inputTokens).toBe(464);
+    expect(usage?.cacheReadTokens).toBe(1536);
+    expect(usage?.totalTokens).toBe(2003);
+  });
+
+  it('applies the split on the non-streaming complete() path', async () => {
+    vi.mocked(OpenAI).mockImplementation(function () {
+      return {
+        responses: {
+          create: vi.fn().mockResolvedValue({
+            ...mockResponse('ok'),
+            usage: {
+              input_tokens: 1200,
+              input_tokens_details: { cached_tokens: 1024, cache_write_tokens: 0 },
+              output_tokens: 4,
+              output_tokens_details: { reasoning_tokens: 0 },
+              total_tokens: 1204,
+            },
+          }),
+        },
+      };
+    });
+    const result = await createOpenAIProvider(TEST_CONFIG).complete([
+      { role: 'user', content: 'Hi' },
+    ]);
+    expect(result.usage.inputTokens).toBe(176);
+    expect(result.usage.cacheReadTokens).toBe(1024);
   });
 });
