@@ -97,7 +97,7 @@ const REQUIRED_PROVIDERS: ReadonlyArray<keyof Omit<PricingTable, 'versionedAt'>>
  * Minimal structural validation for a parsed PricingTable.
  *
  * Validates:
- * - top-level shape: versionedAt (string) + all five provider keys (objects)
+ * - top-level shape: versionedAt (string) + all six provider keys (objects)
  * - each model entry has inputPer1M (number) + outputPer1M (number)
  *   + verifiedAt (string) + sourceUrl (string) — the four required fields
  *   from the JSON Schema

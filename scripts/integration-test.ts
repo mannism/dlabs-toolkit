@@ -2,7 +2,7 @@
  * Manual integration test script for @diabolicallabs/llm-client.
  *
  * Tests all three methods (complete, stream, structured) against real Anthropic,
- * OpenAI, Gemini, and DeepSeek APIs. This script is NOT run in CI — it is run
+ * OpenAI, Gemini, DeepSeek, and xAI APIs. This script is NOT run in CI — it is run
  * manually before raising a PR that changes provider implementations.
  *
  * Prerequisites:
@@ -10,6 +10,7 @@
  *   OPENAI_API_KEY     — must be set
  *   GOOGLE_AI_API_KEY  — required for Gemini tests (skipped if absent)
  *   DEEPSEEK_API_KEY   — required for DeepSeek tests (skipped if absent)
+ *   XAI_API_KEY        — required for xAI tests (skipped if absent)
  *
  * Run with:
  *   pnpm tsx scripts/integration-test.ts
@@ -387,6 +388,77 @@ async function main(): Promise<void> {
         'deepseek.structured()',
         `data=${JSON.stringify(result.data)} | ` +
           `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
+          `latency=${Date.now() - start}ms`
+      );
+    });
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // XAI (skipped if XAI_API_KEY is absent) — full server-tool coverage lives in smoke-xai.ts
+  // ───────────────────────────────────────────────────────────────────────────
+  section('xAI — grok-4.7');
+
+  if (!process.env['XAI_API_KEY']) {
+    skipSection('xai', 'XAI_API_KEY not set');
+  } else {
+    const xai = await createClientFromEnv('xai', 'grok-4.7', { timeoutMs: 120_000 });
+
+    await runTest('xai.complete()', async () => {
+      const start = Date.now();
+      const result = await xai.complete([{ role: 'user', content: 'Reply with exactly: pong' }], {
+        maxTokens: 400,
+        reasoningEffort: 'low',
+      });
+      if (!result.content.toLowerCase().includes('pong')) {
+        throw new Error(`Unexpected content: ${result.content.slice(0, 100)}`);
+      }
+      pass(
+        'xai.complete()',
+        `content=${result.content.trim().slice(0, 40)} | ` +
+          `tokens=${result.usage.inputTokens}in/${result.usage.outputTokens}out | ` +
+          `billed=$${result.usage.providerReportedCostUsd?.toFixed(6) ?? '?'} | ` +
+          `latency=${Date.now() - start}ms`
+      );
+    });
+
+    await runTest('xai.structured()', async () => {
+      const start = Date.now();
+      const result = await xai.structured<Person>(
+        [
+          {
+            role: 'user',
+            content: 'Return a JSON object with name, occupation, and city for a fictional person.',
+          },
+        ],
+        PersonSchema,
+        { reasoningEffort: 'low' }
+      );
+      if (!result.data.name || !result.data.occupation || !result.data.city) {
+        throw new Error(`Incomplete person object: ${JSON.stringify(result.data)}`);
+      }
+      pass(
+        'xai.structured()',
+        `data=${JSON.stringify(result.data)} | latency=${Date.now() - start}ms`
+      );
+    });
+
+    await runTest('xai.complete() + webSearch server tool', async () => {
+      const start = Date.now();
+      const result = await xai.complete(
+        [{ role: 'user', content: 'In one sentence: what is the current Node.js LTS version?' }],
+        {
+          reasoningEffort: 'low',
+          providerOptions: { serverTools: [{ type: 'webSearch' }], maxToolCalls: 2 },
+        }
+      );
+      if ((result.usage.serverToolUsage?.webSearchCalls ?? 0) < 1) {
+        throw new Error('Expected at least one web search call in usage.serverToolUsage');
+      }
+      pass(
+        'xai.complete() + webSearch',
+        `citations=${result.citations?.length ?? 0} | ` +
+          `webSearchCalls=${result.usage.serverToolUsage?.webSearchCalls} | ` +
+          `billed=$${result.usage.providerReportedCostUsd?.toFixed(6) ?? '?'} | ` +
           `latency=${Date.now() - start}ms`
       );
     });

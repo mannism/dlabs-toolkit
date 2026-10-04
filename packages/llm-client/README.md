@@ -1,6 +1,6 @@
 # @diabolicallabs/llm-client
 
-Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, and Perplexity. Single interface for completion, streaming, structured output, and native tool calling. All provider errors are normalized into a consistent `LlmError` shape. © Diabolical Labs
+Unified LLM API across Anthropic, OpenAI, Google Gemini, DeepSeek, Perplexity, and xAI (Grok). Single interface for completion, streaming, structured output, and native tool calling. All provider errors are normalized into a consistent `LlmError` shape. © Diabolical Labs
 
 ## Status
 
@@ -230,6 +230,7 @@ OpenAI has implicit automatic prompt caching on some models (no opt-in needed). 
 | `gemini` | Implemented | `GOOGLE_AI_API_KEY` |
 | `deepseek` | Implemented | `DEEPSEEK_API_KEY` |
 | `perplexity` | Implemented | `PERPLEXITY_API_KEY` |
+| `xai` | Implemented | `XAI_API_KEY` |
 
 ## Perplexity — web-grounded responses
 
@@ -301,6 +302,59 @@ Available models (verified 2026-05-08):
 
 `sonar-deep-research` is accepted as a model string. If Perplexity's API returns an incompatible async response shape, the call will throw a clear `LlmError`. In that case, use `sonar-reasoning-pro` instead, or wait for a future deep-research-specific brief.
 
+## xAI (Grok) — server-side tools
+
+The `xai` provider talks to the OpenAI Responses API at `https://api.x.ai/v1` (default model `grok-4.7`) and supports every call type: `complete`, `stream`, `structured`, `streamStructured`, `withTools`. Server-side tools run on xAI's infrastructure and are passed via `providerOptions.serverTools` (camelCase, mapped to the snake_case wire shape internally):
+
+```typescript
+import { createClientFromEnv } from '@diabolicallabs/llm-client';
+
+const client = await createClientFromEnv('xai', 'grok-4.7', {
+  timeoutMs: 120_000, // agentic tool calls are slow — see "Cost and timeouts" below
+  pricing: { computeOnEveryCall: true },
+});
+
+const res = await client.complete(
+  [{ role: 'user', content: 'What did @SpaceXAI post this week?' }],
+  {
+    reasoningEffort: 'low',
+    providerOptions: {
+      serverTools: [
+        { type: 'xSearch', allowedXHandles: ['SpaceXAI'], fromDate: '2026-09-28', toDate: '2026-10-04' },
+      ],
+      maxToolCalls: 4,
+    },
+  }
+);
+
+res.citations;        // [{ url: 'https://x.com/...' }] — url_citation annotations + web_search sources, deduped
+res.serverToolCalls;  // audit trail: [{ type: 'xSearch', name: 'x_keyword_search', status: 'completed', input }]
+res.usage.serverToolUsage;          // { xSearchCalls: 2, xPostsFetched: 5 }
+res.usage.providerReportedCostUsd;  // what xAI billed
+res.cost?.total;                    // toolkit-computed (tokens + server tool fees); matches the reported cost
+```
+
+| `serverTools[].type` | Wire type | Options |
+|---|---|---|
+| `xSearch` | `x_search` | `allowedXHandles` or `excludedXHandles` (max 20, mutually exclusive), `fromDate`, `toDate` (`YYYY-MM-DD`), `enableImageUnderstanding`, `enableVideoUnderstanding` |
+| `webSearch` | `web_search` | `allowedDomains` or `excludedDomains` (max 5, mutually exclusive), `enableImageUnderstanding`, `enableImageSearch` |
+| `codeInterpreter` | `code_interpreter` | none |
+| `fileSearch` | `file_search` | `vectorStoreIds` (required), `maxNumResults` (collections must already exist; not managed by this package) |
+| `mcp` | `mcp` | `serverUrl`, `serverLabel` (required), `serverDescription`, `allowedTools`, `authorization`, `headers` (never logged, never returned in `serverToolCalls`) |
+| `imageGeneration` | `image_generation` | none; returns `response.images: [{ data (base64), mediaType: 'image/jpeg', prompt? }]` |
+
+Other xai `providerOptions`: `maxToolCalls` (positive integer cap on total server-side tool calls) and `inlineCitations` (boolean, asks xAI for inline citation markers). Invalid configuration (both allow and exclude lists, more than 20 handles or 5 domains, malformed dates, unknown tool types, an unsupported `reasoningEffort`) throws `LlmError({ kind: 'bad_request' })` before any network call.
+
+**Notes**
+- Citations arrive only as `url_citation` annotations (streaming: `response.output_text.annotation.added`) and `web_search_call` sources; xAI's documented top-level `citations` array is absent in live responses, so it is never used. `stream()` accumulates them onto the final chunk (`chunk.citations`, `chunk.images`, `chunk.serverToolCalls`, alongside `chunk.usage`).
+- xAI's `input_tokens` includes cached tokens. `LlmUsage` normalizes to `inputTokens` (uncached) plus `cacheReadTokens` (cached), the convention `computeCost` assumes.
+- `withTools()` mixes your function tools with server tools; only `function_call` items become `toolCalls`, server tool runs land in `serverToolCalls`.
+- PDF input and the xAI Files API are not wired (`files.*` throws `bad_request`). Collections management is out of scope.
+
+### Cost and timeouts
+
+Agentic tool use is billed per call on top of tokens (web search $5/1k calls, X posts $5/1k, X profiles $10/1k, code interpreter $5/1k, file search $2.50/1k, image generation $0.05 per image, MCP token-only), and one open-ended X question has used 16 tool calls and $0.34. Always set `providerOptions.maxToolCalls`, and set `timeoutMs` to at least `120000` whenever `serverTools` is set; the 30s default will time out. `@diabolicallabs/llm-pricing` prices all of the above into `cost.serverTools`; `usage.providerReportedCostUsd` carries xAI's own figure so the two can be reconciled. The per-image fee was derived from a live smoke (reported cost minus token cost).
+
 ## API
 
 ### `createClient(config: LlmClientConfig): LlmClient`
@@ -315,6 +369,7 @@ Reads the API key from the environment automatically:
 - `gemini` → `GOOGLE_AI_API_KEY`
 - `deepseek` → `DEEPSEEK_API_KEY`
 - `perplexity` → `PERPLEXITY_API_KEY`
+- `xai` → `XAI_API_KEY`
 
 ### `LlmClient` interface
 
@@ -455,6 +510,7 @@ interface LlmCallWithToolsOptions extends LlmCallOptions {
 | Anthropic | Native (`{ name, description, input_schema }`) | Supported (inverse: `disable_parallel_tool_use`) | Supported | `tool_use`, `end_turn`, `max_tokens`, `stop_sequence`, `pause_turn`, `refusal` |
 | Gemini | Native (`parametersJsonSchema`) | Not applicable (no Gemini equivalent) | Falls back to AUTO | `tool_use`, `end_turn`, `max_tokens`, `content_filter`, `stop_sequence` |
 | DeepSeek | Native (Chat Completions nested shape) | Supported | Supported | `tool_use`, `end_turn`, `max_tokens`, `content_filter` |
+| xAI | Native (Responses API flat shape), mixable with server-side tools | Supported | Supported | `tool_use`, `end_turn`, `refusal` |
 | Perplexity | Not supported | N/A | N/A | Throws `kind:'bad_request'` immediately |
 
 ### Argument validation
@@ -511,6 +567,7 @@ type LlmStreamStructuredEvent<T> =
 | OpenAI | Supported | Streams `output_text.delta` events via Responses API. Zod 4 schemas enable `json_schema` strict mode; non-Zod schemas use `json_object` mode. |
 | Anthropic | Supported | Uses forced tool-use (`extract` tool, `tool_choice: tool`). Streams `input_json_delta` events — raw JSON fragments that assemble into the final object. |
 | DeepSeek | Supported | Streams Chat Completions deltas with `response_format: { type: 'json_object' }`. Falls back to `parseJsonOrThrow` if `JSON.parse` fails (handles chain-of-thought preamble from `deepseek-reasoner`). |
+| xAI | Supported | Streams `output_text.delta` events; Zod 4 schemas use strict `json_schema` (works alongside server tools), others use an instruction-only fallback. |
 | Gemini | Not supported | Throws `LlmError(kind: 'bad_request')` immediately. Gemini does not reliably support simultaneous `responseSchema` constraints and streaming. Use `stream()` for tokens or `structured()` for validation. |
 | Perplexity | Not supported | Throws `LlmError(kind: 'bad_request')` immediately. Search/retrieval models do not return tool-validated JSON. |
 
@@ -578,6 +635,7 @@ interface ModelCapabilities {
 | Gemini | true | false | null | `'response-schema'` | `'synthesized'` | false |
 | DeepSeek | true | true | null | `'json-schema'` | `'provider'` | true |
 | Perplexity | false | false | null | null | `'provider'` | false |
+| xAI | true | true | null | `'json-schema'` | `'provider'` | true |
 
 ### `reasoningEffort` per provider/model (v6.3.0)
 
@@ -588,7 +646,8 @@ interface ModelCapabilities {
 | `'anthropic-effort'` | `low`, `medium`, `high`, `xhigh`, `max` | `claude-opus-5`, `claude-opus-4-7`, `claude-opus-4-6`, `claude-sonnet-4-6` |
 | `'openai-effort'` | all 7 values | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-mini`, `o3`, `o4-mini` |
 | `'gemini-thinking-level'` | `minimal`, `low`, `medium`, `high` | `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`, `gemini-3.7-flash`, `gemini-3.8-flash` |
-| `null` | not supported | every Perplexity/DeepSeek row; `gpt-4.1`; Gemini 2.5-series (`thinkingBudget`, not `thinkingLevel`); Anthropic models not listed above |
+| `'xai-effort'` | model-specific, see `reasoningEffortValues`: `minimal`/`low`/`medium`/`high`/`xhigh` on grok-4.7/4.6/4.5; plus `none` on grok-4.3 only; `low`/`medium`/`high`/`xhigh` on grok-4.20-multi-agent-0309. `max` is rejected everywhere | `grok-4.7`, `grok-4.6`, `grok-4.5`, `grok-4.3`, `grok-4.20-multi-agent-0309` |
+| `null` | not supported | every Perplexity/DeepSeek row; `grok-4.20-0309-reasoning`, `grok-4.20-0309-non-reasoning`, `grok-build-0.1` (the API rejects the parameter); `gpt-4.1`; Gemini 2.5-series (`thinkingBudget`, not `thinkingLevel`); Anthropic models not listed above |
 
 `getModelCapabilities` covers all models in `@diabolicallabs/llm-pricing`'s `DEFAULT_PRICING_TABLE`, including `gemini-3.8-flash` (v6.7.0+, GA 2026-09-02). The table is versioned at `CAPABILITIES_VERSIONED_AT: '2026-09-05'` — import it to detect staleness.
 
@@ -616,6 +675,7 @@ console.log(response.usage.reasoningTokens); // tokens spent on internal reasoni
 | Anthropic | `output_config.effort` | `'low' \| 'medium' \| 'high' \| 'xhigh' \| 'max'` — no `'none'`/`'minimal'` |
 | OpenAI | `reasoning.effort` | all 7 values — `'none' \| 'minimal' \| 'low' \| 'medium' \| 'high' \| 'xhigh' \| 'max'` |
 | Gemini | `thinkingConfig.thinkingLevel` (uppercase on the wire) | `'minimal' \| 'low' \| 'medium' \| 'high'` — no `'none'`/`'xhigh'`/`'max'` |
+| xAI | `reasoning.effort` | per model (`reasoningEffortValues` in the capability matrix): `none` only on `grok-4.3`; `max` never; the grok-4.20 reasoning/non-reasoning and `grok-build-0.1` models reject the parameter entirely |
 | Perplexity, DeepSeek | — | not supported at all; setting `reasoningEffort` throws `bad_request` before any SDK call, for every method |
 
 ```typescript
@@ -742,6 +802,7 @@ console.log(response.idSource); // 'provider' | 'synthesized'
 | OpenAI | `response.id` (Responses API) | `'provider'` |
 | DeepSeek | `response.id` (Chat Completions) | `'provider'` |
 | Perplexity | `response.id` (Chat Completions) | `'provider'` |
+| xAI | `response.id` (Responses API) | `'provider'` |
 | Gemini | UUID v7-style synthesized by toolkit | `'synthesized'` |
 
 Synthesized IDs are time-sortable (first 12 hex chars encode the millisecond timestamp) — useful for trace correlation without a separate timestamp. Check `idSource === 'synthesized'` before treating the ID as a durable provider reference.
@@ -1117,6 +1178,7 @@ Both compose: `instrumentClient()` merges its `afterCall` handler with any hooks
 | Gemini (all) | Yes | No | Yes |
 | Perplexity (all) | No — deferred | No — deferred | No |
 | DeepSeek (all) | No | No | No |
+| xAI (all) | Yes | Yes | No — PDFs and Files API refs throw `bad_request` pre-flight |
 
 Gemini only accepts images via `inlineData` (base64 bytes). Image URL source is not supported on Gemini — the toolkit throws `LlmError({ kind: 'bad_request' })` before making any SDK call.
 
