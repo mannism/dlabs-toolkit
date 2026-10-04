@@ -130,6 +130,8 @@ describe('computeCost — server tool fees', () => {
         codeInterpreterCalls: 0.005,
         fileSearchCalls: 0.0025,
         mcpCalls: 0,
+        // Derived from a live grok-4.7 smoke: reported $0.059550 - token cost $0.009550 = $0.05.
+        imageGenerationCalls: 0.05,
       });
     }
   });

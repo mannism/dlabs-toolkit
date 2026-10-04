@@ -562,7 +562,8 @@
         "xUsersFetched": 0.01,
         "codeInterpreterCalls": 0.005,
         "fileSearchCalls": 0.0025,
-        "mcpCalls": 0
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
       },
       "verifiedAt": "2026-10-04",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.7"
@@ -582,7 +583,8 @@
         "xUsersFetched": 0.01,
         "codeInterpreterCalls": 0.005,
         "fileSearchCalls": 0.0025,
-        "mcpCalls": 0
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
       },
       "verifiedAt": "2026-10-04",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.6"
@@ -602,7 +604,8 @@
         "xUsersFetched": 0.01,
         "codeInterpreterCalls": 0.005,
         "fileSearchCalls": 0.0025,
-        "mcpCalls": 0
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
       },
       "verifiedAt": "2026-10-04",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.5"
@@ -622,7 +625,8 @@
         "xUsersFetched": 0.01,
         "codeInterpreterCalls": 0.005,
         "fileSearchCalls": 0.0025,
-        "mcpCalls": 0
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
       },
       "verifiedAt": "2026-10-04",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.3"
@@ -642,7 +646,8 @@
         "xUsersFetched": 0.01,
         "codeInterpreterCalls": 0.005,
         "fileSearchCalls": 0.0025,
-        "mcpCalls": 0
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
       },
       "verifiedAt": "2026-10-04",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.20-0309-reasoning"
@@ -662,7 +667,8 @@
         "xUsersFetched": 0.01,
         "codeInterpreterCalls": 0.005,
         "fileSearchCalls": 0.0025,
-        "mcpCalls": 0
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
       },
       "verifiedAt": "2026-10-04",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.20-0309-non-reasoning"
@@ -682,7 +688,8 @@
         "xUsersFetched": 0.01,
         "codeInterpreterCalls": 0.005,
         "fileSearchCalls": 0.0025,
-        "mcpCalls": 0
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
       },
       "verifiedAt": "2026-10-04",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.20-multi-agent-0309"
@@ -702,7 +709,8 @@
         "xUsersFetched": 0.01,
         "codeInterpreterCalls": 0.005,
         "fileSearchCalls": 0.0025,
-        "mcpCalls": 0
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
       },
       "verifiedAt": "2026-10-04",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-build-0.1"

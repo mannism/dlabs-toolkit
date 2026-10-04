@@ -602,6 +602,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       serverToolFees: {
         codeInterpreterCalls: 0.005,
         fileSearchCalls: 0.0025,
+        imageGenerationCalls: 0.05,
         mcpCalls: 0,
         webSearchCalls: 0.005,
         xPostsFetched: 0.005,
@@ -622,6 +623,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       serverToolFees: {
         codeInterpreterCalls: 0.005,
         fileSearchCalls: 0.0025,
+        imageGenerationCalls: 0.05,
         mcpCalls: 0,
         webSearchCalls: 0.005,
         xPostsFetched: 0.005,
@@ -642,6 +644,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       serverToolFees: {
         codeInterpreterCalls: 0.005,
         fileSearchCalls: 0.0025,
+        imageGenerationCalls: 0.05,
         mcpCalls: 0,
         webSearchCalls: 0.005,
         xPostsFetched: 0.005,
@@ -662,6 +665,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       serverToolFees: {
         codeInterpreterCalls: 0.005,
         fileSearchCalls: 0.0025,
+        imageGenerationCalls: 0.05,
         mcpCalls: 0,
         webSearchCalls: 0.005,
         xPostsFetched: 0.005,
@@ -682,6 +686,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       serverToolFees: {
         codeInterpreterCalls: 0.005,
         fileSearchCalls: 0.0025,
+        imageGenerationCalls: 0.05,
         mcpCalls: 0,
         webSearchCalls: 0.005,
         xPostsFetched: 0.005,
@@ -702,6 +707,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       serverToolFees: {
         codeInterpreterCalls: 0.005,
         fileSearchCalls: 0.0025,
+        imageGenerationCalls: 0.05,
         mcpCalls: 0,
         webSearchCalls: 0.005,
         xPostsFetched: 0.005,
@@ -722,6 +728,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       serverToolFees: {
         codeInterpreterCalls: 0.005,
         fileSearchCalls: 0.0025,
+        imageGenerationCalls: 0.05,
         mcpCalls: 0,
         webSearchCalls: 0.005,
         xPostsFetched: 0.005,
@@ -742,6 +749,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       serverToolFees: {
         codeInterpreterCalls: 0.005,
         fileSearchCalls: 0.0025,
+        imageGenerationCalls: 0.05,
         mcpCalls: 0,
         webSearchCalls: 0.005,
         xPostsFetched: 0.005,
