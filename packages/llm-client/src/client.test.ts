@@ -206,6 +206,19 @@ describe('createClient', () => {
   });
 });
 
+describe('createClient — xai', () => {
+  it('returns a real LlmClient (Responses API provider) for xai', async () => {
+    const client = await createClient({ provider: 'xai', model: 'grok-4.7', apiKey: 'test-key' });
+    expect(typeof client.complete).toBe('function');
+    expect(typeof client.stream).toBe('function');
+    expect(typeof client.structured).toBe('function');
+    expect(typeof client.streamStructured).toBe('function');
+    expect(typeof client.withTools).toBe('function');
+    expect(client.config.provider).toBe('xai');
+    expect(client.config.model).toBe('grok-4.7');
+  });
+});
+
 describe('createClientFromEnv', () => {
   const originalEnv = process.env;
 
@@ -233,6 +246,17 @@ describe('createClientFromEnv', () => {
     setTestEnv('OPENAI_API_KEY', 'sk-openai-test');
     const client = await createClientFromEnv('openai', 'gpt-4o-mini');
     expect(client).toBeDefined();
+  });
+
+  it('reads XAI_API_KEY for xai provider', async () => {
+    setTestEnv('XAI_API_KEY', 'xai-test');
+    const client = await createClientFromEnv('xai', 'grok-4.7');
+    expect(client.config.provider).toBe('xai');
+  });
+
+  it('names XAI_API_KEY in the error when it is not set for xai', async () => {
+    setTestEnv('XAI_API_KEY', undefined);
+    await expect(createClientFromEnv('xai', 'grok-4.7')).rejects.toThrow(/XAI_API_KEY/);
   });
 
   it('rejects with LlmError when ANTHROPIC_API_KEY is not set', async () => {
@@ -408,6 +432,7 @@ describe('createClient — pricing integration', () => {
       gemini: {},
       deepseek: {},
       perplexity: {},
+      xai: {},
     };
 
     await createClient({

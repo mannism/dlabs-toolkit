@@ -6,7 +6,7 @@
  * cross-provider capability check once, call it from every provider call site.
  *
  * Responsibilities:
- *   - resolveReasoningEffort()            — Anthropic/OpenAI/Gemini: maps LlmReasoningEffort to
+ *   - resolveReasoningEffort()            — Anthropic/OpenAI/Gemini/xAI: maps LlmReasoningEffort to
  *                                            the provider-native wire value, or throws bad_request
  *                                            before any SDK call if the value is outside that
  *                                            provider's accepted set.
@@ -17,6 +17,7 @@
  * Provider value sets (verified against installed SDK types, 2026-07-29):
  *   Anthropic — output_config.effort:      'low' | 'medium' | 'high' | 'xhigh' | 'max'
  *   OpenAI    — reasoning.effort:          'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+ *   xAI       — reasoning.effort:          'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' (model-dependent)
  *   Gemini    — thinkingConfig.thinkingLevel (uppercase): 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH'
  *
  * Never issue an SDK call if an unsupported effort value is detected — guard must throw first.
@@ -43,6 +44,21 @@ const OPENAI_EFFORT_VALUES: ReadonlySet<LlmReasoningEffort> = new Set([
   'high',
   'xhigh',
   'max',
+]);
+
+/**
+ * xAI Grok reasoning.effort values accepted by ANY xAI model — everything except 'max', which
+ * every probed model rejects ("Invalid reasoning effort", live 2026-10-04). This is only the
+ * provider-wide outer bound: which of these a SPECIFIC model takes (e.g. 'none' is grok-4.3 only)
+ * is decided per model from the capability matrix (reasoningEffortValues) in providers/xai.ts.
+ */
+const XAI_EFFORT_VALUES: ReadonlySet<LlmReasoningEffort> = new Set([
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
 ]);
 
 /** Gemini thinkingConfig.thinkingLevel accepted values — no 'none'/'xhigh'/'max'. */
@@ -73,7 +89,7 @@ function toGeminiThinkingLevel(effort: LlmReasoningEffort): string {
  */
 export function resolveReasoningEffort(
   effort: LlmReasoningEffort | undefined,
-  provider: 'anthropic' | 'openai' | 'gemini'
+  provider: 'anthropic' | 'openai' | 'gemini' | 'xai'
 ): string | undefined {
   if (effort === undefined) return undefined;
 
@@ -87,6 +103,13 @@ export function resolveReasoningEffort(
   if (provider === 'openai') {
     if (!OPENAI_EFFORT_VALUES.has(effort)) {
       throwUnsupportedEffort(provider, effort, OPENAI_EFFORT_VALUES);
+    }
+    return effort;
+  }
+
+  if (provider === 'xai') {
+    if (!XAI_EFFORT_VALUES.has(effort)) {
+      throwUnsupportedEffort(provider, effort, XAI_EFFORT_VALUES);
     }
     return effort;
   }

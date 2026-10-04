@@ -1,7 +1,10 @@
 name: "@diabolicallabs/llm-client"
 purpose: >
-  Unified LLM client across 5 providers: OpenAI (Responses API), Anthropic, Gemini
-  (@google/genai v2.x), DeepSeek, and Perplexity. Provides a single LlmClient interface
+  Unified LLM client across 6 providers: OpenAI (Responses API), Anthropic, Gemini
+  (@google/genai v2.x), DeepSeek, Perplexity, and xAI (Grok). xAI adds server-side tools
+  (providerOptions.serverTools: xSearch, webSearch, codeInterpreter, fileSearch, mcp,
+  imageGeneration) with normalized citations/images/serverToolCalls, serverToolUsage and
+  provider-reported cost (LlmUsage.providerReportedCostUsd). Provides a single LlmClient interface
   with complete(), stream(), structured(), withTools(), and streamStructured().
   Provider-neutral multimodal content blocks (v4.2.0+): LlmContentBlock[] in LlmMessage.content
   for images (base64 + URL) and PDFs (base64) — Anthropic full, OpenAI full, Gemini base64 only,
@@ -77,15 +80,17 @@ depends_on:
     why: "DeepSeek's API is OpenAI Chat Completions-compatible; uses the openai SDK pointed at api.deepseek.com"
   - name: "perplexity (openai SDK with baseURL override)"
     why: "Perplexity's API is OpenAI-compatible; uses the openai SDK pointed at api.perplexity.ai. Returns web-grounded responses with citation URLs."
+  - name: "xai (openai SDK with baseURL override)"
+    why: "xAI's API is OpenAI Responses-compatible; uses the openai SDK pointed at api.x.ai/v1. Server-side tools only work on /v1/responses (chat/completions rejects x_search), so this adapter mirrors openai.ts, not the Chat Completions providers."
   - name: "@diabolicallabs/llm-pricing"
-    version: "^1.0.0"
+    version: "^1.7.0"
     why: "Optional peer dep — enables per-call cost tracking (LlmClientConfig.pricing). v1.7.0+: pricing.remoteUrl wires fetchRemoteTable() for live pricing with stale-while-revalidate cache."
 
 depended_on_by:
   - name: "@diabolicallabs/agent-sdk"
     how: "agent-sdk wraps LlmClient via instrumentClient() to intercept all calls for cost tracking. LlmClient is a peer dep of agent-sdk, not bundled."
   - name: "GEOAudit"
-    how: "Live consumer — on ^6.0.0 as of PR #284. All five providers active in production."
+    how: "Live consumer — on ^6.0.0 as of PR #284. All five original providers active in production; xai is opt-in and not yet consumed."
   - name: "brand-compliance-saas"
     how: "Live consumer — on ^6.0.0. BullMQ workers run via tsx (CJS-mode); dynamic import() used as workaround pre-6.1.0. CJS require condition (v6.1.0) is the permanent fix."
   - name: "FitChecker"

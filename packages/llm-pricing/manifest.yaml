@@ -1,7 +1,7 @@
 name: "@diabolicallabs/llm-pricing"
 purpose: >
   Pricing table + cost computation for @diabolicallabs/llm-client. Converts LlmUsage token counts
-  to USD cost breakdowns across all five supported providers. Ships a bundled DEFAULT_PRICING_TABLE
+  to USD cost breakdowns across all six supported providers (incl. xAI server-tool fees via ModelPricing.serverToolFees). Ships a bundled DEFAULT_PRICING_TABLE
   (offline fallback, always available) plus an opt-in fetchRemoteTable() helper for live pricing
   via a remote URL (stale-while-revalidate cache, 24h TTL, never-throws fail-safe). The canonical
   remote source is pricing/table.json at the repo root — refreshes update that file directly

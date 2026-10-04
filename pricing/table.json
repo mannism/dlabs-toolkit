@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.schema.json",
-  "versionedAt": "2026-09-05",
+  "versionedAt": "2026-10-04",
   "anthropic": {
     "claude-opus-4-5": {
       "inputPer1M": 5.0,
@@ -547,16 +547,26 @@
     }
   },
   "xai": {
-    "grok-4.5": {
+    "grok-4.7": {
       "inputPer1M": 2.0,
       "outputPer1M": 6.0,
-      "cacheReadPer1M": 0.3,
+      "cacheReadPer1M": 0.5,
       "longContextThreshold": 200000,
       "longContextInputPer1M": 4.0,
       "longContextOutputPer1M": 12.0,
-      "longContextCacheReadPer1M": 0.6,
-      "verifiedAt": "2026-07-25",
-      "sourceUrl": "https://docs.x.ai/developers/models/grok-4.5"
+      "longContextCacheReadPer1M": 1.0,
+      "serverToolFees": {
+        "webSearchCalls": 0.005,
+        "xSearchCalls": 0,
+        "xPostsFetched": 0.005,
+        "xUsersFetched": 0.01,
+        "codeInterpreterCalls": 0.005,
+        "fileSearchCalls": 0.0025,
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
+      },
+      "verifiedAt": "2026-10-04",
+      "sourceUrl": "https://docs.x.ai/developers/models/grok-4.7"
     },
     "grok-4.6": {
       "inputPer1M": 2.0,
@@ -566,8 +576,144 @@
       "longContextInputPer1M": 4.0,
       "longContextOutputPer1M": 12.0,
       "longContextCacheReadPer1M": 1.0,
-      "verifiedAt": "2026-08-18",
+      "serverToolFees": {
+        "webSearchCalls": 0.005,
+        "xSearchCalls": 0,
+        "xPostsFetched": 0.005,
+        "xUsersFetched": 0.01,
+        "codeInterpreterCalls": 0.005,
+        "fileSearchCalls": 0.0025,
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
+      },
+      "verifiedAt": "2026-10-04",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.6"
+    },
+    "grok-4.5": {
+      "inputPer1M": 2.0,
+      "outputPer1M": 6.0,
+      "cacheReadPer1M": 0.3,
+      "longContextThreshold": 200000,
+      "longContextInputPer1M": 4.0,
+      "longContextOutputPer1M": 12.0,
+      "longContextCacheReadPer1M": 0.6,
+      "serverToolFees": {
+        "webSearchCalls": 0.005,
+        "xSearchCalls": 0,
+        "xPostsFetched": 0.005,
+        "xUsersFetched": 0.01,
+        "codeInterpreterCalls": 0.005,
+        "fileSearchCalls": 0.0025,
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
+      },
+      "verifiedAt": "2026-10-04",
+      "sourceUrl": "https://docs.x.ai/developers/models/grok-4.5"
+    },
+    "grok-4.3": {
+      "inputPer1M": 1.25,
+      "outputPer1M": 2.5,
+      "cacheReadPer1M": 0.2,
+      "longContextThreshold": 200000,
+      "longContextInputPer1M": 2.5,
+      "longContextOutputPer1M": 5.0,
+      "longContextCacheReadPer1M": 0.4,
+      "serverToolFees": {
+        "webSearchCalls": 0.005,
+        "xSearchCalls": 0,
+        "xPostsFetched": 0.005,
+        "xUsersFetched": 0.01,
+        "codeInterpreterCalls": 0.005,
+        "fileSearchCalls": 0.0025,
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
+      },
+      "verifiedAt": "2026-10-04",
+      "sourceUrl": "https://docs.x.ai/developers/models/grok-4.3"
+    },
+    "grok-4.20-0309-reasoning": {
+      "inputPer1M": 1.25,
+      "outputPer1M": 2.5,
+      "cacheReadPer1M": 0.2,
+      "longContextThreshold": 200000,
+      "longContextInputPer1M": 2.5,
+      "longContextOutputPer1M": 5.0,
+      "longContextCacheReadPer1M": 0.4,
+      "serverToolFees": {
+        "webSearchCalls": 0.005,
+        "xSearchCalls": 0,
+        "xPostsFetched": 0.005,
+        "xUsersFetched": 0.01,
+        "codeInterpreterCalls": 0.005,
+        "fileSearchCalls": 0.0025,
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
+      },
+      "verifiedAt": "2026-10-04",
+      "sourceUrl": "https://docs.x.ai/developers/models/grok-4.20-0309-reasoning"
+    },
+    "grok-4.20-0309-non-reasoning": {
+      "inputPer1M": 1.25,
+      "outputPer1M": 2.5,
+      "cacheReadPer1M": 0.2,
+      "longContextThreshold": 200000,
+      "longContextInputPer1M": 2.5,
+      "longContextOutputPer1M": 5.0,
+      "longContextCacheReadPer1M": 0.4,
+      "serverToolFees": {
+        "webSearchCalls": 0.005,
+        "xSearchCalls": 0,
+        "xPostsFetched": 0.005,
+        "xUsersFetched": 0.01,
+        "codeInterpreterCalls": 0.005,
+        "fileSearchCalls": 0.0025,
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
+      },
+      "verifiedAt": "2026-10-04",
+      "sourceUrl": "https://docs.x.ai/developers/models/grok-4.20-0309-non-reasoning"
+    },
+    "grok-4.20-multi-agent-0309": {
+      "inputPer1M": 1.25,
+      "outputPer1M": 2.5,
+      "cacheReadPer1M": 0.2,
+      "longContextThreshold": 200000,
+      "longContextInputPer1M": 2.5,
+      "longContextOutputPer1M": 5.0,
+      "longContextCacheReadPer1M": 0.4,
+      "serverToolFees": {
+        "webSearchCalls": 0.005,
+        "xSearchCalls": 0,
+        "xPostsFetched": 0.005,
+        "xUsersFetched": 0.01,
+        "codeInterpreterCalls": 0.005,
+        "fileSearchCalls": 0.0025,
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
+      },
+      "verifiedAt": "2026-10-04",
+      "sourceUrl": "https://docs.x.ai/developers/models/grok-4.20-multi-agent-0309"
+    },
+    "grok-build-0.1": {
+      "inputPer1M": 1.0,
+      "outputPer1M": 2.0,
+      "cacheReadPer1M": 0.2,
+      "longContextThreshold": 200000,
+      "longContextInputPer1M": 2.0,
+      "longContextOutputPer1M": 4.0,
+      "longContextCacheReadPer1M": 0.4,
+      "serverToolFees": {
+        "webSearchCalls": 0.005,
+        "xSearchCalls": 0,
+        "xPostsFetched": 0.005,
+        "xUsersFetched": 0.01,
+        "codeInterpreterCalls": 0.005,
+        "fileSearchCalls": 0.0025,
+        "mcpCalls": 0,
+        "imageGenerationCalls": 0.05
+      },
+      "verifiedAt": "2026-10-04",
+      "sourceUrl": "https://docs.x.ai/developers/models/grok-build-0.1"
     }
   }
 }

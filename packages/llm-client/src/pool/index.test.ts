@@ -233,3 +233,24 @@ describe('runAll — onProgress', () => {
     expect(onProgress).not.toHaveBeenCalled();
   });
 });
+
+describe('runAll — xai provider', () => {
+  it('routes xai tasks through their own concurrency semaphore', async () => {
+    const pool = createPool({ concurrencyPerProvider: { xai: 1 } });
+    let active = 0;
+    let maxActive = 0;
+    const task = (v: number): PoolTaskWithProvider<number> => ({
+      provider: 'xai',
+      task: async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise<void>((r) => setTimeout(r, 5));
+        active -= 1;
+        return v;
+      },
+    });
+    const results = await pool.runAll([task(1), task(2), task(3)]);
+    expect(results.map((r) => (r.status === 'fulfilled' ? r.value : null))).toEqual([1, 2, 3]);
+    expect(maxActive).toBe(1);
+  });
+});

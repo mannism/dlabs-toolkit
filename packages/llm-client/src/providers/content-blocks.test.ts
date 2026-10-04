@@ -786,3 +786,51 @@ describe('mapOpenAIContent() — file blocks (v5.1.0)', () => {
     );
   });
 });
+
+describe('assertBlocksSupported — xai support matrix (text + image only)', () => {
+  const xaiMatrix = {
+    textBlock: true,
+    imageBase64: true,
+    imageUrl: true,
+    documentBase64: false,
+    fileRef: false,
+  };
+
+  it('accepts text and both image source types', () => {
+    const messages: LlmMessage[] = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'look' },
+          { type: 'image', source: { type: 'url', url: 'https://example.com/a.png' } },
+          { type: 'image', source: { type: 'base64', mediaType: 'image/png', data: 'AA' } },
+        ],
+      },
+    ];
+    expect(() => assertBlocksSupported(messages, 'xai', xaiMatrix)).not.toThrow();
+  });
+
+  it('rejects PDFs and Files API refs, naming xai', () => {
+    const pdf: LlmMessage[] = [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', mediaType: 'application/pdf', data: 'AA' },
+          },
+        ],
+      },
+    ];
+    expect(() => assertBlocksSupported(pdf, 'xai', xaiMatrix)).toThrowError(/xai/);
+    const fileRef = {
+      id: 'f',
+      uri: 'f',
+      provider: 'xai',
+      mediaType: 'application/pdf',
+      state: 'active',
+    } as unknown as LlmFileRef;
+    const refMsg: LlmMessage[] = [{ role: 'user', content: [{ type: 'file', ref: fileRef }] }];
+    expect(() => assertBlocksSupported(refMsg, 'xai', xaiMatrix)).toThrowError(LlmError);
+  });
+});
