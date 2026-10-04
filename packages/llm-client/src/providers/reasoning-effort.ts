@@ -17,7 +17,7 @@
  * Provider value sets (verified against installed SDK types, 2026-07-29):
  *   Anthropic — output_config.effort:      'low' | 'medium' | 'high' | 'xhigh' | 'max'
  *   OpenAI    — reasoning.effort:          'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
- *   xAI       — reasoning.effort:          'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+ *   xAI       — reasoning.effort:          'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' (model-dependent)
  *   Gemini    — thinkingConfig.thinkingLevel (uppercase): 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH'
  *
  * Never issue an SDK call if an unsupported effort value is detected — guard must throw first.
@@ -47,11 +47,13 @@ const OPENAI_EFFORT_VALUES: ReadonlySet<LlmReasoningEffort> = new Set([
 ]);
 
 /**
- * xAI Grok reasoning.effort accepted values — no 'none'/'max'. Verified live 2026-10-04:
- * 'none' and 'max' are rejected by grok-4.7 ("does not support reasoning_effort value none" /
- * "Invalid reasoning effort"), 'minimal' is accepted although not listed in /v1/language-models.
+ * xAI Grok reasoning.effort values accepted by ANY xAI model — everything except 'max', which
+ * every probed model rejects ("Invalid reasoning effort", live 2026-10-04). This is only the
+ * provider-wide outer bound: which of these a SPECIFIC model takes (e.g. 'none' is grok-4.3 only)
+ * is decided per model from the capability matrix (reasoningEffortValues) in providers/xai.ts.
  */
 const XAI_EFFORT_VALUES: ReadonlySet<LlmReasoningEffort> = new Set([
+  'none',
   'minimal',
   'low',
   'medium',

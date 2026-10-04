@@ -30,8 +30,10 @@
  */
 
 import OpenAI from 'openai';
-import { classifyAbort, createAttemptController } from '../abort.js';
+import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { getModelCapabilities } from '../capabilities.js';
+import { parseJsonOrThrow } from '../extract-json.js';
+import { isZodSchema, toProviderSchema } from '../json-schema.js';
 import { getLogger } from '../logger.js';
 import {
   classifyHttpStatus,
@@ -47,12 +49,14 @@ import type {
   LlmFilesApi,
   LlmImage,
   LlmMessage,
+  LlmReasoningEffort,
   LlmResponse,
   LlmServerToolCall,
   LlmStreamChunk,
   LlmStreamStructuredEvent,
   LlmStructuredResponse,
   LlmTool,
+  LlmToolCall,
   LlmToolResponse,
   LlmUsage,
   XaiServerTool,
@@ -351,8 +355,11 @@ export function buildXaiServerTools(
 }
 
 /**
- * Resolve reasoning effort for xai: rejects 'none' / 'max' (xAI 400s on them) and any effort on a
- * model whose capability entry says it takes none, all before any network call.
+ * Resolve reasoning effort for xai, per model, before any network call:
+ *   - 'max' is rejected for every model (provider-wide, resolveReasoningEffort).
+ *   - A model whose capability entry has reasoningEffort: null rejects any effort.
+ *   - Otherwise the value must be in the model's reasoningEffortValues (so 'none' passes only on
+ *     grok-4.3). Models absent from the capability table fall back to "anything but none".
  */
 function resolveXaiEffort(
   effort: LlmCallOptions['reasoningEffort'],
@@ -361,8 +368,20 @@ function resolveXaiEffort(
   const resolved = resolveReasoningEffort(effort, PROVIDER);
   if (resolved === undefined) return undefined;
   const caps = getModelCapabilities(PROVIDER, model);
-  if (caps !== null && caps.reasoningEffort === null) {
+  if (caps === null) {
+    if (resolved === 'none') {
+      badRequest(`reasoningEffort 'none' is only accepted by models that list it (e.g. grok-4.3)`);
+    }
+    return resolved;
+  }
+  if (caps.reasoningEffort === null) {
     badRequest(`model '${model}' does not accept reasoningEffort ('${resolved}' was set)`);
+  }
+  const allowed = caps.reasoningEffortValues;
+  if (allowed !== undefined && !allowed.includes(effort as LlmReasoningEffort)) {
+    badRequest(
+      `model '${model}' does not support reasoningEffort '${resolved}'. Supported: ${allowed.join(', ')}`
+    );
   }
   return resolved;
 }
@@ -397,8 +416,8 @@ function applyXaiParams(
     if (typeof maxToolCalls !== 'number' || !Number.isInteger(maxToolCalls) || maxToolCalls < 1) {
       badRequest('providerOptions.maxToolCalls must be a positive integer');
     }
-    // max_tool_calls is accepted by xAI but absent from the installed SDK's param types (7.18);
-    // the SDK serializes the params object verbatim, so extra keys reach the wire.
+    // max_tool_calls is accepted by xAI but absent from the installed SDK's create-param types
+    // (7.23); the SDK serializes the params object verbatim, so extra keys reach the wire.
     Object.assign(params, { max_tool_calls: maxToolCalls });
   }
 
@@ -808,45 +827,439 @@ export function createXaiProvider(config: LlmClientConfig): LlmClient {
     );
   }
 
-  /** Placeholder for call types still being built; replaced in the next commit. */
-  function notYetImplemented(method: string): never {
-    throw new LlmError({
-      message: `[llm-client] xai: ${method}() is not implemented yet`,
-      provider: PROVIDER,
-      kind: 'bad_request',
-      retryable: false,
-    });
+  /**
+   * One non-streaming Responses call wrapped in the retry loop + per-attempt abort controller.
+   * Shared by structured(), the prompt fallback and withTools(); complete() keeps its own copy
+   * because it also builds the final LlmResponse inside the attempt.
+   */
+  async function createWithRetry(
+    params: OpenAI.Responses.ResponseCreateParamsNonStreaming,
+    options: LlmCallOptions | undefined,
+    effectiveTimeoutMs: number
+  ): Promise<OpenAI.Responses.Response> {
+    return withRetry(
+      async () => {
+        const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+        try {
+          return await client.responses.create(params, {
+            signal: ctl.signal,
+            timeout: effectiveTimeoutMs,
+          });
+        } catch (err) {
+          throw normalizeXaiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+        } finally {
+          ctl.dispose();
+        }
+      },
+      mergeRetryOptsWithSignal(retryOpts, options?.signal)
+    );
   }
 
-  function stream(
-    _messages: LlmMessage[],
-    _options?: LlmCallOptions
-  ): AsyncGenerator<LlmStreamChunk> {
-    return notYetImplemented('stream');
+  /** Apply the max-tokens / temperature defaults shared by every call type. */
+  function applyCommonSampling(params: XaiRequestParams, options: LlmCallOptions | undefined) {
+    const maxTokens = options?.maxTokens ?? config.maxTokens;
+    if (maxTokens !== undefined) params.max_output_tokens = maxTokens;
+    const temperature = options?.temperature ?? config.temperature;
+    if (temperature !== undefined) params.temperature = temperature;
   }
+
+  /** Throw when xAI reports a failed/errored response on a stream (otherwise it would end empty). */
+  function assertStreamEventOk(event: OpenAI.Responses.ResponseStreamEvent): void {
+    if (event.type === 'response.failed') {
+      const detail = asWire<{ message?: unknown }>(event.response.error);
+      throw new LlmError({
+        message: `xai stream failed: ${asString(detail?.message) ?? 'response.failed'}`,
+        provider: PROVIDER,
+        kind: 'server_error',
+        retryable: false,
+      });
+    }
+  }
+
+  /**
+   * Open a streaming Responses call. Pre-flight validation (in applyXaiParams, called by the
+   * caller) has already run, so a validation error never reaches here.
+   */
+  async function openStream(
+    params: OpenAI.Responses.ResponseCreateParamsStreaming,
+    ctl: ReturnType<typeof createAttemptController>,
+    effectiveTimeoutMs: number
+  ): Promise<AsyncIterable<OpenAI.Responses.ResponseStreamEvent>> {
+    try {
+      const sdkStream = await client.responses.create(params, {
+        signal: ctl.signal,
+        timeout: effectiveTimeoutMs,
+      });
+      return sdkStream as AsyncIterable<OpenAI.Responses.ResponseStreamEvent>;
+    } catch (err) {
+      ctl.dispose();
+      throw normalizeXaiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    }
+  }
+
+  /** Accumulated stream state: text, annotation citations and the completed response's extras. */
+  interface StreamState {
+    text: string;
+    usage: LlmUsage | undefined;
+    citations: CitationSet;
+    images: LlmImage[] | undefined;
+    serverToolCalls: LlmServerToolCall[] | undefined;
+  }
+
+  /** Fold one stream event into the accumulated state. Returns the text delta, if any. */
+  function foldStreamEvent(
+    event: OpenAI.Responses.ResponseStreamEvent,
+    state: StreamState
+  ): string | undefined {
+    assertStreamEventOk(event);
+    if (event.type === 'response.output_text.delta') {
+      const delta = event.delta;
+      if (delta !== undefined && delta.length > 0) {
+        state.text += delta;
+        return delta;
+      }
+    } else if (event.type === 'response.output_text.annotation.added') {
+      // Live-verified: citations stream as url_citation annotations, not a citations array.
+      const ann = asWire<XaiWireAnnotation>(event.annotation);
+      if (ann?.type === 'url_citation') state.citations.add(asString(ann.url), ann.title);
+    } else if (event.type === 'response.completed') {
+      state.usage = normalizeXaiUsage(event.response.usage);
+      const parsed = parseXaiOutput(event.response.output);
+      for (const c of parsed.citations ?? []) state.citations.add(c.url, c.title);
+      state.images = parsed.images;
+      state.serverToolCalls = parsed.serverToolCalls;
+    }
+    return undefined;
+  }
+
+  function newStreamState(): StreamState {
+    return {
+      text: '',
+      usage: undefined,
+      citations: new CitationSet(),
+      images: undefined,
+      serverToolCalls: undefined,
+    };
+  }
+
+  /** Optional-field spread for the terminal stream chunk / done event. */
+  function streamExtras(state: StreamState) {
+    const citations = state.citations.toArray();
+    return {
+      ...(citations !== undefined && { citations }),
+      ...(state.images !== undefined && { images: state.images }),
+      ...(state.serverToolCalls !== undefined && { serverToolCalls: state.serverToolCalls }),
+    };
+  }
+
+  async function* stream(
+    messages: LlmMessage[],
+    options?: LlmCallOptions
+  ): AsyncGenerator<LlmStreamChunk> {
+    const model = options?.model ?? resolvedConfig.model;
+    const input = buildResponsesInput(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
+
+    const params: OpenAI.Responses.ResponseCreateParamsStreaming = {
+      model,
+      input,
+      stream: true,
+    };
+    applyCommonSampling(params, options);
+    applyXaiParams(params, model, options);
+
+    const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+    const sdkStream = await openStream(params, ctl, effectiveTimeoutMs);
+    const state = newStreamState();
+
+    try {
+      for await (const event of withStallTimeout(sdkStream, stallMs, ctl, PROVIDER)) {
+        const delta = foldStreamEvent(event, state);
+        if (delta !== undefined) yield { token: delta };
+      }
+    } catch (err) {
+      throw normalizeXaiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    } finally {
+      ctl.dispose();
+    }
+
+    // Terminal chunk: usage (incl. provider-reported cost) plus accumulated citations/images/tools.
+    if (state.usage !== undefined) {
+      yield { token: '', usage: state.usage, ...streamExtras(state) };
+    }
+  }
+
+  /** Parse + validate structured text against the schema; throws structured_parse_failed. */
+  function parseStructuredText<T>(
+    text: string,
+    schema: { parse: (data: unknown) => T },
+    label: string,
+    lenient: boolean
+  ): T {
+    // Strict json_schema guarantees valid JSON; the prompt fallback may wrap it in prose/fences.
+    let parsed: unknown;
+    if (lenient) {
+      parsed = parseJsonOrThrow(text, PROVIDER);
+    } else {
+      try {
+        parsed = JSON.parse(text);
+      } catch (err) {
+        throw new LlmError({
+          message: `xai ${label}: response is not valid JSON. Raw: ${text.slice(0, 200)}`,
+          provider: PROVIDER,
+          kind: 'structured_parse_failed',
+          retryable: false,
+          cause: err,
+        });
+      }
+    }
+    try {
+      return schema.parse(parsed);
+    } catch (err) {
+      throw new LlmError({
+        message: `xai ${label}: response failed schema validation. ${String(err)}`,
+        provider: PROVIDER,
+        kind: 'structured_parse_failed',
+        retryable: false,
+        cause: err,
+      });
+    }
+  }
+
+  /**
+   * Strict text.format for a Zod 4 schema (works alongside server tools, live-verified).
+   * Undefined for non-Zod schemas, which use the prompt-only fallback.
+   */
+  function strictTextFormat(schema: { parse: (data: unknown) => unknown }) {
+    if (!isZodSchema(schema)) return undefined;
+    return {
+      format: {
+        type: 'json_schema' as const,
+        name: 'response',
+        schema: toProviderSchema(schema, 'openai') as Record<string, unknown>,
+        strict: true,
+      },
+    };
+  }
+
+  /** System instruction used when no native schema enforcement is available. */
+  const JSON_ONLY_INSTRUCTION: LlmMessage = {
+    role: 'system',
+    content:
+      'You must respond with valid JSON only. No explanations, no markdown code fences, no extra text. Your entire response must be valid JSON that can be parsed with JSON.parse().',
+  };
 
   async function structured<T>(
-    _messages: LlmMessage[],
-    _schema: { parse: (data: unknown) => T },
-    _options?: LlmCallOptions
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
   ): Promise<LlmStructuredResponse<T>> {
-    return notYetImplemented('structured');
+    // biome-ignore lint/complexity/useLiteralKeys: providerOptions is Record<string,unknown>
+    const structuredMode = options?.providerOptions?.['structuredMode'];
+    const textFormat = structuredMode === 'prompt' ? undefined : strictTextFormat(schema);
+    const useStrict = textFormat !== undefined;
+
+    const model = options?.model ?? resolvedConfig.model;
+    // Prompt fallback: no text.format (json_object support on xAI is unverified) — instruct + parse.
+    const input = buildResponsesInput(useStrict ? messages : [JSON_ONLY_INSTRUCTION, ...messages]);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const start = Date.now();
+
+    const params: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
+      model,
+      input,
+      stream: false,
+      ...(textFormat !== undefined && { text: textFormat }),
+    };
+    applyCommonSampling(params, options);
+    applyXaiParams(params, model, options);
+
+    const raw = await createWithRetry(params, options, effectiveTimeoutMs);
+    const parsed = parseXaiOutput(raw.output);
+    if (parsed.refusal !== undefined) {
+      throw new LlmError({
+        message: `xai structured output: model refused to generate. Refusal: ${parsed.refusal.slice(0, 200)}`,
+        provider: PROVIDER,
+        kind: 'content_filter',
+        retryable: false,
+      });
+    }
+    const data = parseStructuredText(parsed.text, schema, 'structured output', !useStrict);
+
+    return {
+      data,
+      model: raw.model,
+      id: raw.id,
+      idSource: 'provider' as const,
+      usage: normalizeXaiUsage(raw.usage),
+      latencyMs: Date.now() - start,
+      ...extrasOf(parsed),
+    };
   }
 
-  function streamStructured<T>(
-    _messages: LlmMessage[],
-    _schema: { parse: (data: unknown) => T },
-    _options?: LlmCallOptions
+  async function* streamStructured<T>(
+    messages: LlmMessage[],
+    schema: { parse: (data: unknown) => T },
+    options?: LlmCallOptions
   ): AsyncGenerator<LlmStreamStructuredEvent<T>> {
-    return notYetImplemented('streamStructured');
+    const textFormat = strictTextFormat(schema);
+    const useStrict = textFormat !== undefined;
+    const model = options?.model ?? resolvedConfig.model;
+    const input = buildResponsesInput(useStrict ? messages : [JSON_ONLY_INSTRUCTION, ...messages]);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const stallMs = options?.streamStallTimeoutMs ?? config.streamStallTimeoutMs ?? 30_000;
+
+    const params: OpenAI.Responses.ResponseCreateParamsStreaming = {
+      model,
+      input,
+      stream: true,
+      ...(textFormat !== undefined && { text: textFormat }),
+    };
+    applyCommonSampling(params, options);
+    applyXaiParams(params, model, options);
+
+    const ctl = createAttemptController(options?.signal, effectiveTimeoutMs);
+    const sdkStream = await openStream(params, ctl, effectiveTimeoutMs);
+    const state = newStreamState();
+
+    try {
+      for await (const event of withStallTimeout(sdkStream, stallMs, ctl, PROVIDER)) {
+        const delta = foldStreamEvent(event, state);
+        if (delta !== undefined) yield { type: 'token', token: delta };
+      }
+    } catch (err) {
+      throw normalizeXaiError(classifyAbort(err, ctl.abortReason(), PROVIDER));
+    } finally {
+      ctl.dispose();
+    }
+
+    const data = parseStructuredText(state.text, schema, 'streamStructured', !useStrict);
+    yield {
+      type: 'done',
+      data,
+      usage: state.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      ...streamExtras(state),
+    };
   }
 
+  /**
+   * withTools() — caller function tools (flat Responses shape) mixed with server-side tools from
+   * providerOptions.serverTools. Only `function_call` items become LlmToolCall; server tool runs
+   * are reported in serverToolCalls.
+   */
   async function withTools(
-    _messages: LlmMessage[],
-    _tools: LlmTool[],
-    _options?: LlmCallWithToolsOptions
+    messages: LlmMessage[],
+    tools: LlmTool[],
+    options?: LlmCallWithToolsOptions
   ): Promise<LlmToolResponse> {
-    return notYetImplemented('withTools');
+    const model = options?.model ?? resolvedConfig.model;
+    const input = buildResponsesInput(messages);
+    const effectiveTimeoutMs = options?.timeoutMs ?? config.timeoutMs ?? 30_000;
+    const start = Date.now();
+
+    const functionTools: OpenAI.Responses.FunctionTool[] = tools.map((t) => {
+      let schemaForProvider: Record<string, unknown>;
+      switch (t.inputSchema.kind) {
+        case 'zod':
+          schemaForProvider = toProviderSchema(t.inputSchema.schema, 'openai') as Record<
+            string,
+            unknown
+          >;
+          break;
+        case 'jsonSchema':
+          schemaForProvider = t.inputSchema.schema;
+          break;
+        default:
+          throw new LlmError({
+            kind: 'tool_schema_invalid',
+            message: `LlmTool "${(t as { name: string }).name}": inputSchema must have kind 'zod' or 'jsonSchema'`,
+            provider: PROVIDER,
+            retryable: false,
+          });
+      }
+      return {
+        type: 'function',
+        name: t.name,
+        description: t.description,
+        parameters: schemaForProvider as { [key: string]: unknown } | null,
+        strict: null,
+      };
+    });
+
+    const tc = options?.toolChoice;
+    const toolChoice: OpenAI.Responses.ToolChoiceOptions | OpenAI.Responses.ToolChoiceFunction =
+      tc === undefined || tc === 'auto'
+        ? 'auto'
+        : tc === 'none'
+          ? 'none'
+          : tc === 'any'
+            ? 'required'
+            : { type: 'function', name: tc.name };
+
+    const params: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
+      model,
+      input,
+      stream: false,
+      tool_choice: toolChoice,
+    };
+    applyCommonSampling(params, options);
+    if (options?.parallelToolCalls === false) params.parallel_tool_calls = false;
+    // Merges server tools (providerOptions.serverTools) with the caller's function tools.
+    applyXaiParams(params, model, options, functionTools);
+
+    const raw = await createWithRetry(params, options, effectiveTimeoutMs);
+    const parsed = parseXaiOutput(raw.output);
+
+    const toolCalls: LlmToolCall[] = [];
+    for (const fc of parsed.functionCalls) {
+      let parsedArgs: unknown;
+      try {
+        parsedArgs = JSON.parse(fc.args);
+      } catch {
+        parsedArgs = fc.args; // leave as string if not valid JSON
+      }
+      const tool = tools.find((t) => t.name === fc.name);
+      if (tool !== undefined) {
+        try {
+          parsedArgs =
+            tool.inputSchema.kind === 'zod'
+              ? tool.inputSchema.schema.parse(parsedArgs)
+              : tool.inputSchema.validate
+                ? tool.inputSchema.validate(parsedArgs)
+                : parsedArgs;
+        } catch (err) {
+          throw new LlmError({
+            message: `xai withTools: arguments for tool '${fc.name}' failed schema validation. ${String(err)}`,
+            provider: PROVIDER,
+            kind: 'tool_arguments_invalid',
+            retryable: false,
+            cause: err,
+          });
+        }
+      }
+      toolCalls.push({
+        id: fc.callId ?? `synth-${Date.now()}`,
+        toolName: fc.name,
+        arguments: parsedArgs,
+        rawArguments: fc.args,
+      });
+    }
+
+    const stopReason: LlmToolResponse['stopReason'] =
+      parsed.refusal !== undefined ? 'refusal' : toolCalls.length > 0 ? 'tool_use' : 'end_turn';
+
+    return {
+      content: parsed.text,
+      toolCalls,
+      model: raw.model,
+      id: raw.id,
+      idSource: 'provider' as const,
+      usage: normalizeXaiUsage(raw.usage),
+      latencyMs: Date.now() - start,
+      stopReason,
+      ...extrasOf(parsed),
+    };
   }
 
   /** xAI Files API is not wired. Mirrors the DeepSeek stub: every method throws bad_request. */
