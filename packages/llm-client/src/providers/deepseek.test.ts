@@ -1329,7 +1329,7 @@ describe('DeepSeek provider — retired model rejection (2026-08-18)', () => {
       expect(thrown.kind).toBe('bad_request');
       expect(thrown.retryable).toBe(false);
       expect(thrown.message).toContain(retiredId);
-      expect(thrown.message).toContain('deepseek-v4-flash');
+      expect(thrown.message).toContain('deepseek-flash');
       expect(thrown.message).toContain('retired');
     }
     expect(mockCreate).not.toHaveBeenCalled();

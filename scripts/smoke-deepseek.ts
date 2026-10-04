@@ -1,11 +1,11 @@
 /**
  * DeepSeek provider smoke test.
  *
- * Validates: single-turn complete() call against deepseek-v4-flash (canonical V4 default).
+ * Validates: single-turn complete() call against deepseek-flash (canonical default as of 2026-10-04).
  * Expected: successful response with normalized LlmUsage, model string, content.
  *
  * Canonical model IDs (as of 2026-05-13):
- *   deepseek-v4-flash  — general + reasoning (thinking mode via providerOptions)
+ *   deepseek-flash     — DeepSeek-V4.1-Flash, general + reasoning (legacy alias: deepseek-v4-flash)
  *   deepseek-v4-pro    — high-capability tier
  *
  * Retired IDs (DeepSeek retired both on 2026-07-24 15:59 UTC, no fallback alias —
@@ -26,7 +26,7 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const client = await createClientFromEnv('deepseek', 'deepseek-v4-flash', { maxTokens: 5 });
+const client = await createClientFromEnv('deepseek', 'deepseek-flash', { maxTokens: 5 });
 
 console.log('[smoke-deepseek] Starting complete() call...');
 const start = Date.now();

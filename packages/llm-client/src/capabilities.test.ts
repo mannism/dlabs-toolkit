@@ -21,7 +21,7 @@ describe('getModelCapabilities', () => {
     expect(caps).not.toBeNull();
     const c = caps as ModelCapabilities;
     expect(c.contextWindow).toBe(1_000_000);
-    expect(c.maxOutputTokens).toBe(32_000);
+    expect(c.maxOutputTokens).toBe(128_000);
     expect(c.streaming).toBe(true);
     expect(c.tools).toBe(true);
     expect(c.parallelTools).toBe(true);
@@ -38,7 +38,7 @@ describe('getModelCapabilities', () => {
     const caps = getModelCapabilities('openai', 'gpt-5.5');
     expect(caps).not.toBeNull();
     const c = caps as ModelCapabilities;
-    expect(c.contextWindow).toBe(1_000_000);
+    expect(c.contextWindow).toBe(1_050_000);
     expect(c.streaming).toBe(true);
     expect(c.tools).toBe(true);
     expect(c.parallelTools).toBe(true);
@@ -96,7 +96,7 @@ describe('getModelCapabilities', () => {
     const caps = getModelCapabilities('deepseek', 'deepseek-v4-flash');
     expect(caps).not.toBeNull();
     const c = caps as ModelCapabilities;
-    expect(c.contextWindow).toBe(64_000);
+    expect(c.contextWindow).toBe(1_048_576);
     expect(c.streaming).toBe(true);
     expect(c.tools).toBe(true);
     expect(c.parallelTools).toBe(true);
@@ -223,7 +223,7 @@ describe('getModelCapabilities', () => {
         const caps = getModelCapabilities('openai', model);
         expect(caps).not.toBeNull();
         const c = caps as ModelCapabilities;
-        expect(c.contextWindow).toBe(1_000_000);
+        expect(c.contextWindow).toBe(1_050_000);
         expect(c.maxOutputTokens).toBe(128_000);
         expect(c.reasoningEffort).toBe('openai-effort');
       }
@@ -246,7 +246,7 @@ describe('getModelCapabilities', () => {
       const caps = getModelCapabilities('openai', 'gpt-5.4-pro');
       expect(caps).not.toBeNull();
       const c = caps as ModelCapabilities;
-      expect(c.contextWindow).toBe(1_000_000);
+      expect(c.contextWindow).toBe(1_050_000);
       expect(c.maxOutputTokens).toBe(128_000);
       expect(c.reasoningEffort).toBe('openai-effort');
     });
@@ -367,20 +367,23 @@ describe('getModelCapabilities', () => {
   // ── reasoningEffort (v6.5.0) — claude-fable-5/opus-4-8/sonnet-5 rows ──────
 
   describe('reasoningEffort — claude-fable-5/opus-4-8/sonnet-5 rows', () => {
-    it.each(['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-5'] as const)(
-      '%s (anthropic): anthropic-effort, verified capability figures',
-      (model) => {
-        const caps = getModelCapabilities('anthropic', model);
-        expect(caps).not.toBeNull();
-        const c = caps as ModelCapabilities;
-        expect(c.contextWindow).toBe(1_000_000);
-        expect(c.maxOutputTokens).toBe(128_000);
-        expect(c.mediaInput.image.base64).toBe(true);
-        expect(c.mediaInput.image.url).toBe(true);
-        expect(c.mediaInput.document.pdfBase64).toBe(true);
-        expect(c.reasoningEffort).toBe('anthropic-effort');
-      }
-    );
+    it.each([
+      'claude-fable-5',
+      'claude-opus-4-8',
+      'claude-sonnet-5',
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+    ] as const)('%s (anthropic): anthropic-effort, verified capability figures', (model) => {
+      const caps = getModelCapabilities('anthropic', model);
+      expect(caps).not.toBeNull();
+      const c = caps as ModelCapabilities;
+      expect(c.contextWindow).toBe(1_000_000);
+      expect(c.maxOutputTokens).toBe(128_000);
+      expect(c.mediaInput.image.base64).toBe(true);
+      expect(c.mediaInput.image.url).toBe(true);
+      expect(c.mediaInput.document.pdfBase64).toBe(true);
+      expect(c.reasoningEffort).toBe('anthropic-effort');
+    });
   });
 
   // ── reasoningEffort — null default across every Perplexity/DeepSeek row ───
@@ -512,5 +515,53 @@ describe('getModelCapabilities — xai', () => {
 
   it('returns null for an unknown xai model', () => {
     expect(getModelCapabilities('xai', 'grok-99')).toBeNull();
+  });
+});
+
+// ── 2026-10-04 models/pricing refresh ───────────────────────────────────────
+
+describe('getModelCapabilities — 2026-10-04 refresh', () => {
+  it.each(['gpt-6-sol', 'gpt-6.1-sol', 'gpt-6-luna'] as const)(
+    '%s (openai): 1.05M context, 128k output, openai-effort, json-schema',
+    (model) => {
+      const c = getModelCapabilities('openai', model) as ModelCapabilities;
+      expect(c).not.toBeNull();
+      expect(c.contextWindow).toBe(1_050_000);
+      expect(c.maxOutputTokens).toBe(128_000);
+      expect(c.tools).toBe(true);
+      expect(c.structuredOutput).toBe('json-schema');
+      expect(c.reasoningEffort).toBe('openai-effort');
+    }
+  );
+
+  it('deepseek-flash: 1,048,576 context, 393,216 output, image input still false (provider does not send it)', () => {
+    const c = getModelCapabilities('deepseek', 'deepseek-flash') as ModelCapabilities;
+    expect(c).not.toBeNull();
+    expect(c.contextWindow).toBe(1_048_576);
+    expect(c.maxOutputTokens).toBe(393_216);
+    expect(c.mediaInput.image).toEqual({ base64: false, url: false });
+    expect(c.reasoningEffort).toBeNull();
+  });
+
+  it('deepseek-v4-pro limits updated to 1,048,576 / 393,216', () => {
+    const c = getModelCapabilities('deepseek', 'deepseek-v4-pro') as ModelCapabilities;
+    expect(c.contextWindow).toBe(1_048_576);
+    expect(c.maxOutputTokens).toBe(393_216);
+  });
+
+  it('corrected limits: opus-4-6 / sonnet-4-6 1M/128k, haiku-4-5 64k output, gemini-3.1-flash-lite 65_536 output', () => {
+    for (const model of ['claude-opus-4-6', 'claude-sonnet-4-6']) {
+      const c = getModelCapabilities('anthropic', model) as ModelCapabilities;
+      expect(c.contextWindow).toBe(1_000_000);
+      expect(c.maxOutputTokens).toBe(128_000);
+    }
+    for (const model of ['claude-haiku-4-5', 'claude-haiku-4-5-20251001']) {
+      expect((getModelCapabilities('anthropic', model) as ModelCapabilities).maxOutputTokens).toBe(
+        64_000
+      );
+    }
+    expect(
+      (getModelCapabilities('gemini', 'gemini-3.1-flash-lite') as ModelCapabilities).maxOutputTokens
+    ).toBe(65_536);
   });
 });

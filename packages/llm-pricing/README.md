@@ -167,21 +167,21 @@ Anthropic has two cache write tiers. The toolkit's `providerOptions.promptCache:
 
 O-series and `gpt-5.x`/`gpt-6` reasoning-family models bill reasoning tokens against `outputPer1M` but do not return them in the response. `usage.outputTokens` is therefore higher than visible output tokens. `computeCost()` returns the correct billing total but sets `isPartial: true` so consumers know the visible output cost is a floor, not the exact computation cost.
 
-`gpt-6-astra` additionally has a long-context tier, same mechanism as the Gemini models above but with its own threshold:
+`gpt-6-astra` additionally has a long-context tier, same mechanism as the Gemini models above but with its own threshold (as of 2026-10-04 the same 272K rule also applies to `gpt-6-sol`, `gpt-6.1-sol`, `gpt-6-luna`, `gpt-5.6-sol/terra/luna`, `gpt-5.5`, `gpt-5.4` and `gpt-5.4-pro`; see each row's `longContext*` fields):
 
 - `inputTokens ≤ 272 000` → standard rates (`inputPer1M` $10.00, `outputPer1M` $50.00)
 - `inputTokens > 272 000` → the **entire request** bills at `longContextInputPer1M` ($20.00, 2x) and `longContextOutputPer1M` ($75.00, 1.5x) — not just the excess over the threshold.
 
 ### DeepSeek — deprecated aliases
 
-`deepseek-chat` and `deepseek-reasoner` are deprecated upstream — both now route to `deepseek-v4-flash` server-side. The pricing table includes them with the same rates as `deepseek-v4-flash`. `computeCost()` emits a `pricing_deprecated_alias` log event (via the configured `PricingLogger`, see [Logging](#logging)) when it resolves through a deprecated alias.
+`deepseek-chat` and `deepseek-reasoner` are deprecated upstream — both IDs are fully retired upstream (2026-07-24). The pricing table keeps them (with `deprecatedAliasFor: 'deepseek-flash'`) at their own historical stored rates for cost history. `deepseek-v4-flash` is likewise a legacy name now served by `deepseek-flash` and billed at the Flash price (0.15 / 0.60 / 0.003 per 1M, off-peak baseline). `computeCost()` emits a `pricing_deprecated_alias` log event (via the configured `PricingLogger`, see [Logging](#logging)) when it resolves through a deprecated alias.
 
 Use the canonical IDs:
 
 | Canonical | Notes |
 |---|---|
-| `deepseek-v4-flash` | General + reasoning (thinking mode). Default. |
-| `deepseek-v4-pro` | High-capability. Promotional discount expires 2026-05-31. |
+| `deepseek-flash` | DeepSeek-V4.1-Flash. General + reasoning (thinking mode). Default. |
+| `deepseek-v4-pro` | High-capability. |
 
 ### Perplexity — partial coverage
 
@@ -193,7 +193,7 @@ Perplexity bills token costs **plus** per-request fees based on search context s
 
 | Event | When |
 |---|---|
-| `pricing_deprecated_alias` | A deprecated model alias resolved (e.g. `deepseek-chat` → `deepseek-v4-flash`) |
+| `pricing_deprecated_alias` | A deprecated model alias resolved (e.g. `deepseek-chat` → `deepseek-flash`) |
 | `pricing_date_strip_fallback` | A dated model ID matched its base alias via date-strip (e.g. `gpt-5.4-mini-2026-03-17` → `gpt-5.4-mini`) |
 | `pricing_unknown_model` | No pricing data for `(provider, model)` — returns zero cost with `isPartial: true` |
 | `pricing_fetch_failed` | `fetchRemoteTable()` fell back to the bundled table |
