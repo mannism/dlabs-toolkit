@@ -234,7 +234,11 @@ OpenAI has implicit automatic prompt caching on some models (no opt-in needed). 
 
 ## Perplexity — web-grounded responses
 
-The Perplexity provider returns real-time web-grounded answers with source citations. Use it via `createClient` or `createClientFromEnv`:
+The Perplexity provider returns real-time web-grounded answers with source citations.
+
+**Sonar migration status (as of 2026-10-05).** Perplexity states Sonar Chat Completions support ended 2026-09-27; synchronous and streaming requests are being reformulated as Agent API requests, rolling out per model. This provider still works as of 2026-10-05 (smoke verified). Billing of reformulated calls and response-shape stability are not verified, and `cost.isPartial` is `true` for Sonar models because per-request fees are not modeled. Consumers should watch `response.model` and citations for shape changes. Details: `proj-plan/dlabs-toolkit/research/tom-llm-models-pricing-2026-10-04.md` section 7.
+
+Use it via `createClient` or `createClientFromEnv`:
 
 ```typescript
 const client = createClientFromEnv('perplexity', 'sonar');
