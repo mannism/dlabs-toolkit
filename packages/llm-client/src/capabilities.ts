@@ -60,6 +60,7 @@ export type LlmProvider = LlmClientConfig['provider'];
  *                        'anthropic-effort'       = output_config.effort (low/medium/high/xhigh/max).
  *                        'openai-effort'          = reasoning.effort (all 7 LlmReasoningEffort values).
  *                        'gemini-thinking-level'  = thinkingConfig.thinkingLevel (minimal/low/medium/high).
+ *                        'xai-effort'             = reasoning.effort (minimal/low/medium/high/xhigh; 'none'/'max' rejected).
  *                        null = this model's provider doesn't support the field, or (for Anthropic/
  *                        OpenAI/Gemini specifically) this model has not been confirmed to support it.
  *                        Cross-reference the tag against providers/reasoning-effort.ts's exported
@@ -88,7 +89,12 @@ export interface ModelCapabilities {
     /** Gemini media-resolution support tier (v6.7.0+). See the field doc above. */
     mediaResolution: 'request' | 'part' | null;
   };
-  reasoningEffort: 'anthropic-effort' | 'openai-effort' | 'gemini-thinking-level' | null;
+  reasoningEffort:
+    | 'anthropic-effort'
+    | 'openai-effort'
+    | 'gemini-thinking-level'
+    | 'xai-effort'
+    | null;
 }
 
 // ─── Capability table ─────────────────────────────────────────────────────────
@@ -97,7 +103,7 @@ export interface ModelCapabilities {
  * ISO 8601 date the capability table was last verified against provider documentation.
  * Compare against Date.now() to detect staleness.
  */
-export const CAPABILITIES_VERSIONED_AT = '2026-09-05';
+export const CAPABILITIES_VERSIONED_AT = '2026-10-04';
 
 /** Provider-keyed, model-keyed capability lookup table. */
 const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> = {
@@ -991,6 +997,161 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       streamStructured: false,
       mediaInput: {
         image: { base64: false, url: false },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
+      reasoningEffort: null,
+    },
+  },
+
+  // ── xAI (Grok) ─────────────────────────────────────────────────────────────
+  //
+  // Verified live 2026-10-04 against GET https://api.x.ai/v1/models (context_length) and
+  // GET /v1/language-models (modalities, capabilities.reasoning_effort).
+  // xAI publishes NO separate max-output cap: maxOutputTokens is set equal to contextWindow
+  // (output shares the context window) — treat as an upper bound, not a documented limit.
+  // The Responses API at https://api.x.ai/v1 serves every call type. Server-side tools
+  // (x_search, web_search, code_interpreter, file_search, mcp, image_generation) are passed via
+  // providerOptions.serverTools — see XaiServerTool.
+  // tools: true / parallelTools: true — caller function tools work alongside server tools.
+  // structuredOutput: 'json-schema' — strict text.format json_schema works, incl. with tools.
+  // promptCache: null — xAI caches automatically server-side; there is no opt-in marker.
+  // mediaInput: image base64 + url only. PDF input is out of scope (Files API not wired).
+  // reasoningEffort: 'xai-effort' for models whose /v1/language-models entry lists
+  //   capabilities.reasoning_effort (grok-4.7/4.6/4.5/4.3). null for the rest: they list none.
+  //   Pre-flight rejection of effort on null models lives in providers/xai.ts.
+  xai: {
+    'grok-4.7': {
+      contextWindow: 500_000,
+      maxOutputTokens: 500_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'xai-effort',
+    },
+    'grok-4.6': {
+      contextWindow: 500_000,
+      maxOutputTokens: 500_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'xai-effort',
+    },
+    'grok-4.5': {
+      contextWindow: 500_000,
+      maxOutputTokens: 500_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'xai-effort',
+    },
+    'grok-4.3': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 1_000_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'xai-effort',
+    },
+    'grok-4.20-0309-reasoning': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 1_000_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
+      reasoningEffort: null,
+    },
+    'grok-4.20-0309-non-reasoning': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 1_000_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
+      reasoningEffort: null,
+    },
+    'grok-4.20-multi-agent-0309': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 1_000_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
+      reasoningEffort: null,
+    },
+    'grok-build-0.1': {
+      contextWindow: 256_000,
+      maxOutputTokens: 256_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
         document: { pdfBase64: false },
         mediaResolution: null,
       },

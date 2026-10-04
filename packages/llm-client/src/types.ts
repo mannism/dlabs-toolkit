@@ -134,7 +134,7 @@
  *   for all other providers (not yet implemented there — tracked as a follow-up).
  */
 
-import type { LlmCost, PricingTable } from '@diabolicallabs/llm-pricing';
+import type { LlmCost, PricingTable, ServerToolUsageKey } from '@diabolicallabs/llm-pricing';
 import type { z } from 'zod';
 
 // ─── RetryConfig ─────────────────────────────────────────────────────────────
@@ -414,8 +414,9 @@ export interface LlmMessage {
  * go in LlmCallOptions.
  */
 export interface LlmClientConfig {
-  // Full 5-provider union — gemini, deepseek, perplexity are type-only stubs in Week 2
-  provider: 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'perplexity';
+  // Full 6-provider union. 'xai' (Grok) uses the OpenAI Responses API at https://api.x.ai/v1
+  // and adds server-side tools (x_search, web_search, ...) via providerOptions.serverTools.
+  provider: 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'perplexity' | 'xai';
   /**
    * Model identifier. Accepts a string or an array of strings for provider failover (v1.2.0+).
    * When an array is passed, the first element is the primary model. On errors matching
@@ -574,7 +575,96 @@ export interface LlmUsage {
    * currently report this breakdown — left undefined, never synthesized.
    */
   reasoningTokens?: number;
+  /**
+   * Provider-side server tool usage counts (xai only). camelCase mirror of xAI's
+   * `usage.server_side_tool_usage_details`; counts of zero are omitted. Priced by
+   * @diabolicallabs/llm-pricing into LlmCost.serverTools. Undefined for all other providers.
+   */
+  serverToolUsage?: Partial<Record<ServerToolUsageKey, number>>;
+  /**
+   * The cost xAI itself billed for this call, in USD (xai only): `cost_in_usd_ticks / 1e10`.
+   * Present even when LlmClientConfig.pricing is not set, and independent of the toolkit-computed
+   * LlmCost, so callers can reconcile the two. Undefined for all other providers.
+   */
+  providerReportedCostUsd?: number;
 }
+
+/**
+ * A generated image returned by a provider-side image tool (xai image_generation).
+ * `data` is the base64-encoded image bytes (no data: URL prefix).
+ */
+export interface LlmImage {
+  data: string;
+  mediaType: 'image/jpeg';
+  /** The prompt the model used to generate the image, when reported. */
+  prompt?: string;
+}
+
+/** Server-side tool kinds a provider can run on its own infrastructure (xai). */
+export type LlmServerToolType =
+  | 'xSearch'
+  | 'webSearch'
+  | 'codeInterpreter'
+  | 'fileSearch'
+  | 'mcp'
+  | 'imageGeneration';
+
+/**
+ * Audit-trail entry for one server-side tool invocation (xai). Never carries MCP
+ * `authorization` or `headers` (those are request secrets, not response data).
+ */
+export interface LlmServerToolCall {
+  type: LlmServerToolType;
+  /** Provider tool name where reported, e.g. 'x_keyword_search' or an MCP tool name. */
+  name?: string;
+  /** Provider-reported status, e.g. 'completed'. */
+  status: string;
+  /** Tool input as reported (query JSON, code, prompt). Large payloads are not truncated. */
+  input?: string;
+  /** Source URLs the tool consulted (web_search_call.action.sources). */
+  sources?: string[];
+  /** MCP server label (type 'mcp' only). */
+  serverLabel?: string;
+}
+
+/**
+ * xAI server-side tools, in-process camelCase form. Mapped to the snake_case wire shape of
+ * `POST /v1/responses` at the provider boundary. Pass via `providerOptions.serverTools`.
+ *
+ * Validation limits (enforced pre-flight, no network call): allow/exclude lists are mutually
+ * exclusive; at most 20 X handles and 5 domains; dates are `YYYY-MM-DD`.
+ */
+export type XaiServerTool =
+  | {
+      type: 'xSearch';
+      allowedXHandles?: string[];
+      excludedXHandles?: string[];
+      fromDate?: string;
+      toDate?: string;
+      enableImageUnderstanding?: boolean;
+      enableVideoUnderstanding?: boolean;
+    }
+  | {
+      type: 'webSearch';
+      allowedDomains?: string[];
+      excludedDomains?: string[];
+      enableImageUnderstanding?: boolean;
+      enableImageSearch?: boolean;
+    }
+  | { type: 'codeInterpreter' }
+  | { type: 'fileSearch'; vectorStoreIds: string[]; maxNumResults?: number }
+  | {
+      type: 'mcp';
+      serverUrl: string;
+      serverLabel: string;
+      serverDescription?: string;
+      allowedTools?: string[];
+      /** Sent to the MCP server only. Never logged and never echoed in serverToolCalls. */
+      authorization?: string;
+      /** Sent to the MCP server only. Never logged and never echoed in serverToolCalls. */
+      headers?: Record<string, string>;
+    }
+  | { type: 'imageGeneration' };
 
 /**
  * Return value from complete(). Carries the model's text content alongside
@@ -618,8 +708,9 @@ export interface LlmResponse {
    */
   idSource: 'provider' | 'synthesized';
   /**
-   * Web citations returned by the Perplexity provider.
-   * Populated only when the Perplexity API returns source references.
+   * Web citations returned by the Perplexity and xai providers.
+   * Perplexity: the API's citations array. xai: `url_citation` annotations on the output text
+   * plus `web_search_call` sources. Populated only when source references are present.
    * Always undefined for Anthropic, OpenAI, Gemini, and DeepSeek.
    * Deduplicated by URL within a single response.
    */
@@ -627,6 +718,10 @@ export interface LlmResponse {
     url: string;
     title?: string;
   }>;
+  /** Images generated by a server-side image tool (xai image_generation). */
+  images?: LlmImage[];
+  /** Audit trail of server-side tool invocations the provider ran for this call (xai). */
+  serverToolCalls?: LlmServerToolCall[];
   /**
    * USD cost breakdown for this call (v1.1.0+).
    * Populated when LlmClientConfig.pricing is set.
@@ -715,6 +810,15 @@ export interface LlmCallOptions
    * - `structuredMode?: 'prompt'` — force prompt-only path in structured() even when a
    *   Zod 4 schema is passed. (v0.4.0+)
    *
+   * **xAI (Grok):**
+   * - `serverTools?: XaiServerTool[]` — server-side tools Grok runs itself (x_search, web_search,
+   *   code_interpreter, file_search, mcp, image_generation). camelCase here, mapped to snake_case
+   *   on the wire. Validated pre-flight. Results: citations, images, serverToolCalls, usage.
+   * - `maxToolCalls?: number` — cap on total server-side tool calls. Strongly recommended: one
+   *   open-ended X query used 16 tool calls and $0.34.
+   * - `inlineCitations?: boolean` — ask xAI to embed inline citation markers in the text.
+   *   Set `timeoutMs` to at least 120000 when serverTools are set.
+   *
    * **Perplexity:**
    * - `search_recency_filter?: 'month' | 'week' | 'day' | 'hour'` — limit search results by age.
    * - `search_domain_filter?: string[]` — allowlist of domains to include in search.
@@ -741,6 +845,12 @@ export interface LlmCallOptions
 export interface LlmStreamChunk {
   token: string;
   usage?: LlmUsage; // present only on the final chunk
+  /** xai only, final chunk only: citations accumulated from annotation events (deduplicated by URL). */
+  citations?: Array<{ url: string; title?: string }>;
+  /** xai only, final chunk only: images generated by a server-side image tool. */
+  images?: LlmImage[];
+  /** xai only, final chunk only: server-side tool invocations the provider ran. */
+  serverToolCalls?: LlmServerToolCall[];
 }
 
 /**
@@ -871,6 +981,10 @@ export type LlmStructuredResponse<T> = {
   usage: LlmUsage;
   latencyMs: number;
   citations?: Array<{ url: string; title?: string }>;
+  /** Images generated by a server-side image tool (xai image_generation). */
+  images?: LlmImage[];
+  /** Audit trail of server-side tool invocations the provider ran for this call (xai). */
+  serverToolCalls?: LlmServerToolCall[];
   /**
    * USD cost breakdown for this call (v1.1.0+).
    * Populated when LlmClientConfig.pricing is set.
@@ -1047,6 +1161,15 @@ export interface LlmToolResponse {
     | 'content_filter'
     | 'pause_turn'
     | 'refusal';
+  /** Web citations (xai): url_citation annotations + web_search sources, deduplicated by URL. */
+  citations?: Array<{ url: string; title?: string }>;
+  /** Images generated by a server-side image tool (xai image_generation). */
+  images?: LlmImage[];
+  /**
+   * Audit trail of server-side tool invocations (xai). Server tool calls are reported here and
+   * never appear in toolCalls — only caller-defined function calls become LlmToolCall.
+   */
+  serverToolCalls?: LlmServerToolCall[];
   /**
    * USD cost breakdown for this call (v1.1.0+).
    * Populated when LlmClientConfig.pricing is set.
@@ -1092,7 +1215,17 @@ export interface LlmCallWithToolsOptions extends LlmCallOptions {
  */
 export type LlmStreamStructuredEvent<T> =
   | { type: 'token'; token: string }
-  | { type: 'done'; data: T; usage: LlmUsage };
+  | {
+      type: 'done';
+      data: T;
+      usage: LlmUsage;
+      /** xai only: citations accumulated during the stream (deduplicated by URL). */
+      citations?: Array<{ url: string; title?: string }>;
+      /** xai only: images generated by a server-side image tool. */
+      images?: LlmImage[];
+      /** xai only: server-side tool invocations the provider ran. */
+      serverToolCalls?: LlmServerToolCall[];
+    };
 
 // ─── Hooks API (v1.5.0) ──────────────────────────────────────────────────────
 

@@ -1,8 +1,8 @@
 /**
  * @diabolicallabs/llm-client
  *
- * Unified LLM API across 5 providers — Anthropic, OpenAI (Responses API),
- * Gemini (@google/genai v2.x), DeepSeek, and Perplexity. Provides a single
+ * Unified LLM API across 6 providers — Anthropic, OpenAI (Responses API),
+ * Gemini (@google/genai v2.x), DeepSeek, Perplexity, and xAI (Grok). Provides a single
  * LlmClient interface with five call types:
  *   - complete()         — single-shot completion
  *   - stream()           — token streaming
@@ -10,7 +10,7 @@
  *   - withTools()        — native tool calling
  *   - streamStructured() — token streaming + Zod-validated output
  *
- * Features (all 5 providers):
+ * Features (all 6 providers):
  *   - 18-kind LlmErrorKind taxonomy with .kind discriminator
  *   - Configurable retry (exponential backoff + jitter, respect Retry-After)
  *   - Provider failover via fallbackOn kinds
@@ -19,7 +19,9 @@
  *   - Pre-call (beforeCall) and post-call (afterCall) hooks; usage populated
  *     for all 5 call types including streaming
  *   - providerOptions escape hatch for provider-specific call knobs
- *   - Web-grounded citations (Perplexity)
+ *   - Web-grounded citations (Perplexity, xAI)
+ *   - xAI server-side tools: x_search, web_search, code_interpreter, file_search, mcp,
+ *     image_generation (providerOptions.serverTools) with provider-reported cost
  *   - Response IDs (id + idSource)
  *   - Optional per-response cost via @diabolicallabs/llm-pricing
  *   - Remote pricing table via pricing.remoteUrl (stale-while-revalidate, never-throws)
@@ -37,7 +39,7 @@ export { linkedAbortController } from './abort.js';
 // Provider capability matrix — getModelCapabilities(provider, model) → ModelCapabilities | null (v1.4.0+)
 export type { LlmProvider, ModelCapabilities } from './capabilities.js';
 export { CAPABILITIES_VERSIONED_AT, getModelCapabilities } from './capabilities.js';
-// Factory functions — all five providers fully implemented
+// Factory functions — all six providers fully implemented
 export { createClient, createClientFromEnv } from './client.js';
 // Pluggable logger — route diagnostic events through your application logger (v4.1.0+)
 export type { LlmClientLogger } from './logger.js';
@@ -67,11 +69,14 @@ export type {
   LlmFileState,
   LlmFilesApi,
   LlmHooks,
+  LlmImage,
   LlmImageMediaType,
   LlmMessage,
   // Reasoning-effort passthrough — v6.3.0+
   LlmReasoningEffort,
   LlmResponse,
+  LlmServerToolCall,
+  LlmServerToolType,
   LlmSkipResult,
   LlmStreamChunk,
   LlmStreamStructuredEvent,
@@ -83,6 +88,7 @@ export type {
   LlmUsage,
   RetryConfig,
   RetryStrategy,
+  XaiServerTool,
 } from './types.js';
 // Error class and kind discriminator — exported as value, not just type
 export { LlmError } from './types.js';

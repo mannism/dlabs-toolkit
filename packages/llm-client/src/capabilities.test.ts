@@ -145,8 +145,8 @@ describe('getModelCapabilities', () => {
     expect(new Date(CAPABILITIES_VERSIONED_AT).getTime()).not.toBeNaN();
   });
 
-  it('CAPABILITIES_VERSIONED_AT is 2026-09-05 (mediaResolution + gemini-3.8-flash backfill)', () => {
-    expect(CAPABILITIES_VERSIONED_AT).toBe('2026-09-05');
+  it('CAPABILITIES_VERSIONED_AT is 2026-10-04 (xai provider block added)', () => {
+    expect(CAPABILITIES_VERSIONED_AT).toBe('2026-10-04');
   });
 
   // ── mediaInput capabilities (v4.2.0) ──────────────────────────────────────

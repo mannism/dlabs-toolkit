@@ -35,7 +35,7 @@
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 /** Supported provider identifiers. Must match LlmClientConfig.provider. */
-export type PoolProvider = 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'perplexity';
+export type PoolProvider = 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'perplexity' | 'xai';
 
 /** Per-provider concurrency and rate-limit configuration. */
 export interface PoolConfig {

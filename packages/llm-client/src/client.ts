@@ -10,6 +10,7 @@
  *   'gemini'     → fully implemented (Week 3)
  *   'deepseek'   → fully implemented (Week 3)
  *   'perplexity' → fully implemented (Week 5) — search-grounded, citations, providerOptions
+ *   'xai'        → fully implemented — Grok via OpenAI Responses API + server-side tools
  *
  * v1.1.0 — optional cost computation:
  *   When config.pricing is set, a thin wrapper attaches cost?: LlmCost to every
@@ -30,6 +31,7 @@
  *   failover — they just see a config with a resolved model string per attempt.
  */
 
+import type { ServerToolUsageKey } from '@diabolicallabs/llm-pricing';
 import { runAfterCall, runBeforeCall } from './hooks.js';
 import { getLogger } from './logger.js';
 import { createAnthropicProvider } from './providers/anthropic.js';
@@ -37,6 +39,7 @@ import { createDeepSeekProvider } from './providers/deepseek.js';
 import { createGeminiProvider } from './providers/gemini.js';
 import { createOpenAIProvider } from './providers/openai.js';
 import { createPerplexityProvider } from './providers/perplexity.js';
+import { createXaiProvider } from './providers/xai.js';
 import type {
   LlmAfterCallContext,
   LlmCallContext,
@@ -104,6 +107,8 @@ function createProviderClient(config: LlmClientConfig & { model: string }): LlmC
       return createDeepSeekProvider(config);
     case 'perplexity':
       return createPerplexityProvider(config);
+    case 'xai':
+      return createXaiProvider(config);
     default: {
       // TypeScript exhaustiveness check
       const _exhaustive: never = config.provider;
@@ -416,6 +421,7 @@ function wrapWithPricing(base: LlmClient, config: LlmClientConfig): LlmClient {
       totalTokens: number;
       cacheCreationTokens?: number;
       cacheReadTokens?: number;
+      serverToolUsage?: Partial<Record<ServerToolUsageKey, number>>;
     };
     provider: string;
     model: string;
@@ -425,6 +431,7 @@ function wrapWithPricing(base: LlmClient, config: LlmClientConfig): LlmClient {
     output: number;
     cacheRead: number;
     cacheWrite: number;
+    serverTools?: number;
     total: number;
     currency: 'USD';
     isPartial: boolean;
@@ -462,6 +469,7 @@ function wrapWithPricing(base: LlmClient, config: LlmClientConfig): LlmClient {
     totalTokens: number;
     cacheCreationTokens?: number;
     cacheReadTokens?: number;
+    serverToolUsage?: Partial<Record<ServerToolUsageKey, number>>;
   }
 
   function buildCostOpts(usage: UsageShape, model: string) {
@@ -819,6 +827,7 @@ function wrapWithHooks(base: LlmClient, config: LlmClientConfig): LlmClient {
  *   gemini     → GOOGLE_AI_API_KEY
  *   deepseek   → DEEPSEEK_API_KEY
  *   perplexity → PERPLEXITY_API_KEY — recommended default model: 'sonar'
+ *   xai        → XAI_API_KEY — recommended default model: 'grok-4.7'
  *
  * Throws LlmError if the required env var is not set.
  */
@@ -839,6 +848,7 @@ function resolveApiKey(provider: LlmClientConfig['provider']): string {
     gemini: 'GOOGLE_AI_API_KEY',
     deepseek: 'DEEPSEEK_API_KEY',
     perplexity: 'PERPLEXITY_API_KEY',
+    xai: 'XAI_API_KEY',
   };
 
   const envVar = envVarMap[provider];
