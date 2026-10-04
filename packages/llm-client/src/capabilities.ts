@@ -126,6 +126,45 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
   // streamStructured: true — Anthropic streams content_block_delta events from the
   //   forced tool-use path; accumulated + Zod-validated at end.
   anthropic: {
+    // claude-opus-5-5 (2026-10-04): 1M context / 128k max output and effort levels low/medium/
+    // high/xhigh/max verified live against api.anthropic.com/v1/models (capabilities block) and
+    // platform.claude.com/docs/en/models/overview (Tom's report 2026-10-04). Adaptive thinking only.
+    'claude-opus-5-5': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: 'ephemeral',
+      structuredOutput: 'tool-use',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'anthropic-effort',
+    },
+    // claude-sonnet-5-5 (2026-10-04): same shape as claude-sonnet-5; 1M / 128k verified live
+    // against api.anthropic.com/v1/models (Tom's report 2026-10-04).
+    'claude-sonnet-5-5': {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: 'ephemeral',
+      structuredOutput: 'tool-use',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'anthropic-effort',
+    },
     // claude-opus-5 (v6.3.0+): context window (1M) and max output tokens (128k) verified
     // live against platform.claude.com/docs/en/about-claude/models/whats-new-opus-5 (2026-07-29).
     // reasoningEffort confirmed via platform.claude.com/docs/en/build-with-claude/effort, which
@@ -233,7 +272,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
     },
     'claude-opus-4-7': {
       contextWindow: 1_000_000,
-      maxOutputTokens: 32_000,
+      maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
       parallelTools: true,
@@ -249,8 +288,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       reasoningEffort: 'anthropic-effort',
     },
     'claude-opus-4-6': {
-      contextWindow: 200_000,
-      maxOutputTokens: 32_000,
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
       parallelTools: true,
@@ -266,8 +305,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       reasoningEffort: 'anthropic-effort',
     },
     'claude-sonnet-4-6': {
-      contextWindow: 200_000,
-      maxOutputTokens: 64_000,
+      contextWindow: 1_000_000,
+      maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
       parallelTools: true,
@@ -301,7 +340,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
     },
     'claude-haiku-4-5': {
       contextWindow: 200_000,
-      maxOutputTokens: 8_096,
+      maxOutputTokens: 64_000,
       streaming: true,
       tools: true,
       parallelTools: true,
@@ -318,7 +357,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
     },
     'claude-haiku-4-5-20251001': {
       contextWindow: 200_000,
-      maxOutputTokens: 8_096,
+      maxOutputTokens: 64_000,
       streaming: true,
       tools: true,
       parallelTools: true,
@@ -383,13 +422,13 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
   //   reasoning token budget which is additional.
   openai: {
     // gpt-5.6 family (v6.3.0+): Sol/Terra/Luna are the three tiers; 'gpt-5.6' the bare alias
-    // routes to Sol. Context window (~1.05M, rounded to 1_000_000 for consistency with sibling
-    // gpt-5.x rows) and max output tokens (128k) verified live against
+    // routes to Sol. Context window 1,050,000 (updated from a rounded 1_000_000 on
+    // 2026-10-04) and max output tokens (128k) verified live against
     // developers.openai.com/api/docs/guides/reasoning + /models/gpt-5.6-sol (2026-07-29).
     // reasoningEffort: 'openai-effort' confirmed for all three — the reasoning guide explicitly
     // names gpt-5.6-sol/terra/luna as reasoning.effort-capable models.
     'gpt-5.6-sol': {
-      contextWindow: 1_000_000,
+      contextWindow: 1_050_000,
       maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
@@ -406,7 +445,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.6-terra': {
-      contextWindow: 1_000_000,
+      contextWindow: 1_050_000,
       maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
@@ -423,7 +462,62 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.6-luna': {
-      contextWindow: 1_000_000,
+      contextWindow: 1_050_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'openai-effort',
+    },
+    // gpt-6-sol / gpt-6.1-sol / gpt-6-luna (2026-10-04): 1,050,000 context and 128,000 max output
+    // per developers.openai.com/api/docs/models/{id} (Tom's report 2026-10-04); same shape as
+    // gpt-6-astra. Reasoning effort: gpt-6-sol/luna none..max, gpt-6.1-sol low..max (the 'openai-effort'
+    // dialect tag is per-family; the provider validates exact values).
+    'gpt-6-sol': {
+      contextWindow: 1_050_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'openai-effort',
+    },
+    'gpt-6.1-sol': {
+      contextWindow: 1_050_000,
+      maxOutputTokens: 128_000,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      mediaInput: {
+        image: { base64: true, url: true },
+        document: { pdfBase64: true },
+        mediaResolution: null,
+      },
+      reasoningEffort: 'openai-effort',
+    },
+    'gpt-6-luna': {
+      contextWindow: 1_050_000,
       maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
@@ -463,8 +557,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.5': {
-      contextWindow: 1_000_000,
-      maxOutputTokens: 32_768,
+      contextWindow: 1_050_000,
+      maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
       parallelTools: true,
@@ -480,8 +574,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.5-pro': {
-      contextWindow: 1_000_000,
-      maxOutputTokens: 32_768,
+      contextWindow: 1_050_000,
+      maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
       parallelTools: true,
@@ -497,8 +591,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.4': {
-      contextWindow: 256_000,
-      maxOutputTokens: 32_768,
+      contextWindow: 1_050_000,
+      maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
       parallelTools: true,
@@ -514,8 +608,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       reasoningEffort: 'openai-effort',
     },
     'gpt-5.4-mini': {
-      contextWindow: 256_000,
-      maxOutputTokens: 32_768,
+      contextWindow: 400_000,
+      maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
       parallelTools: true,
@@ -557,12 +651,12 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
     // gpt-5.5-pro ($30/$180 per 1M, pricing/table.json), but its capability shape diverges
     // from gpt-5.5-pro's maxOutputTokens (32_768) — verified live against
     // developers.openai.com/api/docs/models/gpt-5.4-pro (2026-08-08): context window
-    // 1,050,000 (rounded to 1_000_000 per the gpt-5.6 rounding convention above) and max
+    // 1,050,000 and max
     // output tokens 128,000. Function calling, vision, and file_search/PDF input confirmed
     // supported on the same page. reasoningEffort: 'openai-effort' confirmed — page lists
     // reasoning.effort levels medium/high/xhigh.
     'gpt-5.4-pro': {
-      contextWindow: 1_000_000,
+      contextWindow: 1_050_000,
       maxOutputTokens: 128_000,
       streaming: true,
       tools: true,
@@ -702,7 +796,7 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
     },
     'gemini-3.1-flash-lite': {
       contextWindow: 1_000_000,
-      maxOutputTokens: 8_192,
+      maxOutputTokens: 65_536,
       streaming: true,
       tools: true,
       parallelTools: false,
@@ -881,9 +975,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
   // responseIds: 'provider' — DeepSeek Chat Completions returns rawResponse.id.
   // streamStructured: true — DeepSeek streams Chat Completions deltas in json_object mode,
   //   accumulated + Zod-validated at end (v1.3.0).
-  // parallelTools: true — DeepSeek V4 (deepseek-v4-flash/pro) supports parallel_tool_calls
+  // parallelTools: true — DeepSeek V4 (deepseek-flash / deepseek-v4-flash / deepseek-v4-pro) supports parallel_tool_calls
   //   on Chat Completions.
-  // deepseek-v4-pro promotional pricing note: 75% discount expires 2026-05-31.
   //
   // deepseek-chat / deepseek-reasoner retirement (2026-08-18): DeepSeek fully retired both
   // IDs on 2026-07-24 15:59 UTC with no fallback alias — calls now error at DeepSeek's API.
@@ -893,9 +986,31 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
   // providers/deepseek.ts (assertNotRetiredModel), not here — this table is inspection-only
   // and was never wired into call dispatch.
   deepseek: {
+    // deepseek-flash (2026-10-04): canonical name for DeepSeek-V4.1-Flash; limits verified live against
+    // api.deepseek.com/models. The model accepts image input upstream, but providers/deepseek.ts does
+    // not send image blocks yet, so mediaInput stays false (follow-up). deepseek-v4-flash is a legacy
+    // name served by this model.
+    'deepseek-flash': {
+      contextWindow: 1_048_576,
+      maxOutputTokens: 393_216,
+      streaming: true,
+      tools: true,
+      parallelTools: true,
+      promptCache: null,
+      structuredOutput: 'json-schema',
+      responseIds: 'provider',
+      streamStructured: true,
+      // DeepSeek does not support vision or document input (June 2026).
+      mediaInput: {
+        image: { base64: false, url: false },
+        document: { pdfBase64: false },
+        mediaResolution: null,
+      },
+      reasoningEffort: null,
+    },
     'deepseek-v4-flash': {
-      contextWindow: 64_000,
-      maxOutputTokens: 8_192,
+      contextWindow: 1_048_576,
+      maxOutputTokens: 393_216,
       streaming: true,
       tools: true,
       parallelTools: true,
@@ -912,8 +1027,8 @@ const CAPABILITY_TABLE: Record<LlmProvider, Record<string, ModelCapabilities>> =
       reasoningEffort: null,
     },
     'deepseek-v4-pro': {
-      contextWindow: 64_000,
-      maxOutputTokens: 8_192,
+      contextWindow: 1_048_576,
+      maxOutputTokens: 393_216,
       streaming: true,
       tools: true,
       parallelTools: true,
