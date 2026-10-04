@@ -316,12 +316,12 @@ async function main(): Promise<void> {
   // ───────────────────────────────────────────────────────────────────────────
   // DEEPSEEK (skipped if DEEPSEEK_API_KEY is absent)
   // ───────────────────────────────────────────────────────────────────────────
-  section('DeepSeek — deepseek-chat');
+  section('DeepSeek — deepseek-flash');
 
   if (!process.env['DEEPSEEK_API_KEY']) {
     skipSection('deepseek', 'DEEPSEEK_API_KEY not set');
   } else {
-    const deepseek = await createClientFromEnv('deepseek', 'deepseek-chat', {
+    const deepseek = await createClientFromEnv('deepseek', 'deepseek-flash', {
       maxTokens: 256,
       maxRetries: 2,
     });

@@ -64,12 +64,16 @@ const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
  * Design decision (final — see
  * proj-plan/dlabs-toolkit/briefs/brief-deepseek-retired-model-routing-bug.md):
  * reject client-side, do not auto-remap. Silently rerouting `deepseek-chat` to
- * `deepseek-v4-flash` would change which model actually serves the request without
+ * `deepseek-flash` would change which model actually serves the request without
  * the caller knowing — a silent behavior/cost change, not a fix.
+ *
+ * 2026-10-04: the canonical Flash ID is now `deepseek-flash` (DeepSeek-V4.1-Flash).
+ * The legacy `deepseek-v4-flash` name is still accepted upstream and billed at the
+ * Flash price, but new callers should use `deepseek-flash`.
  */
 const RETIRED_MODEL_REPLACEMENT: Readonly<Record<string, string>> = {
-  'deepseek-chat': 'deepseek-v4-flash',
-  'deepseek-reasoner': 'deepseek-v4-flash',
+  'deepseek-chat': 'deepseek-flash',
+  'deepseek-reasoner': 'deepseek-flash',
 };
 
 /**

@@ -948,31 +948,31 @@ at DeepSeek's API. The canonical IDs are:
 
 | Model | API ID | Notes |
 |---|---|---|
-| V4 Flash | `deepseek-v4-flash` | General use and reasoning (thinking mode). **Canonical default.** |
-| V4 Pro | `deepseek-v4-pro` | High-capability tier. Promotional pricing active through 2026-05-31. |
+| V4.1 Flash | `deepseek-flash` | General use and reasoning (thinking mode). **Canonical default** (since 2026-10-04). Legacy name `deepseek-v4-flash` is still accepted upstream and billed at the Flash price. |
+| V4 Pro | `deepseek-v4-pro` | High-capability tier. |
 
 **Retired IDs are rejected client-side.** As of the 2026-08-18 retirement fix, calling
 any `llm-client` method (`complete`, `stream`, `structured`, `withTools`,
 `streamStructured`) with `model: 'deepseek-chat'` or `model: 'deepseek-reasoner'` throws
 an `LlmError({ kind: 'bad_request', retryable: false })` immediately — before any HTTP
-call reaches DeepSeek — naming the retired ID and pointing to `deepseek-v4-flash` as the
+call reaches DeepSeek — naming the retired ID and pointing to `deepseek-flash` as the
 replacement:
 
 | Retired ID | Replacement | Was |
 |---|---|---|
-| `deepseek-chat` | `deepseek-v4-flash` | DeepSeek-V3 |
-| `deepseek-reasoner` | `deepseek-v4-flash` (thinking mode) | DeepSeek-R1 |
+| `deepseek-chat` | `deepseek-flash` | DeepSeek-V3 |
+| `deepseek-reasoner` | `deepseek-flash` (thinking mode) | DeepSeek-R1 |
 
 This is a deliberate reject-fast design, not a silent remap: auto-rerouting
-`deepseek-chat` to `deepseek-v4-flash` would change which model actually serves the
+`deepseek-chat` to `deepseek-flash` would change which model actually serves the
 request without the caller knowing. Update call sites to the canonical IDs — there is no
 compatibility shim.
 
 Usage:
 
 ```typescript
-// Canonical V4 Flash (default — replaces deepseek-chat)
-const client = createClientFromEnv('deepseek', 'deepseek-v4-flash');
+// Canonical V4.1 Flash (default — replaces deepseek-chat)
+const client = createClientFromEnv('deepseek', 'deepseek-flash');
 
 // Canonical V4 Pro
 const client = createClientFromEnv('deepseek', 'deepseek-v4-pro');
