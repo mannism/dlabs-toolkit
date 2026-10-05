@@ -715,8 +715,9 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
     sonar: {
       inputPer1M: 1,
       notes:
-        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview',
+        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview. Per-request fees ($5-14 per 1K requests depending on context size) are not modeled, so isPartial is true by design.',
       outputPer1M: 1,
+      partialCostCoverage: true,
       sourceUrl: 'https://docs.perplexity.ai/guides/pricing',
       verifiedAt: '2026-07-25',
     },
@@ -732,16 +733,18 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
     'sonar-pro': {
       inputPer1M: 3,
       notes:
-        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview',
+        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview. Per-request fees ($5-14 per 1K requests depending on context size) are not modeled, so isPartial is true by design.',
       outputPer1M: 15,
+      partialCostCoverage: true,
       sourceUrl: 'https://docs.perplexity.ai/guides/pricing',
       verifiedAt: '2026-07-25',
     },
     'sonar-reasoning-pro': {
       inputPer1M: 2,
       notes:
-        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview',
+        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview. Per-request fees ($5-14 per 1K requests depending on context size) are not modeled, so isPartial is true by design.',
       outputPer1M: 8,
+      partialCostCoverage: true,
       sourceUrl: 'https://docs.perplexity.ai/guides/pricing',
       verifiedAt: '2026-07-25',
     },

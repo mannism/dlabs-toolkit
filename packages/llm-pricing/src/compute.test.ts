@@ -374,7 +374,7 @@ describe('computeCost — Perplexity', () => {
     expect(cost.input).toBeCloseTo(0.5, 5);
     expect(cost.output).toBeCloseTo(0.3, 5);
     expect(round(cost.total)).toBe(0.8);
-    expect(cost.isPartial).toBe(false);
+    expect(cost.isPartial).toBe(true);
   });
 
   it('sonar-pro: higher rate', () => {
@@ -384,7 +384,7 @@ describe('computeCost — Perplexity', () => {
     // Input: 0.1M × $3.00 = $0.30
     // Output: 0.05M × $15.00 = $0.75
     expect(round(cost.total)).toBe(1.05);
-    expect(cost.isPartial).toBe(false);
+    expect(cost.isPartial).toBe(true);
   });
 
   it('sonar-deep-research: isPartial = true', () => {
@@ -397,6 +397,15 @@ describe('computeCost — Perplexity', () => {
     expect(cost.isPartial).toBe(true); // partialCostCoverage
   });
 
+  it('sonar: isPartial = true by design, token-cost total unchanged', () => {
+    const usage = basicUsage(500_000, 300_000);
+    const cost = computeCost({ usage, provider: 'perplexity', model: 'sonar' });
+
+    // Per-request fees are not modeled; flag is set, token total is not altered
+    expect(cost.isPartial).toBe(true);
+    expect(round(cost.total)).toBe(0.8);
+  });
+
   it('sonar-reasoning-pro: standard cost', () => {
     const usage = basicUsage(200_000, 100_000);
     const cost = computeCost({ usage, provider: 'perplexity', model: 'sonar-reasoning-pro' });
@@ -404,7 +413,7 @@ describe('computeCost — Perplexity', () => {
     // Input: 0.2M × $2.00 = $0.40
     // Output: 0.1M × $8.00 = $0.80
     expect(round(cost.total)).toBe(1.2);
-    expect(cost.isPartial).toBe(false);
+    expect(cost.isPartial).toBe(true);
   });
 });
 

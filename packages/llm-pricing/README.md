@@ -185,7 +185,7 @@ Use the canonical IDs:
 
 ### Perplexity — partial coverage
 
-Perplexity bills token costs **plus** per-request fees based on search context size. `computeCost()` covers token costs only. `sonar-deep-research` additionally has citation token, search query, and reasoning token fees not in `LlmUsage`. For these models, `cost.isPartial` is always `true` — the total is a floor.
+Perplexity bills token costs **plus** per-request fees based on search context size. `computeCost()` covers token costs only. `sonar-deep-research` additionally has citation token, search query, and reasoning token fees not in `LlmUsage`. `cost.isPartial` is `true` for `sonar`, `sonar-pro`, `sonar-reasoning-pro` (per-request fees of $5-14 per 1K requests, by context size, are not modeled) and `sonar-deep-research` (per-request, citation token, search query, and reasoning token fees are not modeled). The total is a floor for all four.
 
 ## Logging
 

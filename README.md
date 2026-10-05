@@ -106,6 +106,8 @@ xAI (Grok) runs on the OpenAI Responses API at `https://api.x.ai/v1` and support
 
 Perplexity is web-grounded — `complete()` returns `response.citations` (array of `{ url, title? }`) when sources are available. Stream mode does not include citations (Perplexity API limitation). Default model is `sonar`; reasoning is `sonar-reasoning-pro` (`sonar-reasoning` was deprecated December 2025). Perplexity-specific filters (`search_recency_filter`, `search_domain_filter`) flow through the per-call `providerOptions` escape hatch.
 
+**Sonar migration status (as of 2026-10-05).** Perplexity states Sonar Chat Completions support ended 2026-09-27; synchronous and streaming requests are being reformulated as Agent API requests, rolling out per model. This provider still works as of 2026-10-05 (smoke verified). Billing of reformulated calls and response-shape stability are not verified, and `cost.isPartial` is `true` for Sonar models because per-request fees are not modeled. Consumers should watch `response.model` and citations for shape changes. Details: `proj-plan/dlabs-toolkit/research/tom-llm-models-pricing-2026-10-04.md` section 7.
+
 ---
 
 ## Repo layout
