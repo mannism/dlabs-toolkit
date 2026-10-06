@@ -1,5 +1,15 @@
 # @diabolicallabs/agent-sdk
 
+## 3.4.0
+
+### Minor Changes
+
+- 136601a: Raise `engines.node` to `>=22.12.0`; Node 20 (end of life April 2026) is no longer supported.
+
+### Patch Changes
+
+- @diabolicallabs/llm-client@6.11.0
+
 ## 3.3.7
 
 ### Patch Changes
