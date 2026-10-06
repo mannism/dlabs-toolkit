@@ -13,6 +13,8 @@ An evergreen monthly workflow. On the 1st of each month at 07:30 SGT it:
 3. Compares results **deterministically** in a Code node — no LLM in the comparison step.
 4. Writes a single ✅/⚠️ row to the **Scheduled Work** Notion database on every run, then appends the full report into the page body (see "Notion body paging" below). A `✅ Completed` row means no drift, no new models, no deprecations. A `⚠️ Pending` row means one or more models drifted, a new model was found, or a table model is deprecated or has a shutdown date. Cheaper-model recommendations inform triage but do not by themselves set the status to Pending.
 
+**v2.1 prompt hardening (2026-10-06).** The drift prompt now requires the Standard tier (on-demand, synchronous, short-context, uncached) and an exact model-id match; Batch, Flex, Priority, cached-input, promotional and long-context prices must not be reported. This fixes the five false drifts of the first live run on 2026-10-05 (`o3`, `o4-mini`, `gemini-3-flash-preview`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`), which were Batch/Flex prices or another model's price. The Compare node adds the SUSPECT guard described below as a second line of defense. After merging, re-import the JSON into n8n in place.
+
 **Detection only.** This workflow never edits `pricing/table.json`. It is the front-end that triggers the triage flow below.
 
 **Evergreen design.** Providers, model ids and source domains are always derived from the fetched live table at runtime. When the table is updated, the workflow automatically checks the new set of models on the next run — no workflow edits required.
@@ -28,7 +30,8 @@ The Notion row body can contain these sections, in this order (each only when no
   - `PRICIER` — at least 10% above the predecessor.
   - No predecessor found, or price missing, is stated as such (`NEW` / `PRICE UNVERIFIED`).
 - **Cheaper successors already in the table** — the newest model in a family is at least 10% cheaper (blended) than the one before it.
-- **Price drift** — input or output price differs from the table by 5% or more.
+- **Price drift** — input or output price differs from the table by 5% or more. Only counts lookups that pass the SUSPECT guard below.
+- **SUSPECT DRIFT — NOT COUNTED** (v2.1) — drifts that look like a lookup error rather than a real price change: both prices are exactly 0.5x the table (the Batch/Flex tier) or the detected prices equal another model's table price from the same provider (a model-id mix-up). Listed for a spot-check but excluded from the DRIFT count and from the Pending/Completed decision, so a SUSPECT-only run stays `✅ Completed`. A genuine 50% price cut is possible, so the row asks for a spot-check against the official page.
 - **Deprecated / retiring** — table models the provider now marks deprecated or retired, or gives a shutdown date for. Deprecated-alias entries (`deprecatedAliasFor`) are skipped.
 - **Unverifiable** — no reliable price found for a table model.
 - **Stale verification** — table entries whose `verifiedAt` is more than 90 days old (informational).
