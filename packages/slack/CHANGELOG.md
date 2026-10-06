@@ -1,5 +1,16 @@
 # @diabolicallabs/slack
 
+## 1.1.0
+
+### Minor Changes
+
+- 136601a: Raise `engines.node` to `>=22.12.0`; Node 20 (end of life April 2026) is no longer supported.
+
+### Patch Changes
+
+- Updated dependencies [136601a]
+  - @diabolicallabs/notifier-core@1.1.0
+
 ## 1.0.1
 
 ### Patch Changes

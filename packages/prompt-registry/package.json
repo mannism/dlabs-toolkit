@@ -1,6 +1,6 @@
 {
   "name": "@diabolicallabs/prompt-registry",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Versioned LLM prompt lifecycle — admin-standard prompt_versions pattern as a package. Seed from repo files, publish new versions, roll back, audit history. © Diabolical Labs",
   "author": "Diana Ismail <diana@deeismail.com> (https://deeismail.com)",
   "publisher": "Diabolical Labs",
