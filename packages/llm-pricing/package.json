@@ -27,7 +27,7 @@
     "url": "https://github.com/mannism/dlabs-toolkit/issues"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "build": "tsup",
