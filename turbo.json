@@ -4,6 +4,9 @@
   // TURBO_TOKEN and TURBO_TEAM are stored in GitHub Actions secrets (set by Owner 2026-05-05).
   // Local builds pick up the cache via `turbo link` (Owner has run this).
   // No configuration needed here — Turbo reads TURBO_TOKEN/TURBO_TEAM from the environment.
+  // Opt out of turbo's auto-written agent guidance block: it appends a managed section to AGENTS.md
+  // on every agent-run turbo command, producing a spurious uncommitted change (seen 2026-10-06).
+  "agentGuidance": false,
   "tasks": {
     // typecheck depends on ^build (not ^typecheck) because packages that depend
     // on workspace siblings need the dist/.d.ts files to be present before tsc
