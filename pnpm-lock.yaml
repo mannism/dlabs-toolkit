@@ -238,8 +238,8 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0
       '@slack/web-api':
-        specifier: ^8.1.1
-        version: 8.1.1
+        specifier: ^8.2.0
+        version: 8.2.0
     devDependencies:
       '@diabolicallabs/rate-limiter':
         specifier: workspace:*
@@ -1136,8 +1136,8 @@ packages:
     resolution: {integrity: sha512-IN4gdtlzQt8UJoj+1v+qAHeR4TxHO0KMlIs841SFfDQAcFFnsrWaGsEAE4goxVt8O/JOAFaGGdrFTzhNBop/Fg==}
     engines: {node: '>= 20', npm: '>=9.6.4'}
 
-  '@slack/web-api@8.1.1':
-    resolution: {integrity: sha512-am/z/LLbEC7gNQp6FpaGT0l4XnWqcXetpwdgZHzS7Nbb96q9R9QwWA3lo0ZXGuAHDkct0MvFnouzuc2Y4XNmow==}
+  '@slack/web-api@8.2.0':
+    resolution: {integrity: sha512-bIW8/8BLD/HLuHLIA2LfA7AhSokzui4swCbMJuwoRJxn/kzHVla6YEKLvN1nCFHK/DfX7g+4Wj3ess/ZSh/tWQ==}
     engines: {node: '>= 20', npm: '>=9.6.4'}
 
   '@stablelib/base64@1.0.1':
@@ -3047,7 +3047,7 @@ snapshots:
 
   '@slack/types@3.2.0': {}
 
-  '@slack/web-api@8.1.1':
+  '@slack/web-api@8.2.0':
     dependencies:
       '@slack/logger': 5.0.0
       '@slack/types': 3.2.0
