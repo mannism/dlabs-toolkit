@@ -1,5 +1,5 @@
 /**
- * Unit tests for NotionClient factory functions using MSW v2 for HTTP mocking.
+ * Unit tests for NotionClient factory functions using MSW v3 for HTTP mocking.
  *
  * Tests:
  *   - createNotionClientFromEnv throws NotionValidationError when NOTION_API_KEY absent
@@ -84,7 +84,7 @@ const handlers = [
 
 const server = setupServer(...handlers);
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
