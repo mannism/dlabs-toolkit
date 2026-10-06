@@ -6,7 +6,7 @@ For fleet-wide standards (TypeScript, security, git workflow, PR comprehension g
 
 ## Stack
 
-- Node ≥ 20, pnpm ≥ 9
+- Node ≥ 22.12, pnpm ≥ 9
 - TypeScript strict, ESM-only
 - Turborepo (`turbo run build|typecheck|lint|test`)
 - Biome (format + lint, alongside ESLint + `@typescript-eslint`)
@@ -48,7 +48,7 @@ pnpm release              # build + changeset publish
 ## Conventions
 
 - **TypeScript strict.** No `any`, no implicit `any`, no unused locals/params.
-- **ESM-only.** Modern Node (≥ 20) and modern bundlers only. No CJS dual-publish.
+- **ESM-only.** Modern Node (≥ 22.12) and modern bundlers only. No CJS dual-publish.
 - **US English** in docs, code identifiers, and copy. Per `/Users/mann/Claude/decisions.md` (2026-05-04): dlabs-toolkit and `@diabolicallabs` packages are commercial-surface infrastructure, not personal-brand. Use `normalize`, `serialize`, `color`, `behavior`, `analyze` — not the `-ise`/`-our` UK variants. Applies to function names, variable names, JSDoc, error messages, READMEs, and all public API surface.
 - **Independent versioning per package** via Changesets. Semver discipline mandatory.
 - **No package ships without tests.**
