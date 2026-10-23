@@ -65,6 +65,18 @@ export interface ModelPricing {
   longContextCacheReadPer1M?: number;
 
   /**
+   * USD per 1M cache write tokens (5-minute tier) when total prompt tokens > longContextThreshold.
+   * Falls back to cacheWritePer1M when undefined.
+   */
+  longContextCacheWritePer1M?: number;
+
+  /**
+   * USD per 1M cache write tokens (1-hour tier) in the long-context tier.
+   * Data only, like cacheWrite1hPer1M: computeCost() does not use it yet.
+   */
+  longContextCacheWrite1hPer1M?: number;
+
+  /**
    * Reasoning models (o-series, DeepSeek thinking mode) bill reasoning tokens
    * against outputPer1M but do not return them in visible output.
    * When true, computeCost() marks the result isPartial = true and warns consumers.

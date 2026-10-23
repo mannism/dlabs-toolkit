@@ -163,6 +163,17 @@ Anthropic has two cache write tiers. The toolkit's `providerOptions.promptCache:
 
 `gemini-2.5-flash` has flat pricing — no tiering.
 
+### Anthropic — Haiku 5.5 long-context tiering
+
+`claude-haiku-5-5` is priced by prompt length with a 100K-token threshold. The threshold counts **total prompt tokens**: `inputTokens` + `cacheReadTokens` + `cacheCreationTokens` (a request whose cache read and cache write tokens push the total over 100,000 prices at the long tier). Exactly 100,000 prompt tokens prices at the short tier.
+
+| Field | Applies to |
+|---|---|
+| `longContextCacheWritePer1M` | 5-min cache write above the threshold; `computeCost()` falls back to `cacheWritePer1M` when undefined |
+| `longContextCacheWrite1hPer1M` | 1-hr cache write above the threshold (data only, like `cacheWrite1hPer1M`; not yet used by `computeCost()`) |
+
+Input, output, and cache read use the existing `longContextInputPer1M`, `longContextOutputPer1M`, and `longContextCacheReadPer1M`.
+
 ### OpenAI — reasoning models (`o3`, `o4-mini`, `gpt-5.6-sol/terra/luna`, `gpt-5`/`gpt-5-mini`/`gpt-5-nano`/`gpt-5-pro`, `gpt-6-astra`)
 
 O-series and `gpt-5.x`/`gpt-6` reasoning-family models bill reasoning tokens against `outputPer1M` but do not return them in the response. `usage.outputTokens` is therefore higher than visible output tokens. `computeCost()` returns the correct billing total but sets `isPartial: true` so consumers know the visible output cost is a floor, not the exact computation cost.

@@ -80,6 +80,16 @@
           "minimum": 0,
           "description": "USD per 1M cache read tokens when totalInputTokens > longContextThreshold."
         },
+        "longContextCacheWritePer1M": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1M cache write tokens (5-min tier) when total prompt tokens > longContextThreshold. Falls back to cacheWritePer1M when omitted."
+        },
+        "longContextCacheWrite1hPer1M": {
+          "type": "number",
+          "minimum": 0,
+          "description": "USD per 1M cache write tokens (1-hour tier) when total prompt tokens > longContextThreshold. Data only; computeCost() does not use it yet."
+        },
         "hasInvisibleReasoningTokens": {
           "type": "boolean",
           "description": "True for o-series / reasoning models that bill invisible reasoning tokens against outputPer1M. computeCost() marks result isPartial=true."
