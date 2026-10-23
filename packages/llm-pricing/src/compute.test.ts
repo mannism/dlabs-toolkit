@@ -1217,6 +1217,22 @@ describe('computeCost — 2026-10-04 refresh: new model rows (one golden per pro
     expect(cost.isPartial).toBe(false);
   });
 
+  it('claude-haiku-5-5: $0.10 in / $0.50 out, cache rates, not partial', () => {
+    const cost = computeCost({
+      usage: basicUsage(1_000_000, 1_000_000, {
+        cacheReadTokens: 1_000_000,
+        cacheCreationTokens: 1_000_000,
+      }),
+      provider: 'anthropic',
+      model: 'claude-haiku-5-5',
+    });
+    expect(cost.input).toBeCloseTo(0.1, 5);
+    expect(cost.output).toBeCloseTo(0.5, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.01, 5);
+    expect(cost.cacheWrite).toBeCloseTo(0.125, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+
   it('gpt-6-sol: $2 in / $10 out at 100K each, isPartial (invisible reasoning)', () => {
     const cost = computeCost({ usage: hundredKEach, provider: 'openai', model: 'gpt-6-sol' });
     expect(cost.input).toBeCloseTo(0.2, 5);

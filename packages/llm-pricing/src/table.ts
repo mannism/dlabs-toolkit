@@ -86,6 +86,17 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
       verifiedAt: '2026-10-05',
     },
+    'claude-haiku-5-5': {
+      cacheReadPer1M: 0.01,
+      cacheWrite1hPer1M: 0.2,
+      cacheWritePer1M: 0.125,
+      inputPer1M: 0.1,
+      notes:
+        'Active; retirement not sooner than 2027-10-07. Tiered by prompt length: rates here are the <=100K-token tier. Prompts over 100K tokens (cache reads/writes count) bill at $0.50 in / $2.50 out / $0.05 cache read / $0.625 5m write / $1 1h write; the table has no tier support, so such requests are under-priced 5x.',
+      outputPer1M: 0.5,
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-10-23',
+    },
     'claude-mythos-5': {
       cacheReadPer1M: 1,
       cacheWrite1hPer1M: 20,
