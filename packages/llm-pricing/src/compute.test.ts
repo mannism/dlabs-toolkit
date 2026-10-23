@@ -1217,19 +1217,20 @@ describe('computeCost — 2026-10-04 refresh: new model rows (one golden per pro
     expect(cost.isPartial).toBe(false);
   });
 
-  it('claude-haiku-5-5: $0.10 in / $0.50 out, cache rates, not partial', () => {
+  it('claude-haiku-5-5: $0.10 in / $0.50 out, cache rates, not partial (short tier)', () => {
+    // 30K each => 90K total prompt tokens, below the 100K long-context threshold.
     const cost = computeCost({
-      usage: basicUsage(1_000_000, 1_000_000, {
-        cacheReadTokens: 1_000_000,
-        cacheCreationTokens: 1_000_000,
+      usage: basicUsage(30_000, 30_000, {
+        cacheReadTokens: 30_000,
+        cacheCreationTokens: 30_000,
       }),
       provider: 'anthropic',
       model: 'claude-haiku-5-5',
     });
-    expect(cost.input).toBeCloseTo(0.1, 5);
-    expect(cost.output).toBeCloseTo(0.5, 5);
-    expect(cost.cacheRead).toBeCloseTo(0.01, 5);
-    expect(cost.cacheWrite).toBeCloseTo(0.125, 5);
+    expect(cost.input).toBeCloseTo(0.003, 8);
+    expect(cost.output).toBeCloseTo(0.015, 8);
+    expect(cost.cacheRead).toBeCloseTo(0.0003, 8);
+    expect(cost.cacheWrite).toBeCloseTo(0.00375, 8);
     expect(cost.isPartial).toBe(false);
   });
 
