@@ -190,8 +190,8 @@ export function computeCost(input: ComputeCostInput): LlmCost {
     };
   }
 
-  // Determine whether we are in the long-context tier (Gemini 3.1 Pro, 2.5 Pro, xAI Grok).
-  // The threshold applies to TOTAL prompt tokens. Providers that split cached tokens out of
+  // Determine whether we are in the long-context tier (Gemini, xAI Grok, OpenAI GPT-5.x/6, Anthropic Haiku 5.5).
+  // The threshold applies to TOTAL prompt tokens (input + cache read + cache write). Providers that split cached tokens out of
   // inputTokens (xAI, Anthropic) would otherwise price a large, mostly-cached prompt at the base tier.
   const totalPromptTokens =
     usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheCreationTokens ?? 0);
@@ -212,6 +212,10 @@ export function computeCost(input: ComputeCostInput): LlmCost {
     ? (pricing.longContextCacheReadPer1M ?? pricing.cacheReadPer1M)
     : pricing.cacheReadPer1M;
 
+  const effectiveCacheWritePer1M = isLongContext
+    ? (pricing.longContextCacheWritePer1M ?? pricing.cacheWritePer1M)
+    : pricing.cacheWritePer1M;
+
   // Compute each cost component.
   const inputCost = perMillion(usage.inputTokens) * effectiveInputPer1M;
   const outputCost = perMillion(usage.outputTokens) * effectiveOutputPer1M;
@@ -223,11 +227,12 @@ export function computeCost(input: ComputeCostInput): LlmCost {
       : 0;
 
   // Cache write cost — Anthropic 5-min ephemeral writes (cacheCreationTokens).
-  // We use cacheWritePer1M (5-min tier) since that is the only tier the toolkit
-  // currently wires via providerOptions.promptCache: 'ephemeral'.
+  // We use the 5-min tier rate (cacheWritePer1M, or longContextCacheWritePer1M in the
+  // long-context tier) since that is the only tier the toolkit currently wires via
+  // providerOptions.promptCache: 'ephemeral'.
   const cacheWriteCost =
-    usage.cacheCreationTokens !== undefined && pricing.cacheWritePer1M !== undefined
-      ? perMillion(usage.cacheCreationTokens) * pricing.cacheWritePer1M
+    usage.cacheCreationTokens !== undefined && effectiveCacheWritePer1M !== undefined
+      ? perMillion(usage.cacheCreationTokens) * effectiveCacheWritePer1M
       : 0;
 
   // Server tool fees (xAI web/X search, code interpreter, ...). Each non-zero count is

@@ -138,6 +138,44 @@ describe('fetchRemoteTable', () => {
       expect(result.fetchedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     });
 
+    it('accepts a remote table whose model carries the long-context cache-write fields', async () => {
+      const withTier: PricingTable = {
+        ...MOCK_TABLE,
+        anthropic: {
+          'claude-haiku-5-5': {
+            inputPer1M: 0.1,
+            outputPer1M: 0.5,
+            cacheWritePer1M: 0.125,
+            longContextThreshold: 100000,
+            longContextInputPer1M: 0.5,
+            longContextOutputPer1M: 2.5,
+            longContextCacheWritePer1M: 0.625,
+            longContextCacheWrite1hPer1M: 1.0,
+            verifiedAt: '2026-10-23',
+            sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+          },
+        },
+      };
+      mockFetch({ ok: true, body: withTier });
+
+      const result = await fetchRemoteTable(TEST_URL);
+
+      expect(result.source).toBe('remote');
+      expect(result.table.anthropic['claude-haiku-5-5']?.longContextCacheWritePer1M).toBe(0.625);
+      expect(result.table.anthropic['claude-haiku-5-5']?.longContextCacheWrite1hPer1M).toBe(1.0);
+    });
+
+    it('accepts a remote table without the long-context cache-write fields', async () => {
+      mockFetch({ ok: true, body: MOCK_TABLE });
+
+      const result = await fetchRemoteTable(TEST_URL);
+
+      expect(result.source).toBe('remote');
+      expect(
+        result.table.anthropic['claude-sonnet-4-6']?.longContextCacheWritePer1M
+      ).toBeUndefined();
+    });
+
     it('does not throw on success', async () => {
       mockFetch({ ok: true, body: MOCK_TABLE });
 

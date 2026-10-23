@@ -1234,6 +1234,68 @@ describe('computeCost — 2026-10-04 refresh: new model rows (one golden per pro
     expect(cost.isPartial).toBe(false);
   });
 
+  describe('claude-haiku-5-5 long-context tier (100K prompt tokens, cache read/write count)', () => {
+    const run = (inputTokens: number, outputTokens: number, o: Partial<LlmUsage> = {}) =>
+      computeCost({
+        usage: basicUsage(inputTokens, outputTokens, o),
+        provider: 'anthropic',
+        model: 'claude-haiku-5-5',
+      });
+
+    it('exactly 100,000 prompt tokens prices at the short tier', () => {
+      const cost = run(100_000, 20_000);
+      expect(cost.input).toBeCloseTo(0.01, 8);
+      expect(cost.output).toBeCloseTo(0.01, 8);
+      expect(cost.total).toBeCloseTo(0.02, 8);
+    });
+
+    it('100,001 prompt tokens prices at the long tier', () => {
+      const cost = run(100_001, 20_000);
+      expect(cost.input).toBeCloseTo(0.0500005, 8);
+      expect(cost.output).toBeCloseTo(0.05, 8);
+      expect(cost.total).toBeCloseTo(0.1000005, 8);
+    });
+
+    it('cache read + write push total over 100K: all four components use long-tier rates', () => {
+      // 1,000 input + 60,000 cache read + 40,001 cache write = 101,001 prompt tokens.
+      const cost = run(1_000, 2_000, { cacheReadTokens: 60_000, cacheCreationTokens: 40_001 });
+      expect(cost.input).toBeCloseTo(0.0005, 8);
+      expect(cost.output).toBeCloseTo(0.005, 8);
+      expect(cost.cacheRead).toBeCloseTo(0.003, 8);
+      expect(cost.cacheWrite).toBeCloseTo(0.025000625, 8);
+      expect(cost.total).toBeCloseTo(0.033500625, 8);
+    });
+
+    it('same small request below the threshold uses short-tier cache write rate', () => {
+      const cost = run(1_000, 2_000, { cacheReadTokens: 60_000, cacheCreationTokens: 39_000 });
+      expect(cost.cacheWrite).toBeCloseTo(0.004875, 8);
+    });
+  });
+
+  it('cache write falls back to cacheWritePer1M in the long tier when longContextCacheWritePer1M is undefined', () => {
+    const cost = computeCost({
+      usage: basicUsage(1_000, 0, { cacheCreationTokens: 1_000_000 }),
+      provider: 'anthropic',
+      model: 'm',
+      pricingTable: {
+        ...DEFAULT_PRICING_TABLE,
+        anthropic: {
+          m: {
+            inputPer1M: 1,
+            outputPer1M: 1,
+            cacheWritePer1M: 2,
+            longContextThreshold: 500,
+            longContextInputPer1M: 5,
+            verifiedAt: '2026-10-23',
+            sourceUrl: 'https://example.com',
+          },
+        },
+      },
+    });
+    expect(cost.cacheWrite).toBeCloseTo(2, 8);
+    expect(cost.input).toBeCloseTo(0.005, 8);
+  });
+
   it('gpt-6-sol: $2 in / $10 out at 100K each, isPartial (invisible reasoning)', () => {
     const cost = computeCost({ usage: hundredKEach, provider: 'openai', model: 'gpt-6-sol' });
     expect(cost.input).toBeCloseTo(0.2, 5);
