@@ -84,16 +84,16 @@ importers:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.135.0
-        version: 0.135.0(zod@4.6.5)
+        version: 0.135.0(zod@4.6.7)
       '@google/genai':
         specifier: ^2.30.0
         version: 2.30.0
       openai:
         specifier: ^7.39.0
-        version: 7.39.0(ws@8.22.0)(zod@4.6.5)
+        version: 7.39.0(ws@8.22.0)(zod@4.6.7)
       zod:
-        specifier: ^4.6.5
-        version: 4.6.5
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@diabolicallabs/llm-pricing':
         specifier: workspace:*
@@ -169,8 +169,8 @@ importers:
   packages/prompt-registry:
     dependencies:
       zod:
-        specifier: ^4.6.5
-        version: 4.6.5
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
@@ -2412,18 +2412,18 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
-  '@anthropic-ai/sdk@0.135.0(zod@4.6.5)':
+  '@anthropic-ai/sdk@0.135.0(zod@4.6.7)':
     dependencies:
       '@opentelemetry/api': 1.10.0
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.1.1
     optionalDependencies:
-      zod: 4.6.5
+      zod: 4.6.7
 
   '@babel/helper-string-parser@7.29.7': {}
 
@@ -3847,10 +3847,10 @@ snapshots:
 
   obug@3.0.0: {}
 
-  openai@7.39.0(ws@8.22.0)(zod@4.6.5):
+  openai@7.39.0(ws@8.22.0)(zod@4.6.7):
     optionalDependencies:
       ws: 8.22.0
-      zod: 4.6.5
+      zod: 4.6.7
 
   optionator@0.9.4:
     dependencies:
@@ -4324,4 +4324,4 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zod@4.6.5: {}
+  zod@4.6.7: {}
