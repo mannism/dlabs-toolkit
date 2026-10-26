@@ -147,8 +147,8 @@ importers:
   packages/notion:
     dependencies:
       '@notionhq/client':
-        specifier: ^5.27.0
-        version: 5.27.0
+        specifier: ^5.28.0
+        version: 5.28.0
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
@@ -892,8 +892,8 @@ packages:
     resolution: {integrity: sha512-NmEzpWbbiWpudgqKVZtGdSAvQGIYyj7Rf8ea+1hJEo+Dn0YvPHtiz577US7kGg0sCaZtPelrdqV4SfwwGJq1cA==}
     engines: {node: '>=22'}
 
-  '@notionhq/client@5.27.0':
-    resolution: {integrity: sha512-JnkLtAzSDrEnvtZ8dQ5L4KO+xyL5g01xK5qmKTmhJ5KFY8LWsMyFG033vHCj0mFcsz9thAMjfcAQz/SWxiexag==}
+  '@notionhq/client@5.28.0':
+    resolution: {integrity: sha512-DbTOT7OSjy+JhoVju/3exAb/nahfUpG/VC8coYFL6AXJZNOCo2kl81Hjf0s6FR7V9xsOWT7SCG4MGkIyBkZUSA==}
     engines: {node: '>=18'}
 
   '@open-draft/until@3.0.1':
@@ -2897,7 +2897,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@notionhq/client@5.27.0': {}
+  '@notionhq/client@5.28.0': {}
 
   '@open-draft/until@3.0.1': {}
 
