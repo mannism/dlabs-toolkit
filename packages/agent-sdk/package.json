@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@diabolicallabs/llm-pricing": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.0.5",
     "tsup": "^9.0.0",
     "vitest": "^5.0.5"
