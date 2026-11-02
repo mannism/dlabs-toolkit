@@ -53,7 +53,7 @@
     "@diabolicallabs/rate-limiter": "workspace:*",
     "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^5.0.5",
-    "tsup": "^8.3.5",
+    "tsup": "^9.0.0",
     "vitest": "^5.0.5"
   }
 }
