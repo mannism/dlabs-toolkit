@@ -55,7 +55,7 @@
     "@types/pg": "^8.23.1",
     "@vitest/coverage-v8": "^5.0.5",
     "pg": "^8.23.1",
-    "tsup": "^8.3.5",
+    "tsup": "^9.0.0",
     "vitest": "^5.0.5"
   },
   "dependencies": {
