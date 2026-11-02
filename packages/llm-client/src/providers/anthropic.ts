@@ -35,6 +35,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { classifyAbort, createAttemptController, withStallTimeout } from '../abort.js';
 import { parseJsonOrThrow } from '../extract-json.js';
 import { isZodSchema, type JsonNode, toProviderSchema } from '../json-schema.js';
+import { getLogger } from '../logger.js';
 import {
   classifyHttpStatus,
   mergeRetryOptsWithSignal,
@@ -284,6 +285,31 @@ export function normalizeAnthropicError(err: unknown): LlmError {
   return normalizeThrownError(err, PROVIDER);
 }
 
+/**
+ * Models for which the "temperature dropped" warning has already been emitted in this process.
+ * Module-level on purpose: the warning is once per process per model, not per client instance.
+ */
+const temperatureWarnedModels = new Set<string>();
+
+/**
+ * Anthropic API version 2026-10-21 (pinned by @anthropic-ai/sdk 1.x) removed temperature, top_p
+ * and top_k and returns 400 if any is sent, on every model. LlmCallOptions.temperature and
+ * LlmClientConfig.temperature stay on the public types because the other providers use them, so
+ * for Anthropic the value is ignored here and a warning is logged once per process per model.
+ * Logs the model and parameter name only, never the value.
+ */
+function dropTemperature(model: string, requested: number | undefined): void {
+  if (requested === undefined || temperatureWarnedModels.has(model)) return;
+  temperatureWarnedModels.add(model);
+  getLogger().warn('anthropic_sampling_param_dropped', {
+    provider: PROVIDER,
+    model,
+    param: 'temperature',
+    message:
+      'temperature is not supported by Anthropic API version 2026-10-21 and was not sent; remove it for Anthropic models',
+  });
+}
+
 /** Create the Anthropic provider implementation. */
 export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
   // Providers always receive model as a string (client.ts resolves arrays before dispatch).
@@ -333,10 +359,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           };
 
           if (system !== undefined) params.system = buildSystemParam(system, promptCache);
-          const temperature = options?.temperature ?? config.temperature;
-          if (temperature !== undefined) {
-            params.temperature = temperature;
-          }
+          dropTemperature(model, options?.temperature ?? config.temperature);
 
           // reasoningEffort (v6.3.0+) — merge into output_config, never overwrite:
           // OutputConfig also carries 'format' (structured outputs), which a bare
@@ -405,10 +428,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     };
 
     if (system !== undefined) params.system = buildSystemParam(system, promptCache);
-    const streamTemperature = options?.temperature ?? config.temperature;
-    if (streamTemperature !== undefined) {
-      params.temperature = streamTemperature;
-    }
+    dropTemperature(model, options?.temperature ?? config.temperature);
 
     // reasoningEffort (v6.3.0+) — merge into output_config, never overwrite (see complete()).
     const streamEffort = resolveReasoningEffort(options?.reasoningEffort, 'anthropic');
@@ -530,8 +550,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           };
 
           if (system !== undefined) params.system = buildSystemParam(system, promptCache);
-          const temperature = options?.temperature ?? config.temperature;
-          if (temperature !== undefined) params.temperature = temperature;
+          dropTemperature(params.model, options?.temperature ?? config.temperature);
 
           // reasoningEffort (v6.3.0+) — merge into output_config, never overwrite (see complete()).
           const structuredEffort = resolveReasoningEffort(options?.reasoningEffort, 'anthropic');
@@ -649,8 +668,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
     };
 
     if (system !== undefined) params.system = buildSystemParam(system, promptCache);
-    const temperature = options?.temperature ?? config.temperature;
-    if (temperature !== undefined) params.temperature = temperature;
+    dropTemperature(params.model, options?.temperature ?? config.temperature);
 
     // reasoningEffort (v6.3.0+) — merge into output_config, never overwrite (see complete()).
     const streamStructuredEffort = resolveReasoningEffort(options?.reasoningEffort, 'anthropic');
@@ -875,8 +893,7 @@ export function createAnthropicProvider(config: LlmClientConfig): LlmClient {
           };
 
           if (system !== undefined) params.system = system;
-          const temperature = options?.temperature ?? config.temperature;
-          if (temperature !== undefined) params.temperature = temperature;
+          dropTemperature(params.model, options?.temperature ?? config.temperature);
 
           // reasoningEffort (v6.3.0+) — merge into output_config, never overwrite (see complete()).
           const toolsEffort = resolveReasoningEffort(options?.reasoningEffort, 'anthropic');
