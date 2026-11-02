@@ -147,8 +147,8 @@ importers:
   packages/notion:
     dependencies:
       '@notionhq/client':
-        specifier: ^5.27.0
-        version: 5.27.0
+        specifier: ^5.30.0
+        version: 5.30.0
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
@@ -892,9 +892,9 @@ packages:
     resolution: {integrity: sha512-NmEzpWbbiWpudgqKVZtGdSAvQGIYyj7Rf8ea+1hJEo+Dn0YvPHtiz577US7kGg0sCaZtPelrdqV4SfwwGJq1cA==}
     engines: {node: '>=22'}
 
-  '@notionhq/client@5.27.0':
-    resolution: {integrity: sha512-JnkLtAzSDrEnvtZ8dQ5L4KO+xyL5g01xK5qmKTmhJ5KFY8LWsMyFG033vHCj0mFcsz9thAMjfcAQz/SWxiexag==}
-    engines: {node: '>=18'}
+  '@notionhq/client@5.30.0':
+    resolution: {integrity: sha512-SZpwkns/zScc7P7MA1LC144VT6AlKhy3NRAHa1rSxr/FVBGnmgMI2n81Y89X0UPgnKNSLyoEbzsod8KZsSGLSg==}
+    engines: {node: '>=22'}
 
   '@open-draft/until@3.0.1':
     resolution: {integrity: sha512-s7/9ELP4aP9YZtW7RJaa0Xf3RISaRH9+EFN18FtykJYRHGNrl8f9ymvoNXzjhrjmftFvkQudtuDU9RYhk0xs3A==}
@@ -2897,7 +2897,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@notionhq/client@5.27.0': {}
+  '@notionhq/client@5.30.0': {}
 
   '@open-draft/until@3.0.1': {}
 
