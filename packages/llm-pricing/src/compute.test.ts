@@ -1394,3 +1394,58 @@ describe('computeCost — OpenAI >272K long-context surcharge (2026-10-04)', () 
     expect(cost.output).toBeCloseTo(outRate, 5);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 2026-11-02 refresh: sonnet-5-5 cache read, gemini-4-argon, gpt-6.1-terra
+// ---------------------------------------------------------------------------
+
+describe('computeCost — 2026-11-02 refresh', () => {
+  it('claude-sonnet-5-5: cache read bills at $0.10/MTok (0.05x, not the 0.1x default)', () => {
+    const cost = computeCost({
+      usage: basicUsage(0, 0, { cacheReadTokens: 1_000_000 }),
+      provider: 'anthropic',
+      model: 'claude-sonnet-5-5',
+    });
+    expect(cost.cacheRead).toBeCloseTo(0.1, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gemini-4-argon: resolves at the introductory $2 / $10 / $0.10 rate (no long-context tier)', () => {
+    const cost = computeCost({
+      usage: basicUsage(1_000_000, 1_000_000, { cacheReadTokens: 1_000_000 }),
+      provider: 'gemini',
+      model: 'gemini-4-argon',
+    });
+    expect(cost.input).toBeCloseTo(2.0, 5);
+    expect(cost.output).toBeCloseTo(10.0, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.1, 5);
+    expect(cost.isPartial).toBe(false);
+    expect(DEFAULT_PRICING_TABLE.gemini['gemini-4-argon']?.notes).toContain('2026-12-01');
+  });
+
+  it('gpt-6.1-terra: standard rates at exactly 272K prompt tokens', () => {
+    const cost = computeCost({
+      usage: basicUsage(272_000, 100_000),
+      provider: 'openai',
+      model: 'gpt-6.1-terra',
+    });
+    expect(cost.input).toBeCloseTo(0.272, 5); // 0.272M × $1.00
+    expect(cost.output).toBeCloseTo(0.5, 5); // 0.1M × $5.00
+  });
+
+  it('gpt-6.1-terra: above 272K the FULL request bills at 2x input, 1.5x output, 2x cache read', () => {
+    const cost = computeCost({
+      usage: basicUsage(100_000, 100_000, { cacheReadTokens: 200_000 }),
+      provider: 'openai',
+      model: 'gpt-6.1-terra',
+    });
+    // 300K total prompt tokens > 272K → input $2.00, output $7.50, cache read $0.10
+    expect(cost.input).toBeCloseTo(0.2, 5);
+    expect(cost.output).toBeCloseTo(0.75, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.02, 5);
+  });
+
+  it('gpt-6-terra is intentionally absent (no published price)', () => {
+    expect(DEFAULT_PRICING_TABLE.openai['gpt-6-terra']).toBeUndefined();
+  });
+});
