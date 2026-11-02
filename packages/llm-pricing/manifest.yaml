@@ -40,8 +40,8 @@ contracts:
     fail_safe: "On any failure (network error, HTTP non-2xx, parse error, schema validation failure, 5s timeout) returns DEFAULT_PRICING_TABLE with source:'fallback'. Never throws."
     precedence: "pricing.table (explicit override) > pricing.remoteUrl (remote fetch) > DEFAULT_PRICING_TABLE (bundled fallback)."
   cost_computation:
-    anthropic_cache: "cacheCreationTokens billed at cacheWritePer1M (5-min ephemeral). 1-hr tier (cacheWrite1hPer1M) is reserved for future LlmUsage field."
-    gemini_tiering: "inputTokens > longContextThreshold selects the elevated rate tier (200k threshold for gemini-3.1-pro-preview and gemini-2.5-pro)."
+    anthropic_cache: "cacheCreationTokens billed at cacheWritePer1M (5-min ephemeral). 1-hr tier (cacheWrite1hPer1M) is data only, reserved for a future LlmUsage field."
+    long_context_tiering: "Provider-agnostic and data-driven: when the prompt exceeds a model's longContextThreshold, longContextInputPer1M / OutputPer1M / CacheReadPer1M apply to the full request, and longContextCacheWritePer1M applies to 5-min cache writes (falls back to cacheWritePer1M when undefined). longContextCacheWrite1hPer1M is data only. Tiered today: Anthropic claude-haiku-5-5 (100k), OpenAI GPT-5.x / GPT-6.x flagship and mid tiers (272k), Gemini 3.1 Pro preview and 2.5 Pro (200k), xAI Grok 4.x (200k). pricing/table.json is the authoritative list."
     deprecated_aliases: "deepseek-chat and deepseek-reasoner emit console.warn on resolution, return their own stored (historical) rates; the live Flash model is deepseek-flash (legacy name deepseek-v4-flash is billed at the same rate)."
     isPartial: "True when cost components exist that cannot be computed from LlmUsage: o-series invisible reasoning tokens, sonar-deep-research citation/search fees."
 
