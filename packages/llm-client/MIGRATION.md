@@ -1,5 +1,29 @@
 # @diabolicallabs/llm-client — Migration Guide
 
+## v6.x → v7.0.0 — Anthropic `temperature` is no longer sent (`@anthropic-ai/sdk` 1.x)
+
+### What changed
+
+`@anthropic-ai/sdk` is now `^1.3.0`. SDK 1.x pins Anthropic API version `2026-10-21`, which removes `temperature`, `top_p` and `top_k`; a request that sends any of them returns HTTP 400 on every model.
+
+For Anthropic calls (`complete`, `stream`, `structured`, `streamStructured`, `withTools`), `temperature` from `LlmCallOptions` or `LlmClientConfig` is now **dropped**: it is not put on the request, and a single `anthropic_sampling_param_dropped` warning is logged through the toolkit logger once per process per model (model and parameter name only, never the value). Calls succeed and use the model's default sampling.
+
+`temperature` stays on `LlmCallOptions` / `LlmClientConfig` because OpenAI, Gemini, DeepSeek and Perplexity still use it. `top_p` / `top_k` were never exposed and still are not.
+
+### Who is affected
+
+Any caller that passes `temperature` to an Anthropic model. Before this release the value was honored on models that accepted it (Claude 4.6 and older); it now silently has no effect (plus the warning). Known downstream callers:
+
+- `brand-compliance-saas`: `packages/module-brand-compliance/src/lib/review/anthropic-adapter.ts:391` (`temperature: 0.1`) and `packages/platform-core/src/app/api/admin/settings/verify-model/route.ts:103` (`temperature: 0`).
+
+Other fleet repos checked pass temperature only to OpenAI, Gemini or Perplexity.
+
+### Action
+
+Stop passing `temperature` when the resolved provider is Anthropic. No other code change is needed; until you do, the warning appears once per model per process. If you must keep non-default sampling on Anthropic, pin to `@diabolicallabs/llm-client@^6` (SDK 0.135, API `2023-06-01`).
+
+---
+
 ## v6.2.x → v6.3.0 — Reasoning-effort passthrough
 
 ### What changed

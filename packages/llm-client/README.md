@@ -391,7 +391,7 @@ All methods accept `LlmCallOptions` as the options parameter:
 interface LlmCallOptions {
   model?: string;
   maxTokens?: number;
-  temperature?: number;
+  temperature?: number; // ignored for Anthropic (API 2026-10-21 rejects it); see MIGRATION.md v7
   timeoutMs?: number;              // Per-call timeout (ms). Overrides config.timeoutMs.
   signal?: AbortSignal;            // Caller-supplied cancel signal. Never retried.
   streamStallTimeoutMs?: number;   // Per-chunk silence timeout for stream(). Default 30000.
