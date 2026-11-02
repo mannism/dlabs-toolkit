@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/mannism/dlabs-toolkit/main/pricing/table.schema.json",
-  "versionedAt": "2026-10-05",
+  "versionedAt": "2026-11-02",
   "anthropic": {
     "claude-opus-4-5": {
       "inputPer1M": 5.0,
@@ -8,7 +8,7 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Active; Anthropic retirement not before 2026-11-24. Live API ID is claude-opus-4-5-20251101."
     },
@@ -18,7 +18,7 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-sonnet-4-5": {
@@ -27,7 +27,7 @@
       "cacheReadPer1M": 0.3,
       "cacheWritePer1M": 3.75,
       "cacheWrite1hPer1M": 6.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Deprecated by Anthropic 2026-09-30, retires 2026-11-30 (replacement claude-sonnet-5-5). Price unchanged; do not delete this key."
     },
@@ -37,7 +37,7 @@
       "cacheReadPer1M": 0.3,
       "cacheWritePer1M": 3.75,
       "cacheWrite1hPer1M": 6.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-haiku-4-5": {
@@ -46,7 +46,7 @@
       "cacheReadPer1M": 0.1,
       "cacheWritePer1M": 1.25,
       "cacheWrite1hPer1M": 2.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Active; Anthropic retirement not sooner than 2026-10-15 (a floor, not a notice). Re-check monthly."
     },
@@ -56,7 +56,7 @@
       "cacheReadPer1M": 0.1,
       "cacheWritePer1M": 1.25,
       "cacheWrite1hPer1M": 2.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Active; Anthropic retirement not sooner than 2026-10-15 (a floor, not a notice). Re-check monthly."
     },
@@ -66,7 +66,7 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-sonnet-4-5-20250929": {
@@ -75,7 +75,7 @@
       "cacheReadPer1M": 0.3,
       "cacheWritePer1M": 3.75,
       "cacheWrite1hPer1M": 6.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Deprecated by Anthropic 2026-09-30, retires 2026-11-30 (replacement claude-sonnet-5-5). Price unchanged; do not delete this key."
     },
@@ -85,7 +85,7 @@
       "cacheReadPer1M": 0.08,
       "cacheWritePer1M": 1.0,
       "cacheWrite1hPer1M": 1.6,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Retired from Anthropic's first-party API 2026-02-19; still available via Bedrock/Google Cloud at this rate."
     },
@@ -105,7 +105,7 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-fable-5": {
@@ -114,7 +114,7 @@
       "cacheReadPer1M": 1.0,
       "cacheWritePer1M": 12.5,
       "cacheWrite1hPer1M": 20.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-fable-5-1": {
@@ -123,7 +123,7 @@
       "cacheReadPer1M": 0.25,
       "cacheWritePer1M": 12.5,
       "cacheWrite1hPer1M": 20.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Cache reads priced at 0.025x base input (not the standard 0.1x multiplier every other Claude model uses) — this is Anthropic's documented rate, not an error. Do not 'correct' cacheReadPer1M toward inputPer1M * 0.1."
     },
@@ -133,7 +133,7 @@
       "cacheReadPer1M": 0.5,
       "cacheWritePer1M": 6.25,
       "cacheWrite1hPer1M": 10.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
     },
     "claude-sonnet-5": {
@@ -142,7 +142,7 @@
       "cacheReadPer1M": 0.2,
       "cacheWritePer1M": 2.5,
       "cacheWrite1hPer1M": 4.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Permanent rate — Anthropic cancelled the planned 2026-08-31 increase to $3/$15 and made the $2/$10 rate standard. Do not 'correct' this back to $3/$15."
     },
@@ -152,7 +152,7 @@
       "cacheReadPer1M": 1.0,
       "cacheWritePer1M": 12.5,
       "cacheWrite1hPer1M": 20.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Glasswing-only niche model — same pricing tier as claude-fable-5."
     },
@@ -162,7 +162,7 @@
       "cacheReadPer1M": 0.25,
       "cacheWritePer1M": 12.5,
       "cacheWrite1hPer1M": 20.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Project Glasswing limited-availability model — same pricing tier as claude-fable-5-1, including the 0.025x cache-read multiplier."
     },
@@ -172,18 +172,19 @@
       "cacheReadPer1M": 0.2,
       "cacheWritePer1M": 5.0,
       "cacheWrite1hPer1M": 8.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "notes": "Cache reads priced at 0.05x base input (not the standard 0.1x multiplier) - Anthropic's documented rate, not an error. Do not 'correct' cacheReadPer1M toward inputPer1M * 0.1."
     },
     "claude-sonnet-5-5": {
       "inputPer1M": 2.0,
       "outputPer1M": 10.0,
-      "cacheReadPer1M": 0.2,
+      "cacheReadPer1M": 0.1,
       "cacheWritePer1M": 2.5,
       "cacheWrite1hPer1M": 4.0,
-      "verifiedAt": "2026-10-05",
-      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing"
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "Cache reads priced at 0.05x base input ($0.10/MTok; not the standard 0.1x multiplier) - Anthropic's documented rate, same multiplier as claude-opus-5-5. Do not 'correct' cacheReadPer1M toward inputPer1M * 0.1. Contrast claude-sonnet-5 (standard 0.1x = $0.20)."
     },
     "claude-haiku-5-5": {
       "inputPer1M": 0.1,
@@ -191,7 +192,7 @@
       "cacheReadPer1M": 0.01,
       "cacheWritePer1M": 0.125,
       "cacheWrite1hPer1M": 0.2,
-      "verifiedAt": "2026-10-23",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
       "longContextThreshold": 100000,
       "longContextInputPer1M": 0.5,
@@ -200,6 +201,36 @@
       "longContextCacheWritePer1M": 0.625,
       "longContextCacheWrite1hPer1M": 1.0,
       "notes": "Active; retirement not sooner than 2027-10-07. Tiered by prompt length at 100K tokens (input + cache read + cache write count toward the threshold): base rates are the <=100K tier; prompts over 100K bill at $0.50 in / $2.50 out / $0.05 cache read / $0.625 5m write / $1 1h write via the longContext* fields."
+    },
+    "claude-opus-4-1": {
+      "inputPer1M": 15.0,
+      "outputPer1M": 75.0,
+      "cacheReadPer1M": 1.5,
+      "cacheWritePer1M": 18.75,
+      "cacheWrite1hPer1M": 30.0,
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "Retired from Anthropic's first-party API 2026-08-05 (API ID claude-opus-4-1-20250805; replacement claude-opus-4-8). Rate retained for historical cost calculations and Bedrock / Google-managed Vertex use."
+    },
+    "claude-opus-4": {
+      "inputPer1M": 15.0,
+      "outputPer1M": 75.0,
+      "cacheReadPer1M": 1.5,
+      "cacheWritePer1M": 18.75,
+      "cacheWrite1hPer1M": 30.0,
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "Retired from Anthropic's first-party API 2026-06-15 (API ID claude-opus-4-20250514; replacement claude-opus-4-8). Rate retained for historical cost calculations only."
+    },
+    "claude-sonnet-4": {
+      "inputPer1M": 3.0,
+      "outputPer1M": 15.0,
+      "cacheReadPer1M": 0.3,
+      "cacheWritePer1M": 3.75,
+      "cacheWrite1hPer1M": 6.0,
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "notes": "Retired from Anthropic's first-party API 2026-06-15 (API ID claude-sonnet-4-20250514; replacement claude-sonnet-5-5). Rate retained for historical cost calculations only."
     }
   },
   "openai": {
@@ -207,7 +238,7 @@
       "inputPer1M": 5.0,
       "outputPer1M": 30.0,
       "cacheReadPer1M": 0.5,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "longContextThreshold": 272000,
       "longContextInputPer1M": 10.0,
@@ -218,7 +249,7 @@
     "gpt-5.5-pro": {
       "inputPer1M": 30.0,
       "outputPer1M": 180.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "OpenAI's model page does not state a long-context surcharge for this model; none modeled (unverified whether one applies)."
     },
@@ -226,7 +257,7 @@
       "inputPer1M": 2.5,
       "outputPer1M": 15.0,
       "cacheReadPer1M": 0.25,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "longContextThreshold": 272000,
       "longContextInputPer1M": 5.0,
@@ -238,39 +269,39 @@
       "inputPer1M": 0.75,
       "outputPer1M": 4.5,
       "cacheReadPer1M": 0.075,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing"
     },
     "gpt-4.1": {
       "inputPer1M": 2.0,
       "outputPer1M": 8.0,
       "cacheReadPer1M": 0.5,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
-      "notes": "Corrected 2026-10-04: the earlier 'scheduled shutdown 2026-10-23' claim was wrong. OpenAI's deprecations page lists only gpt-4.1-nano for that date; gpt-4.1 has no deprecation notice."
+      "notes": "Snapshot gpt-4.1-2025-04-14 deprecated 2026-10-14 (OpenAI deprecations page); shutdown 2027-01-14, replacement gpt-6-luna. Supersedes the 2026-10-04 note that said no deprecation notice exists."
     },
     "gpt-4.1-mini": {
       "inputPer1M": 0.4,
       "outputPer1M": 1.6,
       "cacheReadPer1M": 0.1,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
-      "notes": "GA, snapshot gpt-4.1-mini-2025-04-14, 1,047,576 context / 32,768 max output. No deprecation notice as of 2026-10-05 (siblings: gpt-4.1-nano shuts down 2026-10-23)."
+      "notes": "GA, snapshot gpt-4.1-mini-2025-04-14, 1,047,576 context / 32,768 max output. Deprecated 2026-10-14 (OpenAI deprecations page); shutdown 2027-01-14, replacement gpt-6-luna."
     },
     "gpt-4.1-nano": {
       "inputPer1M": 0.1,
       "outputPer1M": 0.4,
       "cacheReadPer1M": 0.025,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
-      "notes": "Scheduled shutdown 2026-10-23 (OpenAI deprecations page) - replacement gpt-5.6-luna. Add for historical cost calculation only."
+      "notes": "Shut down 2026-10-23 (OpenAI deprecations page) - already past; calls now fail. Rate retained for historical cost calculation only. Replacement: gpt-5.6-luna."
     },
     "o3": {
       "inputPer1M": 2.0,
       "outputPer1M": 8.0,
       "cacheReadPer1M": 0.5,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-sol. Price confirmed 2026-10-05 against OpenAI pricing page: 2.00/0.50/8.00 (no drift)."
     },
@@ -279,22 +310,22 @@
       "outputPer1M": 4.4,
       "cacheReadPer1M": 0.275,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
-      "notes": "Scheduled shutdown 2026-10-23 (OpenAI deprecations page) - replacement gpt-5.6-terra. Price confirmed 2026-10-05 against OpenAI pricing page: 1.10/0.275/4.40 (no drift)."
+      "notes": "Shut down 2026-10-23 (OpenAI deprecations page) - already past; calls now fail. Rate retained for historical cost calculation only. Replacement: gpt-5.6-terra."
     },
     "gpt-5.4-nano": {
       "inputPer1M": 0.2,
       "outputPer1M": 1.25,
       "cacheReadPer1M": 0.02,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Scheduled shutdown 2027-04-01 (OpenAI deprecations page) - replacement gpt-6-luna."
     },
     "gpt-5.4-pro": {
       "inputPer1M": 30.0,
       "outputPer1M": 180.0,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "longContextThreshold": 272000,
       "longContextInputPer1M": 60.0,
@@ -306,15 +337,15 @@
       "outputPer1M": 4.4,
       "cacheReadPer1M": 0.55,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-08-18",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
-      "notes": "Scheduled shutdown 2026-10-23 (OpenAI deprecations page) — migrate consumers to gpt-5.6-sol/terra/luna before then."
+      "notes": "Shut down 2026-10-23 (OpenAI deprecations page) - already past; calls now fail. Rate retained for historical cost calculation only. Replacement: gpt-5.6-sol."
     },
     "o3-pro": {
       "inputPer1M": 20.0,
       "outputPer1M": 80.0,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-sol (reasoning.mode: pro)."
     },
@@ -323,9 +354,9 @@
       "outputPer1M": 60.0,
       "cacheReadPer1M": 7.5,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-08-18",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
-      "notes": "Scheduled shutdown 2026-10-23 (OpenAI deprecations page) — migrate consumers to gpt-5.6-sol/terra/luna before then."
+      "notes": "Shut down 2026-10-23 (OpenAI deprecations page) - already past; calls now fail. Rate retained for historical cost calculation only. Replacement: gpt-5.6-sol."
     },
     "o1-mini": {
       "inputPer1M": 0.55,
@@ -333,27 +364,30 @@
       "cacheReadPer1M": 0.55,
       "hasInvisibleReasoningTokens": true,
       "verifiedAt": "2026-05-18",
-      "sourceUrl": "https://developers.openai.com/api/docs/pricing"
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+      "notes": "SHUT DOWN 2025-10-27 (OpenAI deprecations page; replacement o4-mini, itself shut down 2026-10-23). No longer on the OpenAI pricing page - rate UNVERIFIED, retained for historical cost calculation only."
     },
     "gpt-4o": {
       "inputPer1M": 2.5,
       "outputPer1M": 10.0,
       "cacheReadPer1M": 1.25,
-      "verifiedAt": "2026-10-05",
-      "sourceUrl": "https://developers.openai.com/api/docs/pricing"
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+      "notes": "Dated snapshots gpt-4o-2024-08-06 and gpt-4o-2024-11-20 deprecated 2026-10-14 (OpenAI deprecations page); shutdown 2027-01-14, replacement gpt-6-luna. Whether the bare gpt-4o alias is retired on the same date is inferred, not stated. gpt-4o-2024-05-13 shut down 2026-10-23."
     },
     "gpt-4o-mini": {
       "inputPer1M": 0.15,
       "outputPer1M": 0.6,
       "cacheReadPer1M": 0.075,
-      "verifiedAt": "2026-10-05",
-      "sourceUrl": "https://developers.openai.com/api/docs/pricing"
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+      "notes": "Snapshot gpt-4o-mini-2024-07-18 deprecated 2026-10-14 (OpenAI deprecations page); shutdown 2027-01-14, replacement gpt-6-luna. Whether the bare gpt-4o-mini alias is retired on the same date is inferred, not stated."
     },
     "gpt-5": {
       "inputPer1M": 1.25,
       "outputPer1M": 10.0,
       "cacheReadPer1M": 0.125,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-sol."
     },
@@ -361,7 +395,7 @@
       "inputPer1M": 0.25,
       "outputPer1M": 2.0,
       "cacheReadPer1M": 0.025,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-terra."
     },
@@ -369,14 +403,14 @@
       "inputPer1M": 0.05,
       "outputPer1M": 0.4,
       "cacheReadPer1M": 0.005,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-luna."
     },
     "gpt-5-pro": {
       "inputPer1M": 15.0,
       "outputPer1M": 120.0,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-sol (pro mode)."
     },
@@ -384,7 +418,7 @@
       "inputPer1M": 1.25,
       "outputPer1M": 10.0,
       "cacheReadPer1M": 0.125,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Scheduled shutdown 2027-04-01 (OpenAI deprecations page) - replacement gpt-6-sol."
     },
@@ -400,13 +434,13 @@
       "inputPer1M": 1.75,
       "outputPer1M": 14.0,
       "cacheReadPer1M": 0.175,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing"
     },
     "gpt-5.2-pro": {
       "inputPer1M": 21.0,
       "outputPer1M": 168.0,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "cacheReadPer1M removed 2026-10-04: OpenAI publishes no cached-input price for pro models (the earlier 2.1 was an aggregator 0.1x guess)."
     },
@@ -430,7 +464,7 @@
       "inputPer1M": 1.75,
       "outputPer1M": 14.0,
       "cacheReadPer1M": 0.175,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Scheduled shutdown 2027-04-01 (OpenAI deprecations page) - replacement gpt-6-sol."
     },
@@ -439,7 +473,7 @@
       "outputPer1M": 20.0,
       "cacheReadPer1M": 0.4,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Corrected 2026-09-05: was 5.00/30.00/0.50 (stale, sourced from a secondary aggregator). Live OpenAI pricing confirms 4.00/20.00/0.40, independently corroborated by gpt-6-astra pricing being exactly 2.5x this rate. Downstream consumers on caret ranges will see reported Sol output costs drop ~33% — this is a correction, not a regression. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. OpenAI pricing page (2026-10-05): GPT-5.6 Sol promotional pricing is available at least through 2026-11-21; standard rate after that is not published.",
       "cacheWritePer1M": 5.0,
@@ -453,7 +487,7 @@
       "outputPer1M": 12.0,
       "cacheReadPer1M": 0.2,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "cacheWritePer1M": 2.5,
       "longContextThreshold": 272000,
@@ -467,7 +501,7 @@
       "outputPer1M": 1.2,
       "cacheReadPer1M": 0.02,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "notes": "Budget tier of the GPT-5.6 family (alongside gpt-5.6-sol and gpt-5.6-terra). Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input.",
       "cacheWritePer1M": 0.25,
@@ -486,7 +520,7 @@
       "longContextOutputPer1M": 75.0,
       "longContextCacheReadPer1M": 2.0,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-09-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
       "notes": "Prompts over 272K input tokens bill at 2x input/cache rates and 1.5x output for the FULL request (not just the excess). No schema field exists for long-context cache write; if a doubled write rate matters downstream, it would be $25.00/MTok by the same 2x rule — not modeled here."
     },
@@ -500,7 +534,7 @@
       "longContextOutputPer1M": 15.0,
       "longContextCacheReadPer1M": 0.4,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-sol",
       "notes": "Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. Long-context cache-write (2x) is not modeled (no schema field), same as gpt-6-astra. Superseded by gpt-6.1-sol (OpenAI model page, 2026-10-05); same input/output, half the cache-read rate."
     },
@@ -514,7 +548,7 @@
       "longContextOutputPer1M": 15.0,
       "longContextCacheReadPer1M": 0.2,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
       "notes": "Cache reads at 0.05x input (half of gpt-6-sol). Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request."
     },
@@ -528,9 +562,39 @@
       "longContextOutputPer1M": 0.75,
       "longContextCacheReadPer1M": 0.02,
       "hasInvisibleReasoningTokens": true,
-      "verifiedAt": "2026-10-04",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
       "notes": "Budget tier of GPT-6. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. Long-context cache-write (2x) is not modeled (no schema field), same as gpt-6-astra."
+    },
+    "gpt-6.1-terra": {
+      "inputPer1M": 1.0,
+      "outputPer1M": 5.0,
+      "cacheReadPer1M": 0.05,
+      "cacheWritePer1M": 1.25,
+      "longContextThreshold": 272000,
+      "longContextInputPer1M": 2.0,
+      "longContextOutputPer1M": 7.5,
+      "longContextCacheReadPer1M": 0.1,
+      "hasInvisibleReasoningTokens": true,
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+      "notes": "Released 2026-10-26 (OpenAI changelog). Context 1,050,000 (922K max input) / 128K max output, cutoff 2026-06-01. Reasoning tokens billed as output. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input (30-minute tier); long-context cache-write (2x) not modeled."
+    },
+    "chat-latest": {
+      "inputPer1M": 5.0,
+      "outputPer1M": 30.0,
+      "cacheReadPer1M": 0.5,
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+      "notes": "Rolling ChatGPT alias listed on the OpenAI pricing page (checked 2026-11-02); the underlying model changes without notice, so cost is only as accurate as the alias target. Added at Owner request; no fleet consumer found."
+    },
+    "gpt-5-search-api": {
+      "inputPer1M": 1.25,
+      "outputPer1M": 10.0,
+      "cacheReadPer1M": 0.125,
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://developers.openai.com/api/docs/pricing",
+      "notes": "Search-tool model listed on the OpenAI pricing page (checked 2026-11-02). Token rates only; any per-call web search fees are not modeled. Added at Owner request; no fleet consumer found."
     }
   },
   "gemini": {
@@ -542,7 +606,7 @@
       "longContextInputPer1M": 4.0,
       "longContextOutputPer1M": 18.0,
       "longContextCacheReadPer1M": 0.4,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-2.5-pro": {
@@ -553,7 +617,7 @@
       "longContextInputPer1M": 2.5,
       "longContextOutputPer1M": 15.0,
       "longContextCacheReadPer1M": 0.25,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "notes": "No shutdown date announced, but Google limits access to 2.5 models to users who actively used them - new projects may get 404/403."
     },
@@ -561,7 +625,7 @@
       "inputPer1M": 0.3,
       "outputPer1M": 2.5,
       "cacheReadPer1M": 0.03,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "notes": "Gemini API (ai.google.dev deprecations page, 2026-10-05): no shutdown date announced; access limited to previously active users, new projects should use 3.5 Flash-Lite or 3.8 Flash. Vertex AI (separate surface) lists discontinuation 2026-10-20."
     },
@@ -569,7 +633,7 @@
       "inputPer1M": 0.25,
       "outputPer1M": 1.5,
       "cacheReadPer1M": 0.025,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "notes": "Scheduled shutdown 2027-05-07 (Google deprecations page) - replacement gemini-3.5-flash-lite."
     },
@@ -577,7 +641,7 @@
       "inputPer1M": 0.5,
       "outputPer1M": 3.0,
       "cacheReadPer1M": 0.05,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "notes": "Legacy preview; superseded by gemini-3.6-flash. No shutdown date announced."
     },
@@ -585,7 +649,7 @@
       "inputPer1M": 0.1,
       "outputPer1M": 0.4,
       "cacheReadPer1M": 0.01,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "notes": "Gemini API (ai.google.dev deprecations page, 2026-10-05): no shutdown date announced; access limited to previously active users, new projects should use 3.5 Flash-Lite or 3.8 Flash. Vertex AI (separate surface) lists discontinuation 2026-10-20."
     },
@@ -600,14 +664,14 @@
       "inputPer1M": 0.3,
       "outputPer1M": 2.5,
       "cacheReadPer1M": 0.03,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing"
     },
     "gemini-3.6-flash": {
       "inputPer1M": 0.75,
       "outputPer1M": 3.75,
       "cacheReadPer1M": 0.075,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "notes": "Introductory pricing through 2026-12-31; standard pricing from 2027-01-01 is 1.50/7.50 input/output, cacheRead 0.15. Do not flag the January change as drift."
     },
@@ -623,9 +687,25 @@
       "inputPer1M": 0.75,
       "outputPer1M": 3.75,
       "cacheReadPer1M": 0.075,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
       "notes": "Introductory pricing through 2026-12-31; standard pricing from 2027-01-01 is 1.50/7.50 input/output, cacheRead 0.15. Do not flag the January change as drift."
+    },
+    "gemini-4-argon": {
+      "inputPer1M": 2.0,
+      "outputPer1M": 10.0,
+      "cacheReadPer1M": 0.1,
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "notes": "Time-boxed introductory price: $2.00 in / $10.00 out / $0.10 cache read through 2026-11-30. Price steps up to $4.00 / $20.00 / $0.20 on 2026-12-01 - needs a repricing PR then. 1M context window. Implicit caching only. No >200k tier listed. Not available on the free tier. Do not flag the step-up as drift before 2026-12-01."
+    },
+    "gemini-robotics-er-2-preview": {
+      "inputPer1M": 1.0,
+      "outputPer1M": 5.0,
+      "cacheReadPer1M": 0.1,
+      "verifiedAt": "2026-11-02",
+      "sourceUrl": "https://ai.google.dev/gemini-api/docs/pricing",
+      "notes": "Preview. Introductory pricing through 2026-12-31; from 2027-01-01 $2.00 in / $10.00 out / $0.20 cache read. Robotics embodied-reasoning model with text output; add only if a fleet consumer uses it."
     }
   },
   "deepseek": {
@@ -633,7 +713,7 @@
       "inputPer1M": 0.15,
       "outputPer1M": 0.6,
       "cacheReadPer1M": 0.003,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "notes": "DeepSeek-V4.1-Flash. Off-peak baseline rate. Peak (01:00-04:00 and 06:00-10:00 UTC, Monday-Friday excluding Chinese public holidays) is 2x: 0.30/1.20/cache 0.006. computeCost() does not model time-of-day pricing. Legacy name deepseek-v4-flash is served by this model and billed at this price."
     },
@@ -641,7 +721,7 @@
       "inputPer1M": 0.15,
       "outputPer1M": 0.6,
       "cacheReadPer1M": 0.003,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "notes": "Legacy name: the model is retired, requests are served by DeepSeek-V4.1-Flash (deepseek-flash) and billed at the Flash price (off-peak baseline). Peak (01:00-04:00 and 06:00-10:00 UTC, Monday-Friday excluding Chinese public holidays) is 2x. computeCost() does not model time-of-day pricing. Migrate callers to deepseek-flash.",
       "deprecatedAliasFor": "deepseek-flash"
@@ -650,7 +730,7 @@
       "inputPer1M": 0.66,
       "outputPer1M": 1.98,
       "cacheReadPer1M": 0.022,
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "notes": "Off-peak baseline rate. Peak (01:00-04:00 and 06:00-10:00 UTC, Monday-Friday excluding Chinese public holidays) is 2x: 1.32/3.96/cache 0.044. computeCost() does not model time-of-day pricing."
     },
@@ -726,7 +806,7 @@
         "mcpCalls": 0,
         "imageGenerationCalls": 0.05
       },
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.7"
     },
     "grok-4.6": {
@@ -747,7 +827,7 @@
         "mcpCalls": 0,
         "imageGenerationCalls": 0.05
       },
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.6"
     },
     "grok-4.5": {
@@ -768,7 +848,7 @@
         "mcpCalls": 0,
         "imageGenerationCalls": 0.05
       },
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.5"
     },
     "grok-4.3": {
@@ -789,7 +869,7 @@
         "mcpCalls": 0,
         "imageGenerationCalls": 0.05
       },
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.3"
     },
     "grok-4.20-0309-reasoning": {
@@ -810,7 +890,7 @@
         "mcpCalls": 0,
         "imageGenerationCalls": 0.05
       },
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.20-0309-reasoning"
     },
     "grok-4.20-0309-non-reasoning": {
@@ -831,7 +911,7 @@
         "mcpCalls": 0,
         "imageGenerationCalls": 0.05
       },
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.20-0309-non-reasoning"
     },
     "grok-4.20-multi-agent-0309": {
@@ -852,7 +932,7 @@
         "mcpCalls": 0,
         "imageGenerationCalls": 0.05
       },
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-4.20-multi-agent-0309"
     },
     "grok-build-0.1": {
@@ -873,7 +953,7 @@
         "mcpCalls": 0,
         "imageGenerationCalls": 0.05
       },
-      "verifiedAt": "2026-10-05",
+      "verifiedAt": "2026-11-02",
       "sourceUrl": "https://docs.x.ai/developers/models/grok-build-0.1"
     }
   }
