@@ -19,7 +19,7 @@
 import type { PricingTable } from './types.js';
 
 export const DEFAULT_PRICING_TABLE: PricingTable = {
-  versionedAt: '2026-11-02',
+  versionedAt: '2026-11-14',
 
   anthropic: {
     'claude-fable-5': {
@@ -41,6 +41,17 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       outputPer1M: 50,
       sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
       verifiedAt: '2026-11-02',
+    },
+    'claude-fable-5-2': {
+      cacheReadPer1M: 0.2,
+      cacheWrite1hPer1M: 16,
+      cacheWritePer1M: 10,
+      inputPer1M: 8,
+      notes:
+        'Active, GA on the Claude API (created 2026-11-09); 1M context, 128K max output; retirement not sooner than 2027-11-09. Cache reads priced at 0.025x base input (not the standard 0.1x). Succeeds claude-fable-5-1. Fast mode is priced separately at $16/$80 and is not modeled.',
+      outputPer1M: 40,
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-11-14',
     },
     'claude-haiku-3': {
       cacheReadPer1M: 0.03,
@@ -70,7 +81,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheWritePer1M: 1.25,
       inputPer1M: 1,
       notes:
-        'Active; Anthropic retirement not sooner than 2026-10-15 (a floor, not a notice). Re-check monthly.',
+        'Active; Anthropic retirement not sooner than 2026-10-15 (a floor, not a notice; that date has passed with no retirement notice as of 2026-11-14). Re-check monthly.',
       outputPer1M: 5,
       sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
       verifiedAt: '2026-11-02',
@@ -124,6 +135,17 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
       verifiedAt: '2026-11-02',
     },
+    'claude-mythos-5-2': {
+      cacheReadPer1M: 0.2,
+      cacheWrite1hPer1M: 16,
+      cacheWritePer1M: 10,
+      inputPer1M: 8,
+      notes:
+        'Limited availability (Cyber Verification Program orgs only); not listed on our key. Same rates as claude-fable-5-2. Cache reads priced at 0.025x base input. Retirement not sooner than 2027-11-09.',
+      outputPer1M: 40,
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-11-14',
+    },
     'claude-opus-4': {
       cacheReadPer1M: 1.5,
       cacheWrite1hPer1M: 30,
@@ -156,6 +178,17 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       outputPer1M: 25,
       sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
       verifiedAt: '2026-11-02',
+    },
+    'claude-opus-4-5-20251101': {
+      cacheReadPer1M: 0.5,
+      cacheWrite1hPer1M: 10,
+      cacheWritePer1M: 6.25,
+      inputPer1M: 5,
+      notes:
+        'Live dated API ID for claude-opus-4-5 (200K context, 64K max output). Active; Anthropic retirement not sooner than 2026-11-24 (a floor, not a notice). Re-check weekly until a notice appears.',
+      outputPer1M: 25,
+      sourceUrl: 'https://platform.claude.com/docs/en/about-claude/pricing',
+      verifiedAt: '2026-11-14',
     },
     'claude-opus-4-6': {
       cacheReadPer1M: 0.5,
@@ -328,7 +361,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
     'gpt-5': {
       cacheReadPer1M: 0.125,
       inputPer1M: 1.25,
-      notes: 'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-sol.',
+      notes: 'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-6.1-sol.',
       outputPer1M: 10,
       sourceUrl: 'https://developers.openai.com/api/docs/pricing',
       verifiedAt: '2026-11-02',
@@ -337,7 +370,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheReadPer1M: 0.025,
       inputPer1M: 0.25,
       notes:
-        'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-terra.',
+        'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-6.1-terra.',
       outputPer1M: 2,
       sourceUrl: 'https://developers.openai.com/api/docs/pricing',
       verifiedAt: '2026-11-02',
@@ -345,7 +378,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
     'gpt-5-nano': {
       cacheReadPer1M: 0.005,
       inputPer1M: 0.05,
-      notes: 'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-luna.',
+      notes: 'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-6-luna.',
       outputPer1M: 0.4,
       sourceUrl: 'https://developers.openai.com/api/docs/pricing',
       verifiedAt: '2026-11-02',
@@ -353,7 +386,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
     'gpt-5-pro': {
       inputPer1M: 15,
       notes:
-        'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-sol (pro mode).',
+        'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-6.1-sol (reasoning.mode: pro).',
       outputPer1M: 120,
       sourceUrl: 'https://developers.openai.com/api/docs/pricing',
       verifiedAt: '2026-11-02',
@@ -479,11 +512,14 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
     },
     'gpt-5.5-pro': {
       inputPer1M: 30,
+      longContextInputPer1M: 60,
+      longContextOutputPer1M: 270,
+      longContextThreshold: 272000,
       notes:
-        "OpenAI's model page does not state a long-context surcharge for this model; none modeled (unverified whether one applies).",
+        'Long-context tier (above 272K input tokens: 60.00 in / 270.00 out for the full request) is taken from the OpenAI pricing page; it is not stated on the model page and is unconfirmed.',
       outputPer1M: 180,
       sourceUrl: 'https://developers.openai.com/api/docs/pricing',
-      verifiedAt: '2026-11-02',
+      verifiedAt: '2026-11-14',
     },
     'gpt-5.6-luna': {
       cacheReadPer1M: 0.02,
@@ -510,7 +546,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       longContextOutputPer1M: 30,
       longContextThreshold: 272000,
       notes:
-        'Corrected 2026-09-05: was 5.00/30.00/0.50 (stale, sourced from a secondary aggregator). Live OpenAI pricing confirms 4.00/20.00/0.40, independently corroborated by gpt-6-astra pricing being exactly 2.5x this rate. Downstream consumers on caret ranges will see reported Sol output costs drop ~33% — this is a correction, not a regression. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. OpenAI pricing page (2026-10-05): GPT-5.6 Sol promotional pricing is available at least through 2026-11-21; standard rate after that is not published.',
+        'Corrected 2026-09-05: was 5.00/30.00/0.50 (stale, sourced from a secondary aggregator). Live OpenAI pricing confirms 4.00/20.00/0.40, independently corroborated by gpt-6-astra pricing being exactly 2.5x this rate. Downstream consumers on caret ranges will see reported Sol output costs drop ~33% — this is a correction, not a regression. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. OpenAI pricing page (2026-11-14): GPT-5.6 Sol promotional pricing ends 2026-11-30; no post-promo rate is published.',
       outputPer1M: 20,
       sourceUrl: 'https://developers.openai.com/api/docs/pricing',
       verifiedAt: '2026-11-02',
@@ -630,7 +666,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       hasInvisibleReasoningTokens: true,
       inputPer1M: 2,
       notes:
-        'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-sol. Price confirmed 2026-10-05 against OpenAI pricing page: 2.00/0.50/8.00 (no drift).',
+        'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-6.1-sol. Price re-confirmed 2026-11-14: 2.00/0.50/8.00.',
       outputPer1M: 8,
       sourceUrl: 'https://developers.openai.com/api/docs/pricing',
       verifiedAt: '2026-11-02',
@@ -649,7 +685,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       hasInvisibleReasoningTokens: true,
       inputPer1M: 20,
       notes:
-        'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-5.6-sol (reasoning.mode: pro).',
+        'Scheduled shutdown 2026-12-11 (OpenAI deprecations page) - replacement gpt-6.1-sol (reasoning.mode: pro).',
       outputPer1M: 80,
       sourceUrl: 'https://developers.openai.com/api/docs/pricing',
       verifiedAt: '2026-11-02',
@@ -671,7 +707,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheReadPer1M: 0.03,
       inputPer1M: 0.3,
       notes:
-        'Gemini API (ai.google.dev deprecations page, 2026-10-05): no shutdown date announced; access limited to previously active users, new projects should use 3.5 Flash-Lite or 3.8 Flash. Vertex AI (separate surface) lists discontinuation 2026-10-20.',
+        'Google deprecations page (2026-11-14): shutdown 2026-12-01. API requests auto-route to gemini-3.5-flash-lite from that date and are billed at Gemini 3.5 Flash-Lite rates (same 0.30/2.50 as this row). Vertex AI (separate surface) listed discontinuation 2026-10-20. Access limited to previously active users.',
       outputPer1M: 2.5,
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
       verifiedAt: '2026-11-02',
@@ -693,7 +729,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       longContextOutputPer1M: 15,
       longContextThreshold: 200000,
       notes:
-        'No shutdown date announced, but Google limits access to 2.5 models to users who actively used them - new projects may get 404/403.',
+        'Google deprecations page (2026-11-14): shutdown 2026-12-01. API requests auto-route to gemini-3.8-flash from that date and are billed at Gemini 3.8 Flash rates. Table rate applies only until then. No longer selectable in AI Studio; access limited to previously active users.',
       outputPer1M: 10,
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
       verifiedAt: '2026-11-02',
@@ -726,12 +762,27 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
       verifiedAt: '2026-11-02',
     },
-    'gemini-3.5-flash': {
-      cacheReadPer1M: 0.15,
-      inputPer1M: 1.5,
-      outputPer1M: 9,
+    'gemini-3.1-pro-preview-customtools': {
+      cacheReadPer1M: 0.2,
+      inputPer1M: 2,
+      longContextCacheReadPer1M: 0.4,
+      longContextInputPer1M: 4,
+      longContextOutputPer1M: 18,
+      longContextThreshold: 200000,
+      notes:
+        'Same pricing as gemini-3.1-pro-preview (listed under one heading on the pricing page). Custom-tools variant.',
+      outputPer1M: 12,
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
-      verifiedAt: '2026-10-05',
+      verifiedAt: '2026-11-14',
+    },
+    'gemini-3.5-flash': {
+      cacheReadPer1M: 0.075,
+      inputPer1M: 0.75,
+      notes:
+        'Absent from the pricing page and AI Studio since 2026-10-08. The ID routes to gemini-3.6-flash (live call on 2026-11-14 returned modelVersion: gemini-3.6-flash). Priced at the serving model rate on that basis; Google does not state the billing rate for routed calls, so this is unverified. Introductory price ends 2026-12-31; standard pricing of 1.50/7.50 input/output, cacheRead 0.15 from 2027-01-01. Do not flag the January change as drift.',
+      outputPer1M: 3.75,
+      sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
+      verifiedAt: '2026-11-14',
     },
     'gemini-3.5-flash-lite': {
       cacheReadPer1M: 0.03,
@@ -753,10 +804,10 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       cacheReadPer1M: 0.075,
       inputPer1M: 0.75,
       notes:
-        'Introductory pricing through 2026-12-31; standard pricing from 2027-01-01 is 1.50/7.50 input/output, cacheRead 0.15. Do not flag the January change as drift.',
+        'Absent from the pricing page and AI Studio since 2026-10-08. The ID routes to gemini-3.8-flash (live call on 2026-11-14 returned modelVersion: gemini-3.8-flash). Introductory pricing through 2026-12-31; standard pricing from 2027-01-01 is 1.50/7.50 input/output, cacheRead 0.15. Do not flag the January change as drift.',
       outputPer1M: 3.75,
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
-      verifiedAt: '2026-10-05',
+      verifiedAt: '2026-11-14',
     },
     'gemini-3.8-flash': {
       cacheReadPer1M: 0.075,
@@ -775,6 +826,24 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       outputPer1M: 10,
       sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
       verifiedAt: '2026-11-02',
+    },
+    'gemini-4-carbon': {
+      cacheReadPer1M: 0.1,
+      inputPer1M: 2,
+      notes:
+        'GA 2026-11-10 (changelog). Time-boxed introductory price: $2.00 in / $10.00 out / $0.10 cache read through 2026-11-30. Steps up to $4.00 / $20.00 / $0.20 on 2026-12-01 - needs a repricing PR then (same step-up as gemini-4-argon). 1M context window. Implicit caching only. No >200k tier listed. Do not flag the step-up as drift before 2026-12-01.',
+      outputPer1M: 10,
+      sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
+      verifiedAt: '2026-11-14',
+    },
+    'gemini-4-hydrogen': {
+      cacheReadPer1M: 0.075,
+      inputPer1M: 1.5,
+      notes:
+        'GA 2026-11-12 (changelog). Standard price, no step-up listed. 1M context window. Positioned for everyday coding and agentic workflows. No >200k tier listed. Available on the free tier.',
+      outputPer1M: 7.5,
+      sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
+      verifiedAt: '2026-11-14',
     },
     'gemini-robotics-er-2-preview': {
       cacheReadPer1M: 0.1,
@@ -840,18 +909,19 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
 
   perplexity: {
     sonar: {
-      inputPer1M: 1,
+      cacheReadPer1M: 0.0625,
+      inputPer1M: 0.25,
       notes:
-        "Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview. Per-request fees ($5-14 per 1K requests depending on context size) are not modeled, so isPartial is true by design. 2026-10-05: docs.perplexity.ai no longer publishes legacy Sonar rates; the Agent API model list shows perplexity/sonar at 0.25 in / 2.50 out / 0.0625 cache-read. Whether legacy chat-completions 'sonar' calls bill at that rate is not stated. Rates above are UNVERIFIED.",
-      outputPer1M: 1,
+        'Repriced 2026-11-14 to the Agent API perplexity/sonar rate (0.25 in / 2.50 out / 0.0625 cache read), the only Sonar rate Perplexity publishes. Sonar Chat Completions support ended 2026-09-27; sync/streaming requests are reformulated as Agent API requests, rolling out gradually by model. Perplexity does not state that reformulated legacy calls bill at this rate (corroborated only by third-party reports). The legacy flat per-request fee ($5-14 per 1K) is gone on the Agent API; web_search is a separate tool fee ($0.0025 per invocation, $0.001 Fast Search) not computed from tokens, so isPartial stays true.',
+      outputPer1M: 2.5,
       partialCostCoverage: true,
-      sourceUrl: 'https://docs.perplexity.ai/guides/pricing',
-      verifiedAt: '2026-07-25',
+      sourceUrl: 'https://docs.perplexity.ai/docs/agent-api/models',
+      verifiedAt: '2026-11-14',
     },
     'sonar-deep-research': {
       inputPer1M: 2,
       notes:
-        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview 2026-10-05: no published rate for this model on docs.perplexity.ai (pricing, Router, or Agent API pages); UNVERIFIED.',
+        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview 2026-10-05: no published rate for this model on docs.perplexity.ai (pricing, Router, or Agent API pages); UNVERIFIED. 2026-11-14: Perplexity publishes no current rate for this model; the stored rate is the last published one, unverified since 2026-07-25.',
       outputPer1M: 8,
       partialCostCoverage: true,
       sourceUrl: 'https://docs.perplexity.ai/guides/pricing',
@@ -860,7 +930,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
     'sonar-pro': {
       inputPer1M: 3,
       notes:
-        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview. Per-request fees ($5-14 per 1K requests depending on context size) are not modeled, so isPartial is true by design. 2026-10-05: no published rate for this model on docs.perplexity.ai (pricing, Router, or Agent API pages); UNVERIFIED.',
+        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview. Per-request fees ($5-14 per 1K requests depending on context size) are not modeled, so isPartial is true by design. 2026-10-05: no published rate for this model on docs.perplexity.ai (pricing, Router, or Agent API pages); UNVERIFIED. 2026-11-14: Perplexity publishes no current rate for this model; the stored rate is the last published one, unverified since 2026-07-25.',
       outputPer1M: 15,
       partialCostCoverage: true,
       sourceUrl: 'https://docs.perplexity.ai/guides/pricing',
@@ -869,7 +939,7 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
     'sonar-reasoning-pro': {
       inputPer1M: 2,
       notes:
-        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview. Per-request fees ($5-14 per 1K requests depending on context size) are not modeled, so isPartial is true by design. 2026-10-05: no published rate for this model on docs.perplexity.ai (pricing, Router, or Agent API pages); UNVERIFIED.',
+        'Perplexity moved Sonar Chat Completions to the Agent API (support ended 2026-09-27; sync/streaming requests are being reformulated, async unsupported). Rates here are the last published Sonar rates; billing after reformulation is unverified. See https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview. Per-request fees ($5-14 per 1K requests depending on context size) are not modeled, so isPartial is true by design. 2026-10-05: no published rate for this model on docs.perplexity.ai (pricing, Router, or Agent API pages); UNVERIFIED. 2026-11-14: Perplexity publishes no current rate for this model; the stored rate is the last published one, unverified since 2026-07-25.',
       outputPer1M: 8,
       partialCostCoverage: true,
       sourceUrl: 'https://docs.perplexity.ai/guides/pricing',
