@@ -2,11 +2,12 @@
  * Live smoke test for the Perplexity provider.
  *
  * Run from monorepo root:
- *   set -a; source .env; set +a
  *   pnpm --filter=@diabolicallabs/llm-client exec tsx ../../scripts/smoke-perplexity.ts
  *
  * Or from the repo root:
- *   set -a; source .env; set +a && npx tsx scripts/smoke-perplexity.ts
+ *   npx tsx scripts/smoke-perplexity.ts
+ *
+ * Keys come from the environment (exported in ~/.zshenv on the Owner's machine).
  *
  * Verifies:
  *   1. complete() with sonar — at least one citation returned

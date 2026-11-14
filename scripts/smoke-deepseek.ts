@@ -14,8 +14,8 @@
  *   deepseek-chat      — was DeepSeek-V3; now throws LlmError(kind:'bad_request')
  *   deepseek-reasoner  — was DeepSeek-R1; now throws LlmError(kind:'bad_request')
  *
- * Requires: DEEPSEEK_API_KEY in environment.
- * Run: set -a; source .env; set +a && npx tsx scripts/smoke-deepseek.ts
+ * Requires: DEEPSEEK_API_KEY in environment (exported in ~/.zshenv on the Owner's machine).
+ * Run: npx tsx scripts/smoke-deepseek.ts
  */
 
 import { createClientFromEnv } from '../packages/llm-client/src/client.js';

@@ -2,7 +2,8 @@
  * Live smoke test for the OpenAI provider.
  *
  * Run from monorepo root:
- *   set -a; source .env; set +a && npx tsx scripts/smoke-openai.ts
+ *   npx tsx scripts/smoke-openai.ts
+ *   (keys come from the environment; on the Owner's machine they are exported in ~/.zshenv)
  *
  * Target model: gpt-5.4-mini (the model GEOAudit uses).
  * This smoke specifically exercises the max_completion_tokens rename path:

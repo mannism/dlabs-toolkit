@@ -9,9 +9,8 @@
  * IMPORTANT: This script is a DIAGNOSTIC TOOL only. It never modifies the
  * pricing table. Detected drift triggers a human-verified research refresh.
  *
- * Requires: PERPLEXITY_API_KEY in environment.
+ * Requires: PERPLEXITY_API_KEY in environment (exported in ~/.zshenv on the Owner's machine).
  * Usage: pnpm pricing:verify [--threshold=<percent>]
- *        set -a; source .env; set +a && pnpm pricing:verify
  */
 
 import { DEFAULT_PRICING_TABLE } from '../src/table.js';

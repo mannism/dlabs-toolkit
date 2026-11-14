@@ -2,7 +2,8 @@
  * Live smoke test for the Gemini Files API (v5.1.0).
  *
  * Run from monorepo root:
- *   set -a; source .env; set +a && npx tsx scripts/smoke-files-gemini.ts
+ *   npx tsx scripts/smoke-files-gemini.ts
+ *   (keys come from the environment; on the Owner's machine they are exported in ~/.zshenv)
  *
  * Env var: GOOGLE_AI_API_KEY
  *

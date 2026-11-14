@@ -257,13 +257,12 @@ This package uses a monthly Perplexity drift check + quarterly baseline refresh 
 Run this before merging a pricing table PR to confirm table values are in the expected ballpark:
 
 ```bash
-set -a; source .env; set +a
 pnpm pricing:verify
 # Optional: custom threshold (default 10%)
 pnpm pricing:verify --threshold=5
 ```
 
-Requires `PERPLEXITY_API_KEY`. Queries Perplexity `sonar` once per provider, prints a diff table, and exits non-zero if any model's detected price differs by more than the threshold. **Never auto-updates the table** — detected drift triggers a human-verified research refresh.
+Requires `PERPLEXITY_API_KEY` in the environment (exported in `~/.zshenv` on the Owner's machine). Queries Perplexity `sonar` once per provider, prints a diff table, and exits non-zero if any model's detected price differs by more than the threshold. **Never auto-updates the table** — detected drift triggers a human-verified research refresh.
 
 ### Monthly drift check (v0.2.0+ hybrid model)
 

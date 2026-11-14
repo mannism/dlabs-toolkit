@@ -2,7 +2,8 @@
  * Live smoke test for the OpenAI Files API (v5.1.0).
  *
  * Run from monorepo root:
- *   set -a; source .env; set +a && npx tsx scripts/smoke-files-openai.ts
+ *   npx tsx scripts/smoke-files-openai.ts
+ *   (keys come from the environment; on the Owner's machine they are exported in ~/.zshenv)
  *
  * Env var: OPENAI_API_KEY
  *
