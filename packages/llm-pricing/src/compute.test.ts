@@ -369,11 +369,12 @@ describe('computeCost — Perplexity', () => {
     const usage = basicUsage(500_000, 300_000);
     const cost = computeCost({ usage, provider: 'perplexity', model: 'sonar' });
 
-    // Input: 0.5M × $1.00 = $0.50
-    // Output: 0.3M × $1.00 = $0.30
-    expect(cost.input).toBeCloseTo(0.5, 5);
-    expect(cost.output).toBeCloseTo(0.3, 5);
-    expect(round(cost.total)).toBe(0.8);
+    // Agent API rate (repriced 2026-11-14)
+    // Input: 0.5M × $0.25 = $0.125
+    // Output: 0.3M × $2.50 = $0.75
+    expect(cost.input).toBeCloseTo(0.125, 5);
+    expect(cost.output).toBeCloseTo(0.75, 5);
+    expect(cost.total).toBeCloseTo(0.875, 5);
     expect(cost.isPartial).toBe(true);
   });
 
@@ -403,7 +404,7 @@ describe('computeCost — Perplexity', () => {
 
     // Per-request fees are not modeled; flag is set, token total is not altered
     expect(cost.isPartial).toBe(true);
-    expect(round(cost.total)).toBe(0.8);
+    expect(cost.total).toBeCloseTo(0.875, 5);
   });
 
   it('sonar-reasoning-pro: standard cost', () => {
