@@ -147,8 +147,8 @@ importers:
   packages/notion:
     dependencies:
       '@notionhq/client':
-        specifier: ^5.30.0
-        version: 5.30.0
+        specifier: ^5.31.1
+        version: 5.31.1
     devDependencies:
       '@types/node':
         specifier: ^26.6.6
@@ -754,8 +754,8 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  '@notionhq/client@5.30.0':
-    resolution: {integrity: sha512-SZpwkns/zScc7P7MA1LC144VT6AlKhy3NRAHa1rSxr/FVBGnmgMI2n81Y89X0UPgnKNSLyoEbzsod8KZsSGLSg==}
+  '@notionhq/client@5.31.1':
+    resolution: {integrity: sha512-LuVlgHTkHPZf0LOILKVaDboYOyIXNHP9x2DSMhrJzUJjB7GzWjves1OA+8iqJxn1QPW6OqXdp0sS/z0Vh+JACA==}
     engines: {node: '>=22'}
 
   '@open-draft/until@3.0.1':
@@ -2676,7 +2676,7 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
-  '@notionhq/client@5.30.0': {}
+  '@notionhq/client@5.31.1': {}
 
   '@open-draft/until@3.0.1': {}
 
