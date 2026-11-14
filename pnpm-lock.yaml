@@ -237,8 +237,8 @@ importers:
         specifier: workspace:*
         version: link:../notifier-core
       '@slack/types':
-        specifier: ^3.2.0
-        version: 3.2.0
+        specifier: ^3.3.0
+        version: 3.3.0
       '@slack/web-api':
         specifier: ^8.2.0
         version: 8.2.0
@@ -999,8 +999,8 @@ packages:
     resolution: {integrity: sha512-VGXhmmgsAo9shdQYh4tFDndd+7nsgp0Y5h0UPDaUp8K359pBasI6YdkMqFW3mCOxLQkq09qj7o7cq6f3DuXcJQ==}
     engines: {node: '>= 20', npm: '>=9.6.4'}
 
-  '@slack/types@3.2.0':
-    resolution: {integrity: sha512-IN4gdtlzQt8UJoj+1v+qAHeR4TxHO0KMlIs841SFfDQAcFFnsrWaGsEAE4goxVt8O/JOAFaGGdrFTzhNBop/Fg==}
+  '@slack/types@3.3.0':
+    resolution: {integrity: sha512-11r2kM9Zy/UlaV6OwPibZueVlyNJ5xtHEHK/iYDnPLyhQcxRtsifNAwNhJ1Lm0nszW4jrWCHThXCHCNJC/hvqg==}
     engines: {node: '>= 20', npm: '>=9.6.4'}
 
   '@slack/web-api@8.2.0':
@@ -2815,12 +2815,12 @@ snapshots:
     dependencies:
       '@types/node': 26.6.6
 
-  '@slack/types@3.2.0': {}
+  '@slack/types@3.3.0': {}
 
   '@slack/web-api@8.2.0':
     dependencies:
       '@slack/logger': 5.0.0
-      '@slack/types': 3.2.0
+      '@slack/types': 3.3.0
       '@types/node': 26.6.6
       '@types/retry': 0.12.5
       eventemitter3: 5.0.4
