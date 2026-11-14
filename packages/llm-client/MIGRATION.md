@@ -4,7 +4,7 @@
 
 ### What changed
 
-`@anthropic-ai/sdk` is now `^1.3.0`. SDK 1.x pins Anthropic API version `2026-10-21`, which removes `temperature`, `top_p` and `top_k`; a request that sends any of them returns HTTP 400 on every model.
+`@anthropic-ai/sdk` is now `^1.8.0`. SDK 1.x pins Anthropic API version `2026-10-21`, which removes `temperature`, `top_p` and `top_k`; a request that sends any of them returns HTTP 400 on every model.
 
 For Anthropic calls (`complete`, `stream`, `structured`, `streamStructured`, `withTools`), `temperature` from `LlmCallOptions` or `LlmClientConfig` is now **dropped**: it is not put on the request, and a single `anthropic_sampling_param_dropped` warning is logged through the toolkit logger once per process per model (model and parameter name only, never the value). Calls succeed and use the model's default sampling.
 
