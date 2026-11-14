@@ -30,7 +30,9 @@ const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
 
 if (!PERPLEXITY_API_KEY) {
   console.error('[pricing:verify] ERROR: PERPLEXITY_API_KEY is not set in environment.');
-  console.error('  Set it before running: set -a; source .env; set +a && pnpm pricing:verify');
+  console.error(
+    '  Export PERPLEXITY_API_KEY in your environment (e.g. ~/.zshenv), then: pnpm pricing:verify'
+  );
   process.exit(1);
 }
 
