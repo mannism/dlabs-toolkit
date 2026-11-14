@@ -2,7 +2,8 @@
  * Live smoke test for the xAI (Grok) provider.
  *
  * Run from the repo root (tsx is not installed locally; `npx tsx` fails here, use pnpm dlx):
- *   set -a; source .env; set +a && pnpm dlx tsx --tsconfig scripts/tsconfig.json scripts/smoke-xai.ts [--only=1,2]
+ *   pnpm dlx tsx --tsconfig scripts/tsconfig.json scripts/smoke-xai.ts [--only=1,2]
+ *   (keys come from the environment; on the Owner's machine they are exported in ~/.zshenv)
  * (--tsconfig maps the bare 'zod' import, which pnpm only installs under packages/llm-client)
  *
  * Every case prints the toolkit-computed cost (llm-pricing: token + server tool counts) beside
