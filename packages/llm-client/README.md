@@ -391,7 +391,11 @@ All methods accept `LlmCallOptions` as the options parameter:
 interface LlmCallOptions {
   model?: string;
   maxTokens?: number;
-  temperature?: number; // ignored for Anthropic (API 2026-10-21 rejects it); see MIGRATION.md v7
+  // Sampling temperature for OpenAI, Gemini, DeepSeek and Perplexity. Ignored for Anthropic from
+  // 7.0.0: Anthropic API 2026-10-21 (pinned by SDK 1.x) rejects it with HTTP 400, so it is not sent
+  // and a one-time `anthropic_sampling_param_dropped` warning is logged per model.
+  // See MIGRATION.md (v6.x to v7.0.0).
+  temperature?: number;
   timeoutMs?: number;              // Per-call timeout (ms). Overrides config.timeoutMs.
   signal?: AbortSignal;            // Caller-supplied cancel signal. Never retried.
   streamStallTimeoutMs?: number;   // Per-chunk silence timeout for stream(). Default 30000.

@@ -6,7 +6,7 @@
 
 `@anthropic-ai/sdk` is now `^1.8.0`. SDK 1.x pins Anthropic API version `2026-10-21`, which removes `temperature`, `top_p` and `top_k`; a request that sends any of them returns HTTP 400 on every model.
 
-For Anthropic calls (`complete`, `stream`, `structured`, `streamStructured`, `withTools`), `temperature` from `LlmCallOptions` or `LlmClientConfig` is now **dropped**: it is not put on the request, and a single `anthropic_sampling_param_dropped` warning is logged through the toolkit logger once per process per model (model and parameter name only, never the value). Calls succeed and use the model's default sampling.
+For Anthropic calls (`complete`, `stream`, `structured`, `streamStructured`, `withTools`), `temperature` from `LlmCallOptions` or `LlmClientConfig` is now **dropped**: it is not put on the request, and a single `anthropic_sampling_param_dropped` warning is logged through the toolkit logger once per process per model (model and parameter name only, never the value). Calls succeed and use the model's default sampling. Because the model's default sampling now applies, outputs may vary from run to run on Anthropic models, so evals and extraction that relied on `temperature: 0` are no longer deterministic.
 
 `temperature` stays on `LlmCallOptions` / `LlmClientConfig` because OpenAI, Gemini, DeepSeek and Perplexity still use it. `top_p` / `top_k` were never exposed and still are not.
 
@@ -20,7 +20,7 @@ Other fleet repos checked pass temperature only to OpenAI, Gemini or Perplexity.
 
 ### Action
 
-Stop passing `temperature` when the resolved provider is Anthropic. No other code change is needed; until you do, the warning appears once per model per process. If you must keep non-default sampling on Anthropic, pin to `@diabolicallabs/llm-client@^6` (SDK 0.135, API `2023-06-01`).
+Stop passing `temperature` when the resolved provider is Anthropic. No other code change is needed; until you do, the warning appears once per model per process. If you must keep non-default sampling on Anthropic, pin to `@diabolicallabs/llm-client@^6` (SDK 0.135, API `2023-06-01`). Staying on `^6` works only for as long as Anthropic serves that API version.
 
 ---
 
