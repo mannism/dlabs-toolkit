@@ -147,8 +147,8 @@ importers:
   packages/notion:
     dependencies:
       '@notionhq/client':
-        specifier: ^5.30.0
-        version: 5.30.0
+        specifier: ^5.31.1
+        version: 5.31.1
     devDependencies:
       '@types/node':
         specifier: ^26.6.6
@@ -237,8 +237,8 @@ importers:
         specifier: workspace:*
         version: link:../notifier-core
       '@slack/types':
-        specifier: ^3.2.0
-        version: 3.2.0
+        specifier: ^3.3.0
+        version: 3.3.0
       '@slack/web-api':
         specifier: ^8.2.0
         version: 8.2.0
@@ -754,8 +754,8 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  '@notionhq/client@5.30.0':
-    resolution: {integrity: sha512-SZpwkns/zScc7P7MA1LC144VT6AlKhy3NRAHa1rSxr/FVBGnmgMI2n81Y89X0UPgnKNSLyoEbzsod8KZsSGLSg==}
+  '@notionhq/client@5.31.1':
+    resolution: {integrity: sha512-LuVlgHTkHPZf0LOILKVaDboYOyIXNHP9x2DSMhrJzUJjB7GzWjves1OA+8iqJxn1QPW6OqXdp0sS/z0Vh+JACA==}
     engines: {node: '>=22'}
 
   '@open-draft/until@3.0.1':
@@ -999,8 +999,8 @@ packages:
     resolution: {integrity: sha512-VGXhmmgsAo9shdQYh4tFDndd+7nsgp0Y5h0UPDaUp8K359pBasI6YdkMqFW3mCOxLQkq09qj7o7cq6f3DuXcJQ==}
     engines: {node: '>= 20', npm: '>=9.6.4'}
 
-  '@slack/types@3.2.0':
-    resolution: {integrity: sha512-IN4gdtlzQt8UJoj+1v+qAHeR4TxHO0KMlIs841SFfDQAcFFnsrWaGsEAE4goxVt8O/JOAFaGGdrFTzhNBop/Fg==}
+  '@slack/types@3.3.0':
+    resolution: {integrity: sha512-11r2kM9Zy/UlaV6OwPibZueVlyNJ5xtHEHK/iYDnPLyhQcxRtsifNAwNhJ1Lm0nszW4jrWCHThXCHCNJC/hvqg==}
     engines: {node: '>= 20', npm: '>=9.6.4'}
 
   '@slack/web-api@8.2.0':
@@ -2676,7 +2676,7 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
-  '@notionhq/client@5.30.0': {}
+  '@notionhq/client@5.31.1': {}
 
   '@open-draft/until@3.0.1': {}
 
@@ -2815,12 +2815,12 @@ snapshots:
     dependencies:
       '@types/node': 26.6.6
 
-  '@slack/types@3.2.0': {}
+  '@slack/types@3.3.0': {}
 
   '@slack/web-api@8.2.0':
     dependencies:
       '@slack/logger': 5.0.0
-      '@slack/types': 3.2.0
+      '@slack/types': 3.3.0
       '@types/node': 26.6.6
       '@types/retry': 0.12.5
       eventemitter3: 5.0.4
