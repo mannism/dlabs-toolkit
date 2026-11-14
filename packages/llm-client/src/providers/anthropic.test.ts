@@ -16,6 +16,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { z } from 'zod';
+import { type LlmClientLogger, setLlmClientLogger } from '../logger.js';
 import type { LlmClientConfig, LlmUsage } from '../types.js';
 import { LlmError } from '../types.js';
 import { createAnthropicProvider } from './anthropic.js';
@@ -99,7 +100,7 @@ describe('Anthropic provider — complete()', () => {
     expect(callArgs.model).toBe('claude-3-5-sonnet-20241022');
   });
 
-  it('applies maxTokens and temperature from options', async () => {
+  it('applies maxTokens from options and omits temperature (API 2026-10-21 rejects it)', async () => {
     const client = createAnthropicProvider(TEST_CONFIG);
     await client.complete([{ role: 'user', content: 'Hi' }], {
       maxTokens: 512,
@@ -108,7 +109,7 @@ describe('Anthropic provider — complete()', () => {
 
     const callArgs = mockCreate.mock.calls[0]?.[0] as Anthropic.MessageCreateParamsNonStreaming;
     expect(callArgs.max_tokens).toBe(512);
-    expect(callArgs.temperature).toBe(0.5);
+    expect(callArgs).not.toHaveProperty('temperature');
   });
 
   it('normalizes cache tokens when present', async () => {
@@ -371,7 +372,7 @@ describe('Anthropic provider — stream()', () => {
     expect(usageChunks).toHaveLength(0);
   });
 
-  it('applies temperature to stream params when set', async () => {
+  it('omits temperature from stream params when set (API 2026-10-21 rejects it)', async () => {
     const mockStream = {
       [Symbol.asyncIterator]: async function* (): AsyncGenerator<never> {},
       finalMessage: vi.fn(),
@@ -394,7 +395,7 @@ describe('Anthropic provider — stream()', () => {
     }
 
     const callArgs = mockStreamFn.mock.calls[0]?.[0] as Anthropic.MessageStreamParams;
-    expect(callArgs.temperature).toBe(0.7);
+    expect(callArgs).not.toHaveProperty('temperature');
   });
 });
 
@@ -2105,5 +2106,149 @@ describe('Anthropic provider — reasoningEffort (v6.3.0)', () => {
     }
 
     expect(finalUsage?.reasoningTokens).toBe(25);
+  });
+});
+
+describe('Anthropic provider — temperature dropped (API 2026-10-21)', () => {
+  let mockCreate: MockInstance;
+  let mockStreamFn: MockInstance;
+  let warn: MockInstance;
+
+  // The warning de-dupe set is module-level, so each test uses its own model ID
+  // except the explicit once-per-model test, which reuses one on purpose.
+  const cfg = (model: string): LlmClientConfig => ({ ...TEST_CONFIG, model, temperature: 0.3 });
+  const schema = z.object({ value: z.string() });
+  const tool = {
+    name: 'get_weather',
+    description: 'Get the weather.',
+    inputSchema: { kind: 'zod' as const, schema: z.object({ city: z.string() }) },
+  };
+
+  // Stream mock that yields nothing and a minimal final message; enough for stream().
+  function emptyStream() {
+    return {
+      [Symbol.asyncIterator]: async function* (): AsyncGenerator<never> {},
+      finalMessage: vi.fn(),
+    };
+  }
+
+  // Stream mock emitting a valid JSON payload for streamStructured().
+  function jsonStream() {
+    const events = [
+      {
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'input_json_delta', partial_json: '{"value":"ok"}' },
+      },
+      {
+        type: 'message_delta',
+        delta: { stop_reason: 'tool_use', stop_sequence: null },
+        usage: { output_tokens: 5 },
+      },
+    ];
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        yield* events;
+      },
+      finalMessage: vi
+        .fn()
+        .mockResolvedValue(
+          mockMessageResponse({ usage: { input_tokens: 10, output_tokens: 5 } as Anthropic.Usage })
+        ),
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCreate = vi.fn().mockResolvedValue(mockMessageResponse());
+    mockStreamFn = vi.fn();
+    vi.mocked(Anthropic).mockImplementation(function () {
+      return { messages: { create: mockCreate, stream: mockStreamFn } };
+    });
+    warn = vi.fn();
+    setLlmClientLogger({ warn } as unknown as LlmClientLogger);
+  });
+
+  afterEach(() => {
+    setLlmClientLogger(null);
+  });
+
+  function expectOneDropWarning(model: string): void {
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [event, data] = warn.mock.calls[0] as [string, Record<string, unknown>];
+    expect(event).toBe('anthropic_sampling_param_dropped');
+    expect(data).toMatchObject({ provider: 'anthropic', model, param: 'temperature' });
+    // The value must never be logged.
+    expect(JSON.stringify(data)).not.toContain('0.3');
+  }
+
+  it('complete(): omits temperature and warns', async () => {
+    const model = 'claude-test-complete';
+    await createAnthropicProvider(cfg(model)).complete([{ role: 'user', content: 'Hi' }]);
+    expect(mockCreate.mock.calls[0]?.[0]).not.toHaveProperty('temperature');
+    expectOneDropWarning(model);
+  });
+
+  it('stream(): omits temperature and warns', async () => {
+    const model = 'claude-test-stream';
+    mockStreamFn.mockReturnValue(emptyStream());
+    for await (const _ of createAnthropicProvider(cfg(model)).stream([
+      { role: 'user', content: 'Hi' },
+    ])) {
+      // consume
+    }
+    expect(mockStreamFn.mock.calls[0]?.[0]).not.toHaveProperty('temperature');
+    expectOneDropWarning(model);
+  });
+
+  it('structured(): omits temperature and warns', async () => {
+    const model = 'claude-test-structured';
+    mockCreate.mockResolvedValue(
+      mockMessageResponse({
+        content: [
+          { type: 'tool_use', id: 't1', name: 'extract', input: { value: 'ok' } },
+        ] as unknown as Anthropic.ContentBlock[],
+        stop_reason: 'tool_use',
+      })
+    );
+    await createAnthropicProvider(cfg(model)).structured([{ role: 'user', content: 'Hi' }], schema);
+    expect(mockCreate.mock.calls[0]?.[0]).not.toHaveProperty('temperature');
+    expectOneDropWarning(model);
+  });
+
+  it('streamStructured(): omits temperature and warns', async () => {
+    const model = 'claude-test-stream-structured';
+    mockStreamFn.mockReturnValue(jsonStream());
+    for await (const _ of createAnthropicProvider(cfg(model)).streamStructured(
+      [{ role: 'user', content: 'Hi' }],
+      schema
+    )) {
+      // consume
+    }
+    expect(mockStreamFn.mock.calls[0]?.[0]).not.toHaveProperty('temperature');
+    expectOneDropWarning(model);
+  });
+
+  it('withTools(): omits temperature and warns', async () => {
+    const model = 'claude-test-with-tools';
+    await createAnthropicProvider(cfg(model)).withTools([{ role: 'user', content: 'Hi' }], [tool]);
+    expect(mockCreate.mock.calls[0]?.[0]).not.toHaveProperty('temperature');
+    expectOneDropWarning(model);
+  });
+
+  it('warns once per process per model, again for a different model', async () => {
+    const client = createAnthropicProvider(cfg('claude-test-once-a'));
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+    await client.complete([{ role: 'user', content: 'Hi' }], { temperature: 0.9 });
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    await client.complete([{ role: 'user', content: 'Hi' }], { model: 'claude-test-once-b' });
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not warn when no temperature is set', async () => {
+    const client = createAnthropicProvider({ ...TEST_CONFIG, model: 'claude-test-no-temp' });
+    await client.complete([{ role: 'user', content: 'Hi' }]);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

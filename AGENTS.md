@@ -82,6 +82,7 @@ pnpm release              # build + changeset publish
 - **`@diabolicallabs/*` scope is registered on npm.** Publishing requires the appropriate npm auth — no workarounds.
 - **Some packages have downstream callers in private repos** (FitChecker, GEOAudit, labs, brand-compliance-saas). Breaking changes need at least one cycle of downstream coordination — flag in the Changeset.
 - **`llm-client` `require` condition resolves an ESM file via `require(esm)` (Node ≥22.12 stable feature).** The exports map intentionally has no separate CJS build — the same `dist/index.js` ESM file is served to both `require` and `import`. This is safe only as long as the module graph contains **no top-level `await`**. Any future TLA in `llm-client` or a dependency it re-exports would cause `require(esm)` to throw `ERR_REQUIRE_ASYNC_MODULE` for CJS consumers. Review for TLA before adding async module-level initialization.
+- **`llm-client` drops `temperature` on Anthropic calls from 7.0.0.** Anthropic API 2026-10-21 (pinned by `@anthropic-ai/sdk` 1.x) rejects sampling params with HTTP 400; the value stays on `LlmCallOptions`/`LlmClientConfig` for other providers. Do not re-add it to Anthropic requests (see `packages/llm-client/MIGRATION.md`).
 
 ## Testing
 

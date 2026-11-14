@@ -16,7 +16,8 @@ import { z } from 'zod';
 import { createClientFromEnv } from '../packages/llm-client/src/index.js';
 
 // Model targeted by GEOAudit and confirmed current per Anthropic docs (2026-05-12).
-const MODEL = 'claude-sonnet-4-6';
+// Override with SMOKE_ANTHROPIC_MODEL to target a specific model (e.g. a 4.x and a 5.x run).
+const MODEL = process.env['SMOKE_ANTHROPIC_MODEL'] ?? 'claude-sonnet-4-6';
 
 // Long system prompt used for prompt cache tests.
 // Anthropic's minimum cacheable block is 1024 tokens for Sonnet/Opus.

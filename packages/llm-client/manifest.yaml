@@ -65,16 +65,16 @@ status: published
 
 depends_on:
   - name: "@anthropic-ai/sdk"
-    version: "^0.115.0"
-    why: "Anthropic Claude provider — messages API with streaming and prompt cache support"
+    version: "^1.8.0"
+    why: "Anthropic Claude provider — messages API with streaming and prompt cache support. SDK 1.x pins Anthropic API version 2026-10-21, which rejects temperature/top_p/top_k with HTTP 400 (see contracts.anthropic_sampling)."
   - name: "openai"
-    version: "^7.4.0"
+    version: "^7.55.0"
     why: "OpenAI Responses API provider; also used by DeepSeek and Perplexity with baseURL override"
   - name: "zod"
-    version: "^4.4.3"
+    version: "^4.6.7"
     why: "Structured output schema validation. Used in structured() and streamStructured() to parse and validate JSON responses."
   - name: "@google/genai"
-    version: "^2.17.0"
+    version: "^2.32.0"
     why: "Google Gemini provider — generateContent + streaming via v2.x SDK"
   - name: "deepseek (openai SDK with baseURL override)"
     why: "DeepSeek's API is OpenAI Chat Completions-compatible; uses the openai SDK pointed at api.deepseek.com"
@@ -149,6 +149,11 @@ contracts:
     caller_signal: "LlmCallOptions.signal — pre-abort throws immediately; mid-call abort kind:'cancelled', not retried"
     stream_stall: "LlmCallOptions.streamStallTimeoutMs (default 30000ms) — fires per chunk, resets on each yield"
     gemini_caveat: "Promise.race only — SDK HTTP request not cancelled. Backstop: httpOptions.timeout = configMs * 2"
+  anthropic_sampling:
+    temperature: "v7.0.0+: Anthropic calls (complete, stream, structured, streamStructured, withTools) never send temperature. SDK 1.x pins API version 2026-10-21, which rejects temperature/top_p/top_k with HTTP 400. LlmCallOptions.temperature and LlmClientConfig.temperature remain on the public types for the other providers."
+    drop_mechanism: "A single helper, dropTemperature() in providers/anthropic.ts, is called at every request-building site; it sends nothing and logs one anthropic_sampling_param_dropped warning per model per process through the package logger (model and parameter name only, never the value)."
+    top_p_top_k: "Not exposed on the public types; no passthrough."
+    pin_option: "Callers needing non-default Anthropic sampling must stay on ^6 (SDK 0.135, API 2023-06-01)."
   response_ids:
     anthropic: "provider-issued message ID (response.id)"
     openai: "provider-issued response ID (rawResponse.id — Responses API)"
