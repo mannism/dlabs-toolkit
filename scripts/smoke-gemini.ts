@@ -2,7 +2,8 @@
  * Live smoke test for the Gemini provider.
  *
  * Run from monorepo root:
- *   set -a; source .env; set +a && npx tsx scripts/smoke-gemini.ts
+ *   npx tsx scripts/smoke-gemini.ts
+ *   (keys come from the environment; on the Owner's machine they are exported in ~/.zshenv)
  *
  * Models tested:
  *   - gemini-2.5-flash — GEOAudit default (api/server.js:109). Confirmed 2026-05-12.

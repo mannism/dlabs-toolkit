@@ -2,7 +2,8 @@
  * Live smoke test for the Anthropic provider.
  *
  * Run from monorepo root:
- *   set -a; source .env; set +a && npx tsx scripts/smoke-anthropic.ts
+ *   npx tsx scripts/smoke-anthropic.ts
+ *   (keys come from the environment; on the Owner's machine they are exported in ~/.zshenv)
  *
  * Verifies:
  *   1. complete() happy path — logs model/latency/usage/content snippet

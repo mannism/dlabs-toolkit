@@ -369,11 +369,12 @@ describe('computeCost — Perplexity', () => {
     const usage = basicUsage(500_000, 300_000);
     const cost = computeCost({ usage, provider: 'perplexity', model: 'sonar' });
 
-    // Input: 0.5M × $1.00 = $0.50
-    // Output: 0.3M × $1.00 = $0.30
-    expect(cost.input).toBeCloseTo(0.5, 5);
-    expect(cost.output).toBeCloseTo(0.3, 5);
-    expect(round(cost.total)).toBe(0.8);
+    // Agent API rate (repriced 2026-11-14)
+    // Input: 0.5M × $0.25 = $0.125
+    // Output: 0.3M × $2.50 = $0.75
+    expect(cost.input).toBeCloseTo(0.125, 5);
+    expect(cost.output).toBeCloseTo(0.75, 5);
+    expect(cost.total).toBeCloseTo(0.875, 5);
     expect(cost.isPartial).toBe(true);
   });
 
@@ -403,7 +404,7 @@ describe('computeCost — Perplexity', () => {
 
     // Per-request fees are not modeled; flag is set, token total is not altered
     expect(cost.isPartial).toBe(true);
-    expect(round(cost.total)).toBe(0.8);
+    expect(cost.total).toBeCloseTo(0.875, 5);
   });
 
   it('sonar-reasoning-pro: standard cost', () => {
@@ -1447,5 +1448,79 @@ describe('computeCost — 2026-11-02 refresh', () => {
 
   it('gpt-6-terra is intentionally absent (no published price)', () => {
     expect(DEFAULT_PRICING_TABLE.openai['gpt-6-terra']).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2026-11-14 refresh: new models, sonar / gemini-3.5-flash repricing, gpt-5.5-pro tier
+// ---------------------------------------------------------------------------
+
+describe('computeCost — 2026-11-14 refresh', () => {
+  it('claude-fable-5-2: $8 in / $40 out / $0.20 cache read per 1M', () => {
+    const cost = computeCost({
+      usage: basicUsage(1_000_000, 1_000_000, { cacheReadTokens: 1_000_000 }),
+      provider: 'anthropic',
+      model: 'claude-fable-5-2',
+    });
+    expect(cost.input).toBeCloseTo(8.0, 5);
+    expect(cost.output).toBeCloseTo(40.0, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.2, 5);
+    expect(cost.isPartial).toBe(false);
+  });
+
+  it('gemini-4-carbon: introductory $2 / $10 / $0.10 with the 2026-12-01 step-up noted', () => {
+    const cost = computeCost({
+      usage: basicUsage(1_000_000, 1_000_000, { cacheReadTokens: 1_000_000 }),
+      provider: 'gemini',
+      model: 'gemini-4-carbon',
+    });
+    expect(cost.input).toBeCloseTo(2.0, 5);
+    expect(cost.output).toBeCloseTo(10.0, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.1, 5);
+    expect(DEFAULT_PRICING_TABLE.gemini['gemini-4-carbon']?.notes).toContain('2026-12-01');
+  });
+
+  it('gemini-4-hydrogen: $1.50 in / $7.50 out / $0.075 cache read per 1M', () => {
+    const cost = computeCost({
+      usage: basicUsage(1_000_000, 1_000_000, { cacheReadTokens: 1_000_000 }),
+      provider: 'gemini',
+      model: 'gemini-4-hydrogen',
+    });
+    expect(cost.input).toBeCloseTo(1.5, 5);
+    expect(cost.output).toBeCloseTo(7.5, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.075, 5);
+  });
+
+  it('perplexity sonar: Agent API rate $0.25 in / $2.50 out, still partial (tool fees not modeled)', () => {
+    const cost = computeCost({
+      usage: basicUsage(1_000_000, 1_000_000),
+      provider: 'perplexity',
+      model: 'sonar',
+    });
+    expect(cost.input).toBeCloseTo(0.25, 5);
+    expect(cost.output).toBeCloseTo(2.5, 5);
+    expect(cost.total).toBeCloseTo(2.75, 5);
+    expect(cost.isPartial).toBe(true);
+  });
+
+  it('gemini-3.5-flash: priced at the routed gemini-3.6-flash rate ($0.75 / $3.75 / $0.075)', () => {
+    const cost = computeCost({
+      usage: basicUsage(1_000_000, 1_000_000, { cacheReadTokens: 1_000_000 }),
+      provider: 'gemini',
+      model: 'gemini-3.5-flash',
+    });
+    expect(cost.input).toBeCloseTo(0.75, 5);
+    expect(cost.output).toBeCloseTo(3.75, 5);
+    expect(cost.cacheRead).toBeCloseTo(0.075, 5);
+  });
+
+  it('gpt-5.5-pro: above 272K input the long-context tier bills the FULL request at $60 / $270', () => {
+    const cost = computeCost({
+      usage: basicUsage(300_000, 100_000),
+      provider: 'openai',
+      model: 'gpt-5.5-pro',
+    });
+    expect(cost.input).toBeCloseTo(18.0, 5); // 0.3M x $60
+    expect(cost.output).toBeCloseTo(27.0, 5); // 0.1M x $270
   });
 });

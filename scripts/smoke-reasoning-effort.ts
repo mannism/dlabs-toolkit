@@ -2,7 +2,8 @@
  * Live smoke test for reasoning-effort passthrough (v6.3.0) — Acceptance Criterion #14.
  *
  * Run from monorepo root:
- *   set -a; source .env; set +a && npx tsx scripts/smoke-reasoning-effort.ts
+ *   npx tsx scripts/smoke-reasoning-effort.ts
+ *   (keys come from the environment; on the Owner's machine they are exported in ~/.zshenv)
  *
  * Verifies one real complete() call per provider with reasoningEffort set, confirming
  * the response succeeds and usage.reasoningTokens is populated where the provider
