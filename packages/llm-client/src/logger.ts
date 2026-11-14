@@ -19,10 +19,12 @@
  *                            payload: { from, to, reason } where reason is an LlmErrorKind.
  *   xai_unrecognized_output_item — xai returned an output item type the adapter does not map
  *                            (a new server tool type?); payload: { type, name? }
+ *   anthropic_sampling_param_dropped — temperature set on an Anthropic call was not sent (API 2026-10-21
+ *                            rejects it). Once per process per model. payload: { provider, model, param, message }
  *   aftercall_hook_error   — afterCall hook threw; error was dropped to protect the caller.
  *                            payload: { callType, model, message }
  *
- * Note on log level semantics: all four events route through the `warn` method.
+ * Note on log level semantics: all events route through the `warn` method.
  * The payload may include a `level` field (e.g. `model_fallback` carries `level:'info'`)
  * so consumers that ingest the structured JSON can filter by severity beyond the
  * logger-level call.

@@ -429,7 +429,12 @@ export interface LlmClientConfig {
   maxRetries?: number; // default: 3
   baseDelayMs?: number; // default: 1000 — exponential backoff base
   maxTokens?: number; // provider default if omitted
-  temperature?: number; // provider default if omitted
+  /**
+   * Sampling temperature. Provider default if omitted.
+   * Ignored for Anthropic (not sent; one `anthropic_sampling_param_dropped` warning per process per model):
+   * Anthropic API version 2026-10-21, pinned by @anthropic-ai/sdk 1.x, returns 400 for temperature.
+   */
+  temperature?: number;
   /**
    * Per-call default timeout (ms). Default: 30000.
    * Multimodal calls (`document`/`file` content blocks) and `reasoningEffort` calls
