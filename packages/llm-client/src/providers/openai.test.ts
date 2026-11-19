@@ -18,6 +18,7 @@
  * - AbortSignal / cancel / stream stall
  */
 
+import { computeCost, type PricingTable } from '@diabolicallabs/llm-pricing';
 import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { z } from 'zod';
@@ -1761,6 +1762,73 @@ describe('OpenAI normalizeUsage — cached token split', () => {
     });
     expect(u.inputTokens).toBe(0);
     expect(u.cacheReadTokens).toBe(150);
+  });
+
+  it('splits cache_write_tokens out of inputTokens into cacheCreationTokens', () => {
+    const u = normalizeUsage({
+      input_tokens: 12000,
+      input_tokens_details: { cached_tokens: 4000, cache_write_tokens: 7000 },
+      output_tokens: 20,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: 12020,
+    });
+    // Ordinary input = 12000 - 4000 - 7000 (OpenAI prompt caching guide worked example).
+    expect(u.inputTokens).toBe(1000);
+    expect(u.cacheReadTokens).toBe(4000);
+    expect(u.cacheCreationTokens).toBe(7000);
+    expect(u.totalTokens).toBe(12020);
+  });
+
+  it('omits cacheCreationTokens when input_tokens_details is absent', () => {
+    const u = normalizeUsage({ input_tokens: 10, output_tokens: 5, total_tokens: 15 } as never);
+    expect('cacheCreationTokens' in u).toBe(false);
+  });
+
+  it('clamps inputTokens at 0 when cached + written tokens exceed input_tokens', () => {
+    const u = normalizeUsage({
+      input_tokens: 100,
+      input_tokens_details: { cached_tokens: 60, cache_write_tokens: 80 },
+      output_tokens: 5,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: 105,
+    });
+    expect(u.inputTokens).toBe(0);
+    expect(u.cacheCreationTokens).toBe(80);
+  });
+
+  it('bills cache writes at cacheWritePer1M end-to-end via computeCost', () => {
+    const table = {
+      versionedAt: '2026-11-19',
+      anthropic: {},
+      gemini: {},
+      deepseek: {},
+      perplexity: {},
+      xai: {},
+      openai: {
+        'test-model': {
+          inputPer1M: 10,
+          outputPer1M: 40,
+          cacheReadPer1M: 1,
+          cacheWritePer1M: 12.5,
+        },
+      },
+    } as unknown as PricingTable;
+    const usage = normalizeUsage({
+      input_tokens: 12000,
+      input_tokens_details: { cached_tokens: 4000, cache_write_tokens: 7000 },
+      output_tokens: 1000,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: 13000,
+    });
+    const cost = computeCost({
+      usage,
+      provider: 'openai',
+      model: 'test-model',
+      pricingTable: table,
+    });
+    // input 1000/1M*10 = 0.01; read 4000/1M*1 = 0.004; write 7000/1M*12.5 = 0.0875;
+    // output 1000/1M*40 = 0.04; total = 0.1415. (Before the fix, writes billed at 10 => 0.07.)
+    expect(cost.total).toBeCloseTo(0.1415, 10);
   });
 
   it('handles undefined usage', () => {

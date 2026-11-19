@@ -1524,3 +1524,75 @@ describe('computeCost — 2026-11-14 refresh', () => {
     expect(cost.output).toBeCloseTo(27.0, 5); // 0.1M x $270
   });
 });
+
+// ---------------------------------------------------------------------------
+// 2026-11-19 refresh: OpenAI GPT-6.2 rows (astra, sol) + specialist models
+// ---------------------------------------------------------------------------
+
+describe('computeCost — 2026-11-19 refresh (OpenAI GPT-6.2)', () => {
+  it('gpt-6.2-astra short context: $8 in / $40 out / $0.40 cache read', () => {
+    const cost = computeCost({
+      usage: basicUsage(100_000, 50_000, { cacheReadTokens: 100_000 }),
+      provider: 'openai',
+      model: 'gpt-6.2-astra',
+    });
+    // 200K prompt tokens <= 272K → standard rates
+    expect(cost.input).toBeCloseTo(0.8, 5); // 0.1M × $8.00
+    expect(cost.output).toBeCloseTo(2.0, 5); // 0.05M × $40.00
+    expect(cost.cacheRead).toBeCloseTo(0.04, 5); // 0.1M × $0.40
+    expect(cost.isPartial).toBe(true); // invisible reasoning tokens
+  });
+
+  it('gpt-6.2-astra long context: >272K bills the FULL request at $16 in / $60 out', () => {
+    const cost = computeCost({
+      usage: basicUsage(300_000, 100_000),
+      provider: 'openai',
+      model: 'gpt-6.2-astra',
+    });
+    expect(cost.input).toBeCloseTo(4.8, 5); // 0.3M × $16.00
+    expect(cost.output).toBeCloseTo(6.0, 5); // 0.1M × $60.00
+  });
+
+  it('gpt-6.2-sol short context: $2 in / $10 out / $0.10 cache read', () => {
+    const cost = computeCost({
+      usage: basicUsage(100_000, 50_000, { cacheReadTokens: 100_000 }),
+      provider: 'openai',
+      model: 'gpt-6.2-sol',
+    });
+    expect(cost.input).toBeCloseTo(0.2, 5); // 0.1M × $2.00
+    expect(cost.output).toBeCloseTo(0.5, 5); // 0.05M × $10.00
+    expect(cost.cacheRead).toBeCloseTo(0.01, 5); // 0.1M × $0.10
+    expect(cost.isPartial).toBe(true);
+  });
+
+  it('gpt-6.2-sol long context: >272K bills the FULL request at $4 in / $15 out', () => {
+    const cost = computeCost({
+      usage: basicUsage(300_000, 100_000),
+      provider: 'openai',
+      model: 'gpt-6.2-sol',
+    });
+    expect(cost.input).toBeCloseTo(1.2, 5); // 0.3M × $4.00
+    expect(cost.output).toBeCloseTo(1.5, 5); // 0.1M × $15.00
+  });
+
+  it('cache-write rates are carried for the 30-minute tier', () => {
+    expect(DEFAULT_PRICING_TABLE.openai['gpt-6.2-astra']?.cacheWritePer1M).toBe(10);
+    expect(DEFAULT_PRICING_TABLE.openai['gpt-6.2-sol']?.cacheWritePer1M).toBe(2.5);
+  });
+
+  it.each([
+    ['gpt-6.2-astra-law', 8, 40],
+    ['gpt-6-cyber', 20, 100],
+    ['gpt-6-rosalind', 10, 50],
+  ])('%s resolves at $%d in / $%d out per 1M (specialist row)', (model, inRate, outRate) => {
+    // 100K prompt tokens <= 272K → standard rates
+    const short = computeCost({ usage: basicUsage(100_000, 100_000), provider: 'openai', model });
+    expect(short.input).toBeCloseTo(0.1 * inRate, 5);
+    expect(short.output).toBeCloseTo(0.1 * outRate, 5);
+  });
+
+  it('gpt-5.6-sol keeps its promo rate before 2026-12-01 and notes the 2026-11-30 end', () => {
+    expect(DEFAULT_PRICING_TABLE.openai['gpt-5.6-sol']?.inputPer1M).toBe(4);
+    expect(DEFAULT_PRICING_TABLE.openai['gpt-5.6-sol']?.notes).toContain('2026-11-30');
+  });
+});
