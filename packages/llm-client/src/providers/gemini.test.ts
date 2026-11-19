@@ -1804,7 +1804,7 @@ describe('Gemini provider — SDK client construction', () => {
     createGeminiProvider(TEST_CONFIG);
 
     expect(GoogleGenAI).toHaveBeenCalledWith(
-      expect.objectContaining({ apiKey: 'test-key', apiVersion: 'v1beta' }),
+      expect.objectContaining({ apiKey: 'test-key', apiVersion: 'v1beta' })
     );
   });
 });
