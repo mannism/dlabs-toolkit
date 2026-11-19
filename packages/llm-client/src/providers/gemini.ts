@@ -334,8 +334,14 @@ export function createGeminiProvider(config: LlmClientConfig): LlmClient {
   // Since @google/genai does not support per-call construction, we use the config-level
   // timeout * 2 as a static backstop. Per-call overrides shorter than config timeout
   // will be enforced by the Promise.race; longer overrides are bounded by this backstop.
+  //
+  // apiVersion is pinned to 'v1beta' (GoogleGenAIOptions.apiVersion). @google/genai 3.x
+  // changed the Gemini Developer API default from v1beta to v1, and v1 rejects JSON mode
+  // (HTTP 400 "JSON mode is not enabled for api version v1"), breaking structured().
+  // Pinning restores the pre-3.x default; some features/models exist only on v1beta.
   const ai = new GoogleGenAI({
     apiKey: config.apiKey,
+    apiVersion: 'v1beta',
     httpOptions: {
       timeout: configTimeoutMs * 2,
     },

@@ -1793,3 +1793,18 @@ describe('Gemini provider — multimodal content blocks mediaResolution (v6.7.0)
     expect(mockGenerateContent).not.toHaveBeenCalled();
   });
 });
+
+describe('Gemini provider — SDK client construction', () => {
+  it('pins apiVersion to v1beta (3.x SDK defaults to v1, which rejects JSON mode)', () => {
+    vi.clearAllMocks();
+    vi.mocked(GoogleGenAI).mockImplementation(function () {
+      return { models: { generateContent: vi.fn(), generateContentStream: vi.fn() } };
+    });
+
+    createGeminiProvider(TEST_CONFIG);
+
+    expect(GoogleGenAI).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: 'test-key', apiVersion: 'v1beta' }),
+    );
+  });
+});
