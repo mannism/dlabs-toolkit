@@ -71,14 +71,21 @@ const PROVIDER = 'openai';
  * Anthropic convention) bills `inputTokens` at the full input rate and `cacheReadTokens` at the
  * cache-read rate, so we split: inputTokens = input - cached (clamped at 0), cacheReadTokens =
  * cached. totalTokens is passed through from the wire and is unchanged by the split.
- * Exported for unit tests.
+ *
+ * `input_tokens_details.cache_write_tokens` is likewise a subset of `input_tokens` (OpenAI prompt
+ * caching guide: ordinary input = input_tokens - cached_tokens - cache_write_tokens). Writes map to
+ * `cacheCreationTokens` (billed at cacheWritePer1M) and are subtracted from `inputTokens` so they
+ * are not also billed at the plain input rate. Known limit: OpenAI has two write tiers (30m = 1.25x,
+ * 12h = 2.5x, split in `cache_write_tokens_details`); LlmUsage has one write bucket, so 12h writes
+ * are costed at the 30m rate until a 12h field exists. Exported for unit tests.
  */
 export function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined | null): LlmUsage {
   const totalInput = usage?.input_tokens ?? 0;
   // Genuinely `number | undefined` — under exactOptionalPropertyTypes the key is omitted (not
   // assigned `undefined`) when the API didn't report cache details.
   const cachedTokens = usage?.input_tokens_details?.cached_tokens;
-  const inputTokens = Math.max(0, totalInput - (cachedTokens ?? 0));
+  const cacheWriteTokens = usage?.input_tokens_details?.cache_write_tokens;
+  const inputTokens = Math.max(0, totalInput - (cachedTokens ?? 0) - (cacheWriteTokens ?? 0));
   const outputTokens = usage?.output_tokens ?? 0;
   // output_tokens_details.reasoning_tokens (v6.3.0+) — only meaningful for reasoning models.
   // Same omit-when-unreported handling as above.
@@ -90,6 +97,7 @@ export function normalizeUsage(usage: OpenAI.Responses.ResponseUsage | undefined
     // This single function feeds every path (complete, stream finalUsage, structured,
     // streamStructured, withTools), so all of them get the split for free.
     ...(cachedTokens !== undefined && { cacheReadTokens: cachedTokens }),
+    ...(cacheWriteTokens !== undefined && { cacheCreationTokens: cacheWriteTokens }),
     ...(reasoningTokens !== undefined && { reasoningTokens }),
   };
 }
