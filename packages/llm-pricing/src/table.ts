@@ -19,7 +19,7 @@
 import type { PricingTable } from './types.js';
 
 export const DEFAULT_PRICING_TABLE: PricingTable = {
-  versionedAt: '2026-11-14',
+  versionedAt: '2026-11-19',
 
   anthropic: {
     'claude-fable-5': {
@@ -546,10 +546,10 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       longContextOutputPer1M: 30,
       longContextThreshold: 272000,
       notes:
-        'Corrected 2026-09-05: was 5.00/30.00/0.50 (stale, sourced from a secondary aggregator). Live OpenAI pricing confirms 4.00/20.00/0.40, independently corroborated by gpt-6-astra pricing being exactly 2.5x this rate. Downstream consumers on caret ranges will see reported Sol output costs drop ~33% — this is a correction, not a regression. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. OpenAI pricing page (2026-11-14): GPT-5.6 Sol promotional pricing ends 2026-11-30; no post-promo rate is published.',
+        'Corrected 2026-09-05: was 5.00/30.00/0.50 (stale, sourced from a secondary aggregator). Live OpenAI pricing confirms 4.00/20.00/0.40, independently corroborated by gpt-6-astra pricing being exactly 2.5x this rate. Downstream consumers on caret ranges will see reported Sol output costs drop ~33% — this is a correction, not a regression. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. OpenAI pricing page (2026-11-19): rates 4.00/20.00/0.40 (long 8.00/30.00/0.80) re-confirmed; promotional pricing is available until 2026-11-30, the page lists no promotional or post-promo rate separately, so no post-promo rate is published and none is applied. Revisit on 2026-12-01. OpenAI deprecations page (2026-11-19): no deprecation or shutdown notice for this model.',
       outputPer1M: 20,
       sourceUrl: 'https://developers.openai.com/api/docs/pricing',
-      verifiedAt: '2026-11-02',
+      verifiedAt: '2026-11-19',
     },
     'gpt-5.6-terra': {
       cacheReadPer1M: 0.2,
@@ -576,10 +576,25 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       longContextOutputPer1M: 75,
       longContextThreshold: 272000,
       notes:
-        'Prompts over 272K input tokens bill at 2x input/cache rates and 1.5x output for the FULL request (not just the excess). No schema field exists for long-context cache write; if a doubled write rate matters downstream, it would be $25.00/MTok by the same 2x rule — not modeled here.',
+        'Prompts over 272K input tokens bill at 2x input/cache rates and 1.5x output for the FULL request (not just the excess). No schema field exists for long-context cache write; if a doubled write rate matters downstream, it would be $25.00/MTok by the same 2x rule — not modeled here. OpenAI deprecations page (2026-11-19): no deprecation or shutdown notice for this model. Rates re-confirmed against the pricing page 2026-11-19.',
       outputPer1M: 50,
       sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6-astra',
-      verifiedAt: '2026-11-02',
+      verifiedAt: '2026-11-19',
+    },
+    'gpt-6-cyber': {
+      cacheReadPer1M: 2,
+      cacheWritePer1M: 25,
+      hasInvisibleReasoningTokens: true,
+      inputPer1M: 20,
+      longContextCacheReadPer1M: 4,
+      longContextInputPer1M: 40,
+      longContextOutputPer1M: 150,
+      longContextThreshold: 272000,
+      notes:
+        'Specialized model, requires Daybreak Red access and approval. No promotional pricing listed. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. 12h cache write 50.00 (short context); the page lists no long-context cache write. Context 1,050,000 (922K max input) / 128K max output. Fast, Ultrafast and Background multipliers not modeled.',
+      outputPer1M: 100,
+      sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6-cyber',
+      verifiedAt: '2026-11-19',
     },
     'gpt-6-luna': {
       cacheReadPer1M: 0.01,
@@ -591,10 +606,25 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       longContextOutputPer1M: 0.75,
       longContextThreshold: 272000,
       notes:
-        'Budget tier of GPT-6. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. Long-context cache-write (2x) is not modeled (no schema field), same as gpt-6-astra.',
+        'Budget tier of GPT-6. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. Long-context cache-write (2x) is not modeled (no schema field), same as gpt-6-astra. OpenAI deprecations page (2026-11-19): no deprecation or shutdown notice for this model. Rates re-confirmed against the pricing page 2026-11-19.',
       outputPer1M: 0.5,
       sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6-luna',
-      verifiedAt: '2026-11-02',
+      verifiedAt: '2026-11-19',
+    },
+    'gpt-6-rosalind': {
+      cacheReadPer1M: 1,
+      cacheWritePer1M: 12.5,
+      hasInvisibleReasoningTokens: true,
+      inputPer1M: 10,
+      longContextCacheReadPer1M: 2,
+      longContextInputPer1M: 20,
+      longContextOutputPer1M: 75,
+      longContextThreshold: 272000,
+      notes:
+        "Specialized (Trusted Access / configuration) model. No model page exists (404 on 2026-11-19); every rate is from the pricing page's Specialized Models table. Promotional pricing available at least through 2026-12-31; the page does not list the post-promo rate. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. 12h cache write 25.00 (short context). Long-context cache write not modeled; Fast, Ultrafast and Background multipliers not modeled. Context window not stated on any page read.",
+      outputPer1M: 50,
+      sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+      verifiedAt: '2026-11-19',
     },
     'gpt-6-sol': {
       cacheReadPer1M: 0.2,
@@ -606,10 +636,10 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       longContextOutputPer1M: 15,
       longContextThreshold: 272000,
       notes:
-        'Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. Long-context cache-write (2x) is not modeled (no schema field), same as gpt-6-astra. Superseded by gpt-6.1-sol (OpenAI model page, 2026-10-05); same input/output, half the cache-read rate.',
+        'Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input. Long-context cache-write (2x) is not modeled (no schema field), same as gpt-6-astra. Superseded by gpt-6.1-sol (OpenAI model page, 2026-10-05); same input/output, half the cache-read rate. OpenAI deprecations page (2026-11-19): no deprecation or shutdown notice for this model. Rates re-confirmed against the pricing page 2026-11-19.',
       outputPer1M: 10,
       sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6-sol',
-      verifiedAt: '2026-11-02',
+      verifiedAt: '2026-11-19',
     },
     'gpt-6.1-sol': {
       cacheReadPer1M: 0.1,
@@ -621,10 +651,10 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       longContextOutputPer1M: 15,
       longContextThreshold: 272000,
       notes:
-        'Cache reads at 0.05x input (half of gpt-6-sol). Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request.',
+        'Cache reads at 0.05x input (half of gpt-6-sol). Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. OpenAI deprecations page (2026-11-19): no deprecation or shutdown notice for this model. Rates re-confirmed against the pricing page 2026-11-19.',
       outputPer1M: 10,
       sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6.1-sol',
-      verifiedAt: '2026-11-02',
+      verifiedAt: '2026-11-19',
     },
     'gpt-6.1-terra': {
       cacheReadPer1M: 0.05,
@@ -636,10 +666,55 @@ export const DEFAULT_PRICING_TABLE: PricingTable = {
       longContextOutputPer1M: 7.5,
       longContextThreshold: 272000,
       notes:
-        'Released 2026-10-26 (OpenAI changelog). Context 1,050,000 (922K max input) / 128K max output, cutoff 2026-06-01. Reasoning tokens billed as output. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input (30-minute tier); long-context cache-write (2x) not modeled.',
+        'Released 2026-10-26 (OpenAI changelog). Context 1,050,000 (922K max input) / 128K max output, cutoff 2026-06-01. Reasoning tokens billed as output. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. Cache write 1.25x input (30-minute tier); long-context cache-write (2x) not modeled. OpenAI deprecations page (2026-11-19): no deprecation or shutdown notice for this model. Rates re-confirmed against the pricing page 2026-11-19.',
       outputPer1M: 5,
       sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6.1-terra',
-      verifiedAt: '2026-11-02',
+      verifiedAt: '2026-11-19',
+    },
+    'gpt-6.2-astra': {
+      cacheReadPer1M: 0.4,
+      cacheWritePer1M: 10,
+      hasInvisibleReasoningTokens: true,
+      inputPer1M: 8,
+      longContextCacheReadPer1M: 0.8,
+      longContextInputPer1M: 16,
+      longContextOutputPer1M: 60,
+      longContextThreshold: 272000,
+      notes:
+        'Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. 12h cache write 20.00 (short context). Context 1,050,000 (922K max input) / 128K max output. 12h cache write is 2x the 30-minute rate (short context) and is not modeled (no schema field). Long-context cache write not modeled. Fast, Ultrafast and Background multipliers are not modeled. Ultrafast is 3x Standard through 2027-02-28, then 6x from 2027-03-01; Fast is 2x; Background 30% (2h) / 40% (8h) below Standard.',
+      outputPer1M: 40,
+      sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6.2-astra',
+      verifiedAt: '2026-11-19',
+    },
+    'gpt-6.2-astra-law': {
+      cacheReadPer1M: 0.4,
+      cacheWritePer1M: 10,
+      hasInvisibleReasoningTokens: true,
+      inputPer1M: 8,
+      longContextCacheReadPer1M: 0.8,
+      longContextInputPer1M: 16,
+      longContextOutputPer1M: 60,
+      longContextThreshold: 272000,
+      notes:
+        "Specialized (Trusted Access / configuration) model. No model page exists (404 on 2026-11-19); every rate is from the pricing page's Specialized Models table. Promotional pricing available at least through 2026-12-31; the page does not list the post-promo rate. Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. 12h cache write 20.00 (short context). Long-context cache write not modeled; Fast, Ultrafast and Background multipliers not modeled. Context window not stated on any page read.",
+      outputPer1M: 40,
+      sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+      verifiedAt: '2026-11-19',
+    },
+    'gpt-6.2-sol': {
+      cacheReadPer1M: 0.1,
+      cacheWritePer1M: 2.5,
+      hasInvisibleReasoningTokens: true,
+      inputPer1M: 2,
+      longContextCacheReadPer1M: 0.2,
+      longContextInputPer1M: 4,
+      longContextOutputPer1M: 15,
+      longContextThreshold: 272000,
+      notes:
+        'Prompts over 272K input tokens bill at 2x input/cache and 1.5x output for the FULL request. 12h cache write 5.00 (short context). Context 1,050,000 (922K max input) / 128K max output. 12h cache write is 2x the 30-minute rate (short context) and is not modeled (no schema field). Long-context cache write not modeled. Fast, Ultrafast and Background multipliers are not modeled. Ultrafast is 3x Standard through 2027-02-28, then 6x from 2027-03-01; Fast is 2x; Background 30% (2h) / 40% (8h) below Standard.',
+      outputPer1M: 10,
+      sourceUrl: 'https://developers.openai.com/api/docs/models/gpt-6.2-sol',
+      verifiedAt: '2026-11-19',
     },
     o1: {
       cacheReadPer1M: 7.5,
