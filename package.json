@@ -33,18 +33,18 @@
     "release": "turbo run build && changeset publish"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.7",
+    "@biomejs/biome": "^2.6.8",
     "@changesets/cli": "^3.0.3",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.6.6",
-    "@typescript-eslint/eslint-plugin": "^8.72.2",
-    "@typescript-eslint/parser": "^8.72.2",
-    "eslint": "^10.14.0",
+    "@typescript-eslint/eslint-plugin": "^8.73.0",
+    "@typescript-eslint/parser": "^8.73.0",
+    "eslint": "^10.15.0",
     "js-yaml": "^5.5.0",
-    "turbo": "^2.11.11",
+    "turbo": "^2.11.13",
     "typescript": "^6.0.3",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   },
   "packageManager": "pnpm@9.15.0",
   "pnpm": {
